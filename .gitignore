@@ -1,0 +1,8 @@
+build/
+*.nds
+*.elf
+tests/host/test_player
+tests/host/screens
+tests/host/shots/
+sdroot/
+image.bin

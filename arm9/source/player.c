@@ -1,0 +1,309 @@
+// SPDX-License-Identifier: MIT
+//
+// Streaming: two ring buffers (left, right) of RING_BLOCKS blocks each. The
+// ARM7 plays them in a loop and reports every finished block; we then load
+// the next block of the file into the slot that was just freed.
+//
+// A .dsa block stores all left samples, then all right samples, so each half
+// is read straight from the card into its ring with no copying.
+
+#include <stdio.h>
+#include <string.h>
+
+#include <nds.h>
+
+#include "ipc.h"
+#include "player.h"
+
+#define RING_BLOCKS     4                       // 4 x 125 ms = 0.5 s of buffer
+#define BLOCK_FRAMES    4096
+#define BLOCK_BYTES     (BLOCK_FRAMES * 2)      // per channel
+#define RING_BYTES      (RING_BLOCKS * BLOCK_BYTES)
+#define VOLUME          127
+
+static int16_t ring_l[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
+static int16_t ring_r[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
+static uint16_t cover[DSA_COVER_SIZE * DSA_COVER_SIZE] __attribute__((aligned(32)));
+
+static FILE *song_file;
+static char cur_path[512];
+static DsaHeader hdr;
+static DsaTags tags;
+static bool has_cover;
+static PlayerState state = PLAYER_IDLE;
+
+static bool running;                // hardware is playing
+static uint32_t base_block;         // song block that sits in ring slot 0 at start
+static uint32_t loaded;             // blocks loaded since start
+static uint32_t paused_block;       // where to continue after a pause
+static volatile uint32_t played;    // blocks finished since start, from the ARM7
+static volatile bool stop_ack;
+static uint8_t generation;
+static long file_pos = -1;
+static uint32_t underruns;
+
+static void event_handler(u32 value, void *userdata)
+{
+    if (STREAM_EVT_GEN(value) != (generation & 0xF))
+        return; // left over from a previous start
+    played = STREAM_EVT_COUNT(value);
+    if ((value & STREAM_EVT_TYPE_MASK) == STREAM_EVT_STOPPED)
+        stop_ack = true;
+}
+
+void player_init(void)
+{
+    fifoSetValue32Handler(FIFO_STREAM_EVENT, event_handler, NULL);
+}
+
+static void send_cmd(const StreamCmd *c)
+{
+    fifoSendDatamsg(FIFO_STREAM_CMD, sizeof(*c), (u8 *)c);
+}
+
+// Stop the hardware and wait until the ARM7 has confirmed, so `played` is final
+// and the rings may be overwritten.
+static void hw_stop(void)
+{
+    if (!running)
+        return;
+    StreamCmd c = { 0 };
+    c.cmd = STREAM_CMD_STOP;
+    c.generation = generation;
+    stop_ack = false;
+    send_cmd(&c);
+    for (int i = 0; i < 20000 && !stop_ack; i++)
+        swiDelay(100);
+    running = false;
+}
+
+static void load_block(uint32_t rel)
+{
+    uint32_t block = base_block + rel;
+    int slot = rel % RING_BLOCKS;
+    int16_t *l = ring_l + slot * BLOCK_FRAMES;
+    int16_t *r = ring_r + slot * BLOCK_FRAMES;
+    bool stereo = hdr.channels == 2;
+
+    size_t got_l = 0, got_r = 0;
+    if (block < hdr.block_count)
+    {
+        long off = (long)hdr.audio_offset + (long)block * BLOCK_BYTES * hdr.channels;
+        if (off == file_pos || fseek(song_file, off, SEEK_SET) == 0)
+        {
+            got_l = fread(l, 1, BLOCK_BYTES, song_file);
+            if (stereo && got_l == BLOCK_BYTES)
+                got_r = fread(r, 1, BLOCK_BYTES, song_file);
+            file_pos = off + (long)(got_l + got_r);
+        }
+        else
+        {
+            file_pos = -1;
+        }
+    }
+    // Past the end, or a read error: silence.
+    if (got_l < BLOCK_BYTES)
+        memset((uint8_t *)l + got_l, 0, BLOCK_BYTES - got_l);
+    if (stereo && got_r < BLOCK_BYTES)
+        memset((uint8_t *)r + got_r, 0, BLOCK_BYTES - got_r);
+
+    // The sound hardware reads main RAM, not the ARM9 cache.
+    DC_FlushRange(l, BLOCK_BYTES);
+    if (stereo)
+        DC_FlushRange(r, BLOCK_BYTES);
+}
+
+static void hw_start(uint32_t block)
+{
+    hw_stop();
+
+    base_block = block;
+    generation = (generation + 1) & 0xF; // first, so late events of the old run are ignored
+    played = 0;
+    loaded = 0;
+
+    while (loaded < RING_BLOCKS)
+        load_block(loaded++);
+
+    StreamCmd c = { 0 };
+    c.cmd = STREAM_CMD_START;
+    c.left = (uint32_t)ring_l;
+    c.right = (uint32_t)(hdr.channels == 2 ? ring_r : ring_l); // mono: same data on both sides
+    c.ring_bytes = RING_BYTES;
+    c.block_frames = BLOCK_FRAMES;
+    c.timer_divider = hdr.timer_divider;
+    c.volume = VOLUME;
+    c.generation = generation;
+    send_cmd(&c);
+    running = true;
+}
+
+static void close_file(void)
+{
+    hw_stop();
+    if (song_file != NULL)
+        fclose(song_file);
+    song_file = NULL;
+    file_pos = -1;
+    has_cover = false;
+    state = PLAYER_IDLE;
+}
+
+bool player_play(const char *path, char *err, int err_size)
+{
+    close_file();
+
+    song_file = fopen(path, "rb");
+    if (song_file == NULL)
+    {
+        snprintf(err, err_size, "can't open file");
+        return false;
+    }
+    if (!dsa_read_header(song_file, &hdr, err, err_size))
+    {
+        close_file();
+        return false;
+    }
+    if (hdr.block_frames != BLOCK_FRAMES)
+    {
+        snprintf(err, err_size, "unexpected block size %lu", (unsigned long)hdr.block_frames);
+        close_file();
+        return false;
+    }
+    dsa_read_tags(song_file, &hdr, &tags);
+    has_cover = dsa_read_cover(song_file, &hdr, cover);
+    file_pos = -1;
+
+    snprintf(cur_path, sizeof(cur_path), "%s", path);
+    underruns = 0;
+    hw_start(0);
+    state = PLAYER_PLAYING;
+    return true;
+}
+
+void player_service(void)
+{
+    if (state != PLAYER_PLAYING)
+        return;
+
+    uint32_t p = played;
+    if ((uint64_t)(base_block + p) * BLOCK_FRAMES >= hdr.frame_count)
+    {
+        hw_stop();
+        state = PLAYER_ENDED;
+        return;
+    }
+    if (loaded <= p)
+    {
+        // The card was too slow and the hardware is already playing a slot
+        // that wasn't refilled. Skip ahead to the present, starting with the
+        // slot being played, so the rest of it is already right again.
+        underruns++;
+        loaded = p;
+    }
+    while (loaded < p + RING_BLOCKS)
+    {
+        load_block(loaded++);
+        p = played;
+    }
+}
+
+static uint32_t current_block(void)
+{
+    if (state == PLAYER_PAUSED)
+        return paused_block;
+    return base_block + played;
+}
+
+void player_toggle_pause(void)
+{
+    if (state == PLAYER_PLAYING)
+    {
+        hw_stop();
+        paused_block = base_block + played; // resumes at the start of the block that was playing
+        state = PLAYER_PAUSED;
+    }
+    else if (state == PLAYER_PAUSED)
+    {
+        hw_start(paused_block);
+        state = PLAYER_PLAYING;
+    }
+}
+
+static void jump_to_block(int64_t block)
+{
+    if (block < 0)
+        block = 0;
+    if (block >= hdr.block_count)
+        block = hdr.block_count ? hdr.block_count - 1 : 0;
+    if (state == PLAYER_PAUSED)
+    {
+        paused_block = block;
+    }
+    else if (state == PLAYER_PLAYING || state == PLAYER_ENDED)
+    {
+        hw_start(block);
+        state = PLAYER_PLAYING;
+    }
+}
+
+void player_seek_seconds(int seconds)
+{
+    if (state == PLAYER_IDLE)
+        return;
+    // frames per second = clock / divider; round to the nearest block
+    int64_t frames = (int64_t)seconds * hdr.sound_clock_hz / hdr.timer_divider;
+    int64_t delta = (frames + (frames >= 0 ? BLOCK_FRAMES / 2 : -BLOCK_FRAMES / 2)) / BLOCK_FRAMES;
+    jump_to_block((int64_t)current_block() + delta);
+}
+
+void player_restart(void)
+{
+    if (state != PLAYER_IDLE)
+        jump_to_block(0);
+}
+
+void player_stop(void)
+{
+    close_file();
+}
+
+PlayerState player_state(void)
+{
+    return state;
+}
+
+uint32_t player_position_ms(void)
+{
+    if (state == PLAYER_IDLE)
+        return 0;
+    uint64_t frames = (uint64_t)current_block() * BLOCK_FRAMES;
+    if (frames > hdr.frame_count)
+        frames = hdr.frame_count;
+    return (uint32_t)(frames * 1000 * hdr.timer_divider / hdr.sound_clock_hz);
+}
+
+uint32_t player_duration_ms(void)
+{
+    return state == PLAYER_IDLE ? 0 : hdr.duration_ms;
+}
+
+const char *player_path(void)
+{
+    return state == PLAYER_IDLE ? NULL : cur_path;
+}
+
+const DsaTags *player_tags(void)
+{
+    return state == PLAYER_IDLE ? NULL : &tags;
+}
+
+const uint16_t *player_cover(void)
+{
+    return (state != PLAYER_IDLE && has_cover) ? cover : NULL;
+}
+
+uint32_t player_underruns(void)
+{
+    return underruns;
+}
