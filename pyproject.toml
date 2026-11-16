@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsconv"
+version = "0.1.0"
+description = "Convert a music library into files a Nintendo DS player can stream directly"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT AND GPL-2.0-or-later WITH Font-exception-2.0"
+license-files = ["LICENSE", "LICENSES/*"]
+# Every dependency ships prebuilt wheels with its native libraries bundled
+# (PyAV bundles FFmpeg, soxr bundles libsoxr), so no system packages are needed.
+dependencies = [
+    "av>=12",
+    "soxr>=0.3",
+    "numpy>=1.24",
+    "mutagen>=1.46",
+    "pillow>=10",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+dsconv = "dsconv.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dsconv = ["data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
