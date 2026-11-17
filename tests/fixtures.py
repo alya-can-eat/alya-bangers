@@ -32,7 +32,7 @@ def tone(rate: int, seconds: float, channels: int, freq: float) -> np.ndarray:
 
 def encode(path: Path, codec: str, rate: int, channels: int = 2, seconds: float = 1.0,
            freq: float = 440.0, fmt: str | None = None, bitrate: int | None = None,
-           sample_fmt: str | None = None) -> Path:
+           sample_fmt: str | None = None, data: np.ndarray | None = None) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     out = av.open(str(path), "w", format=fmt)
     st = out.add_stream(codec, rate=rate, layout=LAYOUTS[channels])
@@ -40,7 +40,8 @@ def encode(path: Path, codec: str, rate: int, channels: int = 2, seconds: float 
         st.bit_rate = bitrate
     if sample_fmt:
         st.codec_context.format = sample_fmt
-    data = tone(rate, seconds, channels, freq)
+    if data is None:
+        data = tone(rate, seconds, channels, freq)
     frame = av.AudioFrame.from_ndarray(data, format="fltp", layout=LAYOUTS[channels])
     frame.sample_rate = rate
     cc = st.codec_context
@@ -211,6 +212,20 @@ def build_library(root: Path) -> dict:
     p = encode(yt / "Dear Wren....flac", "flac", 44100, seconds=0.3)
     encode(yt / "CON.flac", "flac", 44100, seconds=0.3)
     encode(yt / "Surround Test.flac", "flac", 48000, channels=6, seconds=0.3)
+
+    # A brick-walled master: a full-scale square wave overshoots after resampling
+    t = np.arange(int(44100 * 0.8)) / 44100
+    square = np.where(np.sin(2 * np.pi * 300 * t) >= 0, 1.0, -1.0).astype(np.float32)
+    p = encode(root / "Bandcamp" / "Loud" / "hot.flac", "flac", 44100,
+               data=np.stack([square, square]))
+    tag_flac(p, title="Hot", artist="Loud", replaygain_track_gain="-9.00 dB",
+             replaygain_track_peak="1.000000")
+
+    # Disc subfolders take the album folder's cover
+    alb2 = root / "CD" / "Two Discs"
+    image(alb2 / "cover.jpg", color=(240, 160, 0), fmt="JPEG")
+    encode(alb2 / "Day Disc" / "Track 1.flac", "flac", 44100, seconds=0.2)
+    encode(alb2 / "Night Disc" / "Track 1.flac", "flac", 44100, seconds=0.2)
 
     # A folder whose name ends in dots
     encode(root / "Bandcamp" / "Demos..." / "demo.flac", "flac", 44100, seconds=0.2)

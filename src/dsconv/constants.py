@@ -8,7 +8,7 @@ __version__ = "0.1.0"
 FORMAT_VERSION = 1
 INDEX_VERSION = 1
 FONT_VERSION = 1
-CONVERTER_REVISION = 1
+CONVERTER_REVISION = 2  # 2: headroom instead of clipping
 
 # DS sound hardware: channel timers count at the ARM7 bus clock / 2, and the
 # mixer emits one output sample every 512 of those ticks. A channel timer
@@ -33,6 +33,11 @@ AUDIO_EXTS = {
 }
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 COVER_STEMS = ("cover", "folder", "front", "album", "albumart")
+
+# Folder names that are one disc of a bigger release ("Disc 1", "CD2",
+# "Disc 01 [Side:Dawn]", "Day Disc", "1"). Used for album grouping and
+# for looking up the cover in the parent folder.
+DISC_DIR_PATTERN = r"^(?:disc|disk|cd)\b|\bdisc$|^\d{1,2}$"
 
 OUT_EXT = ".dsa"
 DATA_DIR = ".dsmusic"

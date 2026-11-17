@@ -88,6 +88,14 @@ tags (relative to −23 LUFS) are converted (+5 dB). Gains are *not* applied to
 the audio; the player applies the one it wants (track or album mode),
 e.g. through the channel volume registers.
 
+**Headroom.** Loud masters often have inter-sample peaks above full scale
+after resampling. Such songs are turned down just enough that the highest
+sample stays 2 LSB below full scale (no clipping, not even from the dither).
+The amount is in the tag `~pregain` (e.g. `-1.77 dB`), and the header's gains
+are already raised by it and its peaks scaled, so playback *with* ReplayGain
+sounds exactly as it would from the source. The text tags `replaygain_*`
+still describe the source.
+
 ### 1.2 Tags
 
 ```
@@ -118,6 +126,7 @@ Keys starting with `~` are added by the converter:
 | `~bitrate` | source bit rate in bit/s |
 | `~source_rate`, `~source_channels`, `~source_bits` | source format |
 | `~cover` | `embedded`, `folder:<file name>` or `none` |
+| `~pregain` | only if the song was turned down to avoid clipping, e.g. `-1.77 dB` |
 
 A track without a `title` tag has none here either; the player shows the
 file name instead (as Quod Libet does).
@@ -132,7 +141,9 @@ straight into VRAM. Images are cropped to a centred square, scaled
 
 Cover choice: embedded front cover → any embedded picture → in the song's
 folder `cover.*`, `folder.*`, `front.*`, `album.*`, `albumart.*` (in this
-order, any case) → the only image in the folder → none.
+order, any case) → the only image in the folder → none. Songs in a disc
+subfolder (`Disc 1`, `CD2`, `Disc 01 [Side:Dawn]`, `Day Disc`, `1`, …)
+without their own image use the parent (album) folder's cover the same way.
 
 ### 1.4 Audio
 

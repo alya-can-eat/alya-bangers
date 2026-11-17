@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 
 from .collate import sort_key
 from .constants import (
-    DATA_DIR, FONT_NAME, FONT_VERSION, INDEX_NAME, INDEX_VERSION, NONE_ID, OUT_EXT,
+    DATA_DIR, DISC_DIR_PATTERN, FONT_NAME, FONT_VERSION, INDEX_NAME, INDEX_VERSION, NONE_ID, OUT_EXT,
 )
 from .dsa import FLAG_COVER, DsaError, open_dsa
 
@@ -30,7 +30,7 @@ INDEX_SKIP = {
 }
 INDEX_SKIP_PREFIX = ("replaygain_", "r128_", "musicbrainz_", "acoustid_")
 
-DISC_DIR = re.compile(r"^(?:disc|disk|cd)\b|\bdisc$|^\d{1,2}$", re.IGNORECASE)
+DISC_DIR = re.compile(DISC_DIR_PATTERN, re.IGNORECASE)
 KANA = re.compile(r"[぀-ヿㇰ-ㇿｦ-ﾟ]")
 HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 

@@ -65,7 +65,7 @@ def test_tree_is_mirrored_with_fat32_names(converted):
         assert (dst / rel).is_file(), rel
     names = {p.relative_to(dst).as_posix() for p in dst.rglob("*.dsa")}
     assert not any("hidden" in n or n.startswith(".directory") for n in names)
-    assert len(names) == 27
+    assert len(names) == 30
 
 
 def test_ignored_files_are_not_converted(converted):
@@ -223,7 +223,7 @@ def test_second_run_is_incremental(converted, tmp_path):
     assert run_convert(work_src, work_dst, yes=True, jobs=2, quiet=True) == 0
     m = Manifest(work_dst)
     before = {k: v["out_size"] for k, v in m.files.items()}
-    assert len(before) == 27
+    assert len(before) == 30
 
     target = work_dst / "Bandcamp/300 Lanterns/300 Lanterns - HALCYON/300 Lanterns - HALCYON - 03 HALCYON 3.dsa"
     mtime = target.stat().st_mtime_ns
@@ -278,3 +278,26 @@ def test_damaged_file_is_reported_not_fatal(tmp_path):
     assert (dst / "fine.dsa").exists() and not (dst / "broken.dsa").exists()
     assert not list(dst.rglob("*.tmp"))
     assert "FAILED" in (dst / ".dsmusic" / "last-run.txt").read_text(encoding="utf-8")
+
+
+def test_loud_master_is_turned_down_not_clipped(converted):
+    _, dst, _ = converted
+    f = dsa(dst, "Bandcamp/Loud/hot.dsa")
+    pcm = f.read_audio()
+    assert np.abs(pcm.astype(np.int32)).max() <= 32766       # nothing pinned to the rails
+    pregain = float(f.tags["~pregain"][0].split()[0])
+    assert -3.0 < pregain < -0.1
+    # ReplayGain compensates, so playback with ReplayGain is unchanged
+    assert abs(f.header["rg_track_gain_mdb"] - (-9.0 - pregain) * 1000) <= 5
+    assert abs(f.header["rg_track_peak_q16"] - 10 ** (pregain / 20) * 65536) < 40  # tag is rounded to 0.01 dB
+    report = (dst / ".dsmusic" / "last-run.txt").read_text(encoding="utf-8")
+    assert "Turned down to avoid clipping: 1 songs" in report
+    assert "samples clipped" not in report
+
+
+def test_disc_folders_use_the_album_cover(converted):
+    _, dst, _ = converted
+    for disc in ("Day Disc", "Night Disc"):
+        f = dsa(dst, f"CD/Two Discs/{disc}/Track 1.dsa")
+        assert f.tags["~cover"] == ["folder:cover.jpg"]
+        assert f.header["flags"] & FLAG_COVER

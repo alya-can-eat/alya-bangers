@@ -46,11 +46,15 @@ just run the same command again after changing your library.
   `music/Bandcamp/X/01 Song.dsa`.
 - **Converts the audio** to 16-bit PCM at 32728.5 Hz, the DS mixer's own rate,
   so the DS never resamples (high-quality soxr resampling, dithered).
-  About 470 MB per hour of music.
+  About 470 MB per hour of music. Loud masters whose peaks would clip after
+  resampling are turned down just enough (their ReplayGain values are
+  adjusted to match).
 - **Keeps all tags** (multi-value too) under Quod Libet's key names, and
   ReplayGain values for the player to apply.
 - **Covers:** embedded front cover first, then `cover.*` / `folder.*` /
-  `front.*` / `album.*` in the folder, then the folder's only image.
+  `front.*` / `album.*` in the folder, then the folder's only image. Disc
+  subfolders (`Disc 1`, `Day Disc`, `1`, …) use the album folder's cover, so one
+  `cover.jpg` next to them is enough.
   Stored ready for the DS screen (128×128 and 32×32).
 - **Ignores** anything that isn't audio (Audacity projects, text files, zips…)
   and hidden files/folders, and tells you what it skipped.

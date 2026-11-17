@@ -23,6 +23,7 @@ class Report:
         self.audio_seconds = 0.0
         self.bytes_written = 0
         self.no_cover: list[str] = []
+        self.turned_down: list[tuple[str, float]] = []
         self.failures: list[tuple[str, str]] = []
         self.warnings: list[tuple[str, str]] = []
         self.collisions: list[tuple[str, str, list[str], str]] = []
@@ -59,6 +60,9 @@ class Report:
         self.bytes_written += res.get("out_size", 0)
         if not res.get("has_cover"):
             self.no_cover.append(src.rel)
+        db = res.get("pregain_db", 0.0)
+        if db < 0:
+            self.turned_down.append((src.rel, db))
         for w in res.get("warnings", []):
             self.warnings.append((src.rel, w))
 
@@ -97,6 +101,10 @@ class Report:
             head.append(f"Ignored: {parts}.")
         if self.images:
             head.append(f"Image files (used as covers where they match): {self.images}.")
+        if self.turned_down:
+            worst = min(db for _, db in self.turned_down)
+            head.append(f"Turned down to avoid clipping: {len(self.turned_down)} songs, by up to "
+                        f"{-worst:.1f} dB (ReplayGain values adjusted to match).")
         if self.index_stats:
             s = self.index_stats
             head.append(f"Index: {s['tracks']} tracks, {s['albums']} albums, {s['values']} distinct tag values; "
@@ -120,6 +128,9 @@ class Report:
         self._section("Deleted (source gone)", sorted(self.deleted), screen)
         self._section("Warnings", [f"{r}: {w}" for r, w in sorted(self.warnings)], screen)
         self._section("No cover found", sorted(self.no_cover), screen)
+        if self.turned_down:  # details only in the report file
+            self.lines.append(f"\nTurned down to avoid clipping ({len(self.turned_down)}):")
+            self.lines += [f"  {r}: {db:.2f} dB" for r, db in sorted(self.turned_down)]
         self.screen = screen
 
     def show(self) -> None:

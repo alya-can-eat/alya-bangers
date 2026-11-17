@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .constants import AUDIO_EXTS, DATA_DIR, IMAGE_EXTS, OUT_EXT
+from .constants import AUDIO_EXTS, DATA_DIR, DISC_DIR_PATTERN, IMAGE_EXTS, OUT_EXT
 from .cover import find_folder_cover
 from .fat32 import fat_key, safe_component
 
@@ -40,6 +41,22 @@ class Plan:
 
 def _natural_names(names):
     return sorted(names, key=lambda n: (unicodedata.normalize("NFC", n).casefold(), n))
+
+
+DISC_DIR = re.compile(DISC_DIR_PATTERN, re.IGNORECASE)
+
+
+def _parent_cover(src_root: Path, parent: Path) -> str | None:
+    """Cover of the album folder, for songs in a disc subfolder."""
+    try:
+        names = [n for n in os.listdir(parent) if (parent / n).is_file()]
+    except OSError:
+        return None
+    cover = find_folder_cover(parent, sorted(names))
+    if cover is None:
+        return None
+    rel = parent.relative_to(src_root).as_posix()
+    return cover if rel == "." else f"{rel}/{cover}"
 
 
 def build_plan(src_root: Path, dst_root: Path | None) -> Plan:
@@ -85,6 +102,8 @@ def build_plan(src_root: Path, dst_root: Path | None) -> Plan:
         plan.hidden += len(files) - len(visible)
         cover = find_folder_cover(here, visible)
         cover_rel = (f"{rel_dir}/{cover}" if rel_dir else cover) if cover else None
+        if cover_rel is None and rel_dir and DISC_DIR.search(here.name):
+            cover_rel = _parent_cover(src_root, here.parent)
 
         for name in visible:
             p = here / name

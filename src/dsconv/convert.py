@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import multiprocessing
 import os
 import signal
@@ -11,6 +12,8 @@ import zlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+
+import numpy as np
 
 from . import audio
 from .constants import DATA_DIR, OUT_EXT, REPORT_NAME, __version__
@@ -34,6 +37,26 @@ class Job:
     dest_path: str
     folder_cover_path: str | None
     seed: int
+
+
+# Highest sample value allowed before dithering: 2 LSB below full scale, so
+# the +-1 LSB dither can never clip.
+HEADROOM_LIMIT = 32765 / 32767
+
+
+def compensate_replaygain(rg: dict, gain: float) -> dict:
+    """The audio was scaled by `gain`; adjust ReplayGain so playback loudness
+    with ReplayGain stays exactly what it was."""
+    if gain >= 1.0:
+        return rg
+    out = dict(rg)
+    db = -20.0 * math.log10(gain)
+    for scope in ("track", "album"):
+        if out.get(f"{scope}_gain") is not None:
+            out[f"{scope}_gain"] += db
+        if out.get(f"{scope}_peak") is not None:
+            out[f"{scope}_peak"] *= gain
+    return out
 
 
 def _worker_init() -> None:
@@ -65,6 +88,17 @@ def run_job(job: Job) -> dict:
             except Exception as e:
                 res["warnings"].append(f"folder cover unreadable: {e}")
 
+        # Pass 1: find the peak after resampling. Loud masters often have
+        # inter-sample peaks above full scale that would clip in 16 bit.
+        _, _, chunks = audio.decode_resampled(src)
+        peak = 0.0
+        for chunk in chunks:
+            if chunk.size:
+                peak = max(peak, float(np.abs(chunk).max()))
+        gain = 1.0 if peak <= HEADROOM_LIMIT else HEADROOM_LIMIT / peak
+        gain_db = 20.0 * math.log10(gain)
+
+        # Pass 2 (the source is in the page cache by now): convert for real.
         info, channels, chunks = audio.decode_resampled(src)
         tags["~source"] = [job.src_rel]
         tags["~codec"] = [info.describe().split(",")[0]]
@@ -75,6 +109,8 @@ def run_job(job: Job) -> dict:
         if info.bits:
             tags["~source_bits"] = [str(info.bits)]
         tags["~cover"] = [cover_from]
+        if gain < 1.0:
+            tags["~pregain"] = [f"{gain_db:.2f} dB"]
         tag_bytes, w = encode_tags(tags)
         res["warnings"] += w
 
@@ -82,9 +118,10 @@ def run_job(job: Job) -> dict:
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.parent / f"{TMP_PREFIX}{os.getpid()}-{zlib.crc32(job.src_rel.encode()):08x}.tmp"
         with tmp.open("wb", buffering=1 << 20) as f:
-            writer = DsaWriter(f, channels, tag_bytes, cover, thumb, replaygain(tags), job.seed)
+            writer = DsaWriter(f, channels, tag_bytes, cover, thumb,
+                               compensate_replaygain(replaygain(tags), gain), job.seed)
             for chunk in chunks:
-                writer.write(chunk)
+                writer.write(chunk * np.float32(gain) if gain < 1.0 else chunk)
             stats = writer.close()
             f.flush()
             os.fsync(f.fileno())
@@ -97,7 +134,7 @@ def run_job(job: Job) -> dict:
         if total and stats["clipped"] / total > 1e-4:
             res["warnings"].append(f"{stats['clipped']} samples clipped (source peaks above full scale)")
         res.update(ok=True, out_size=dest.stat().st_size, seconds=info.duration_s,
-                   has_cover=cover is not None)
+                   has_cover=cover is not None, pregain_db=gain_db)
     except Exception as e:
         res["error"] = f"{type(e).__name__}: {e}"
         if tmp is not None:
