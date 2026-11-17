@@ -1,7 +1,7 @@
 """FAT32-safe file and folder names.
 
 FAT32 long file names cannot contain  " * / : < > ? \\ |  or control characters,
-cannot end in a dot or space, hold at most 255 UTF-16 code units, and are
+cannot end in a dot or space (only the very end of the whole name counts), hold at most 255 UTF-16 code units, and are
 compared case-insensitively. Forbidden characters are replaced by their
 full-width lookalikes, so names still read the same on the DS.
 """
@@ -57,19 +57,40 @@ def _truncate(stem: str, budget: int) -> str:
     return "".join(out)
 
 
+FULLWIDTH_DOT = "\uFF0E"  # ．
+
+
+def _fix_end(name: str) -> str:
+    """A FAT32 name can't end in a space or a dot. Trailing spaces are dropped
+    (invisible anyway); trailing dots become full-width dots, so a folder named
+    "Demos..." still reads "Demos．．．"."""
+    name = name.rstrip(" ")
+    dots = len(name) - len(name.rstrip("."))
+    if dots:
+        name = name[:-dots] + FULLWIDTH_DOT * dots
+    return name
+
+
 def safe_component(name: str, ext: str = "") -> str:
     """Return a FAT32-safe version of one path component.
 
-    `ext` (e.g. ".dsa") is appended after cleaning and never truncated.
+    `ext` (e.g. ".dsa") is appended after cleaning and never truncated. The
+    end-of-name rule only concerns the whole name, so with an extension the
+    stem keeps its trailing dots ("S.T.A.R.S." -> "S.T.A.R.S..dsa").
     """
-    stem = _clean(name).lstrip(" ").rstrip(" .")
+    stem = _clean(name).lstrip(" ")
+    if not ext:
+        stem = _fix_end(stem)
     if not stem:
         stem = "_"
     if stem.split(".")[0].upper() in RESERVED:
         stem = stem + "_"
     budget = MAX_UTF16_UNITS - utf16_len(ext)
     if utf16_len(stem) > budget:
-        stem = _truncate(stem, budget).rstrip(" .") or "_"
+        stem = _truncate(stem, budget)
+        if not ext:
+            stem = _fix_end(stem)
+        stem = stem or "_"
     return stem + ext
 
 

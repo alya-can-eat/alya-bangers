@@ -55,7 +55,8 @@ just run the same command again after changing your library.
 - **Ignores** anything that isn't audio (Audacity projects, text files, zips…)
   and hidden files/folders, and tells you what it skipped.
 - **FAT32-safe names:** `:` `*` `?` … become full-width lookalikes
-  (`00：00`), trailing dots go, reserved names get a `_`. Nothing to do by hand.
+  (`00：00`), a folder name can't end in a dot (`Demos...` becomes
+  `Demos．．．`), reserved names get a `_`. Nothing to do by hand.
 - **Collisions** (e.g. `Song.flac` and `Song.opus` in the same folder, or names
   that only differ in upper/lower case): it asks which one to keep, suggesting
   the better format (lossless > Opus > AAC/Vorbis > MP3, then bitrate). Your

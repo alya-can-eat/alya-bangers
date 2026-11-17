@@ -212,6 +212,9 @@ def build_library(root: Path) -> dict:
     encode(yt / "CON.flac", "flac", 44100, seconds=0.3)
     encode(yt / "Surround Test.flac", "flac", 48000, channels=6, seconds=0.3)
 
+    # A folder whose name ends in dots
+    encode(root / "Bandcamp" / "Demos..." / "demo.flac", "flac", 44100, seconds=0.2)
+
     # Folders that differ only in case get merged
     encode(root / "Kivara" / "a.flac", "flac", 44100, seconds=0.2)
     encode(root / "KIVARA" / "b.flac", "flac", 44100, seconds=0.2)

@@ -54,7 +54,8 @@ def test_tree_is_mirrored_with_fat32_names(converted):
         "CD/GrEaT NO.2 sOnGs/Disc 2/Track 1.dsa",
         f"{YT}/VXLTRA - 00：00.dsa",
         f"{YT}/Brassfox - Good F＊＊King Noise.dsa",
-        f"{YT}/Dear Wren.dsa",
+        f"{YT}/Dear Wren....dsa",                      # dots before .dsa are fine
+        "Bandcamp/Demos\uFF0E\uFF0E\uFF0E/demo.dsa",          # folder: trailing dots -> ．
         f"{YT}/CON_.dsa",
         f"{YT}/Kid 🎵 Song.dsa",
         f"{YT}/Lúa - 5 Phút Mơ.dsa",   # NFC, although the source name was NFD
@@ -64,7 +65,7 @@ def test_tree_is_mirrored_with_fat32_names(converted):
         assert (dst / rel).is_file(), rel
     names = {p.relative_to(dst).as_posix() for p in dst.rglob("*.dsa")}
     assert not any("hidden" in n or n.startswith(".directory") for n in names)
-    assert len(names) == 26
+    assert len(names) == 27
 
 
 def test_ignored_files_are_not_converted(converted):
@@ -222,7 +223,7 @@ def test_second_run_is_incremental(converted, tmp_path):
     assert run_convert(work_src, work_dst, yes=True, jobs=2, quiet=True) == 0
     m = Manifest(work_dst)
     before = {k: v["out_size"] for k, v in m.files.items()}
-    assert len(before) == 26
+    assert len(before) == 27
 
     target = work_dst / "Bandcamp/300 Lanterns/300 Lanterns - HALCYON/300 Lanterns - HALCYON - 03 HALCYON 3.dsa"
     mtime = target.stat().st_mtime_ns

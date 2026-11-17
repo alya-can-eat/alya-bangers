@@ -322,7 +322,9 @@ valid on FAT32 (and on Windows):
 
 - `" * / : < > ? \ |` become `＂ ＊ ／ ： ＜ ＞ ？ ＼ ｜` (full-width lookalikes)
 - control characters are removed
-- trailing dots and spaces, and leading spaces, are removed
+- leading spaces are removed; a name can't *end* in a dot or space, so a
+  folder name loses trailing spaces and its trailing dots become `．`
+  (file names end in `.dsa`, so dots before it stay: `S.T.A.R.S..dsa`)
 - names are NFC-normalized
 - `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9` get a `_`
 - names are cut to 255 UTF-16 code units (extension kept)

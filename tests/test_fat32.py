@@ -6,10 +6,18 @@ def test_forbidden_characters_become_fullwidth():
     assert safe_component('a*b?c"d<e>f|g\\h', "") == "a＊b？c＂d＜e＞f｜g＼h"
 
 
-def test_trailing_dots_and_spaces_removed():
-    assert safe_component("Dear Wren...", ".dsa") == "Dear Wren.dsa"
-    assert safe_component("  name . ", "") == "name"
-    assert safe_component("...", "") == "_"
+def test_dots_before_the_extension_are_kept():
+    assert safe_component("Dear Wren...", ".dsa") == "Dear Wren....dsa"
+    assert safe_component("n0m0n_ - ......", ".dsa") == "n0m0n_ - .......dsa"
+    assert safe_component("Tin Owl Club - S.T.A.R.S.", ".dsa") == "Tin Owl Club - S.T.A.R.S..dsa"
+    assert safe_component("(Extended Version) ", ".dsa") == "(Extended Version) .dsa"
+
+
+def test_folder_names_cannot_end_in_dot_or_space():
+    assert safe_component("Demos...", "") == "Demos\uFF0E\uFF0E\uFF0E"
+    assert safe_component("  name . ", "") == "name \uFF0E"
+    assert safe_component("...", "") == "\uFF0E\uFF0E\uFF0E"
+    assert safe_component("   ", "") == "_"
 
 
 def test_control_characters_dropped_and_nfc():
