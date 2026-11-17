@@ -52,6 +52,22 @@ uint32_t utf8_next(const char **s)
     return c;
 }
 
+void utf8_trim_partial(char *s)
+{
+    size_t len = strlen(s);
+    size_t start = len;
+    // Find the start of the last character (at most 3 continuation bytes back).
+    while (start > 0 && len - start < 4 && ((uint8_t)s[start - 1] & 0xC0) == 0x80)
+        start--;
+    if (start == 0)
+        return;
+    uint8_t lead = (uint8_t)s[start - 1];
+    size_t need = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3
+                : (lead & 0xF8) == 0xF0 ? 4 : 1;
+    if (len - (start - 1) < need)
+        s[start - 1] = '\0';
+}
+
 static int lower_ascii(int c)
 {
     return (c >= 'A' && c <= 'Z') ? c + 32 : c;

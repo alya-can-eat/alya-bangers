@@ -3,6 +3,7 @@
 // dsplayer: browse the music folder on the bottom screen, see what's playing
 // on the top screen.
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,9 +51,14 @@ static void service(void)
     player_service();
 }
 
-static void show_message(const char *fmt, const char *arg)
+__attribute__((format(printf, 1, 2)))
+static void show_message(const char *fmt, ...)
 {
-    snprintf(message, sizeof(message), fmt, arg);
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(message, sizeof(message), fmt, ap);
+    va_end(ap);
+    utf8_trim_partial(message); // a cut may have split a character
     message_frames = 4 * 60;
     redraw_bottom = true;
 }
@@ -109,9 +115,7 @@ static void play_index(int i, int direction)
             redraw_bottom = true;
             return;
         }
-        char what[200];
-        snprintf(what, sizeof(what), "%s: %s", path_basename(playlist[i]), err);
-        show_message("%s", what);
+        show_message("%s: %s", path_basename(playlist[i]), err);
     }
     player_stop();
     playlist_index = -1;
@@ -185,7 +189,7 @@ static void activate_selection(void)
     char path[BROWSER_PATH_MAX];
     if (!browser_entry_path(&br, br.selected, path, sizeof(path)))
     {
-        show_message("%s", "Path too long");
+        show_message("Path too long");
         return;
     }
     if (br.entries[br.selected].is_dir)

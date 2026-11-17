@@ -11,6 +11,9 @@
 // give U+FFFD. Returns 0 at the end of the string.
 uint32_t utf8_next(const char **s);
 
+// Remove an incomplete UTF-8 sequence at the end of s (left by truncation).
+void utf8_trim_partial(char *s);
+
 // Natural, ASCII case-insensitive order: "Track 2" < "Track 10".
 int natural_compare(const char *a, const char *b);
 
