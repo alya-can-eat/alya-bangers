@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef DSPLAYER_BUILTIN_FONT_H__
 #define DSPLAYER_BUILTIN_FONT_H__

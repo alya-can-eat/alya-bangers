@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Runs the real app (main.c) on the PC: taps, holds and drags through the
 // UI like a person would, and writes screenshots of both screens.
@@ -238,6 +238,19 @@ int main(int argc, char **argv)
     check(app.sa_kind == SA_PUT, "nothing was playing: the cover is put on from the left");
     run(30);
     check(app.sa_kind == SA_NONE, "the cover is in place");
+    // the ARM7's reports arrive between frames: the position never goes back
+    {
+        uint32_t last = player_position_smooth_ms();
+        bool back = false;
+        for (int i = 0; i < 120; i++)
+        {
+            tick(0);
+            uint32_t now = player_position_smooth_ms();
+            back |= now < last;
+            last = now;
+        }
+        check(!back, "the progress never moves backwards");
+    }
 
     // covers as a stack in list order
     tap(100, LIST_Y + 3 * ROW_H + 8);
@@ -414,20 +427,49 @@ int main(int argc, char **argv)
     check(app.ov_t == OV_TICKS, "settings in place");
     check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
-    tap(100, 24 + 5 * 24 + 10);
+    tap(100, SET_Y + 5 * SET_H + 10);
     check(app.set.show_remaining, "time left can be chosen");
-    tap(100, 24 + 5 * 24 + 10);
+    tap(100, SET_Y + 5 * SET_H + 10);
     check(!app.set.plain_bg, "cover background on by default");
-    tap(100, 24 + 6 * 24 + 10);
+    tap(100, SET_Y + 6 * SET_H + 10);
     check(app.set.plain_bg, "cover background can be turned off");
-    tap(100, 24 + 6 * 24 + 10);
-    tap(100, 24 + 1 * 24 + 10);     // case-sensitive
+    tap(100, SET_Y + 6 * SET_H + 10);
+    tap(100, SET_Y + 1 * SET_H + 10);     // case-sensitive
     check(app.set.case_sensitive, "case-sensitive on");
+    // About slides in from the right, ‹ goes back
+    tap(100, SET_Y + 7 * SET_H + 10);
+    check(app.about && app.about_t > 0 && app.about_t < TAB_TICKS, "About sliding in");
+    shot("13a_about_sliding");
+    run(20);
+    check(app.about_t == TAB_TICKS, "About in place");
+    shot("13b_about");
+    uint8_t lid_before = app.set.pause_on_lid;
+    tap(100, SET_Y + 2 * SET_H + 10);
+    check(app.set.pause_on_lid == lid_before, "rows can't be tapped through About");
+    press(KEY_B);
+    check(!app.about && app.overlay == OV_SETTINGS, "B leaves About, settings stay open");
+    run(20);
+    tap(240, 8);
+    tap(240, BAR_Y + 14);
+    tap(100, SET_Y + 7 * SET_H + 10);
+    run(20);
+    tap(20, 8);
+    run(20);
+    check(!app.about && app.about_t == 0, "‹ goes back");
+    // the highlight glides between rows
+    press(KEY_DOWN);
+    run(10);
+    check(app.menu_sel == 0 && app.menu_vis == 0, "first D-pad press: highlight in place");
+    press(KEY_DOWN);
+    check(app.menu_vis > 0 && app.menu_vis < SET_H, "highlight gliding");
+    run(10);
+    check(app.menu_vis == SET_H, "highlight arrived");
+    shot("13c_settings_sel");
     tap(240, 8);
     tap(36, 10);
     check(find_row("KIVARA") >= 0, "KIVARA separate when case-sensitive");
     tap(240, BAR_Y + 14);
-    tap(100, 24 + 1 * 24 + 10);
+    tap(100, SET_Y + 1 * SET_H + 10);
     tap(240, 8);
 
     // ---- scroll bar drag with the letter bubble

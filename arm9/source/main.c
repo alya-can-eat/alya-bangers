@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // dsplayer: browse the library by artist, album, title or folder on the
 // bottom screen, see what plays on the top screen.
@@ -591,6 +591,7 @@ static void settings_toggle(int row)
         break;
     case 5: app.set.show_remaining ^= 1; break;
     case 6: app.set.plain_bg ^= 1; break;
+    case 7: app.about = true; redraw = true; return;
     default: return;
     }
     touch_state();
@@ -692,7 +693,7 @@ static void tap_browser(int x, int y)
         else if (x >= 104 && x < 152) slide_to(true);
         else if (x >= 160 && x < 192) open_sort_menu();
         else if (x >= 192 && x < 224) cycle_brightness();
-        else if (x >= 224) { app.overlay = OV_SETTINGS; app.menu_sel = -1; }
+        else if (x >= 224) { app.overlay = OV_SETTINGS; app.menu_sel = -1; app.about = false; app.about_t = 0; }
     }
     redraw = true;
 }
@@ -763,9 +764,11 @@ static void tap_settings(int x, int y)
     {
         if (x >= 224)
             app.overlay = OV_NONE;
+        else if (app.about && x < 112)
+            app.about = false;          // ‹ back to the settings
     }
-    else if (y >= 24 && y < 24 + 7 * 24)
-        settings_toggle((y - 24) / 24);
+    else if (!app.about && y >= SET_Y && y < SET_Y + SET_ROWS * SET_H)
+        settings_toggle((y - SET_Y) / SET_H);
     redraw = true;
 }
 
@@ -956,7 +959,12 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        menu_keys(rep, down, 7, settings_toggle);
+        if (app.about)
+        {
+            if (down & KEY_B) app.about = false;
+        }
+        else
+            menu_keys(rep, down, SET_ROWS, settings_toggle);
         return;
     case OV_SORT:
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);
@@ -1164,6 +1172,23 @@ static void app_init(void)
     last_save = ticks;
 }
 
+// Moves a highlight 2/5 of the way to its target per vblank; jumps further
+// than far are taken at once. True while it moves.
+static bool glide(int *v, int target, uint32_t elapsed, int far)
+{
+    if (*v == target)
+        return false;
+    for (uint32_t k = 0; k < elapsed && *v != target; k++)
+    {
+        int d = target - *v;
+        if (d > far || d < -far)
+            *v = target;
+        else
+            *v += d * 2 / 5 ? d * 2 / 5 : (d > 0 ? 1 : -1);
+    }
+    return true;
+}
+
 // One step of the app, once per vblank: input, playback, then one screen
 // drawn (they take turns). Animations follow the vblank counter, so they
 // keep their speed even when drawing takes longer than a frame.
@@ -1242,12 +1267,14 @@ static void app_tick(void)
 
     // menus slide up when they open and down when they close
     static Overlay last_overlay;
+    bool menu_opened = false;
     if (app.overlay != last_overlay)
     {
         if (app.overlay != OV_NONE)
         {
             app.ov_vis = app.overlay;
             app.ov_t = 0;
+            menu_opened = true;
         }
         last_overlay = app.overlay;
         redraw = true;
@@ -1263,6 +1290,16 @@ static void app_tick(void)
     }
     if (app.ov_t == 0 && app.overlay == OV_NONE)
         app.ov_vis = OV_NONE;
+    // About slides in over the settings and back out
+    int about_target = app.about ? TAB_TICKS : 0;
+    if (app.about_t != about_target)
+    {
+        if (app.about_t < about_target)
+            app.about_t = app.about_t + (int)elapsed > about_target ? about_target : app.about_t + (int)elapsed;
+        else
+            app.about_t = app.about_t - (int)elapsed < 0 ? 0 : app.about_t - (int)elapsed;
+        redraw = true;
+    }
 
     // play <-> pause shape, seek knob size
     int pp_target = player_state() == PLAYER_PLAYING ? PP_TICKS : 0;
@@ -1281,17 +1318,21 @@ static void app_tick(void)
             app.knob_t = knob_target;
         redraw = true;
     }
-    // the row highlight glides to the selection
-    int sel_target = (app.sel - app.scroll) * ROW_H;
-    for (uint32_t k = 0; k < elapsed && app.sel_vis != sel_target; k++)
-    {
-        int d = sel_target - app.sel_vis;
-        if (d > ROWS * ROW_H || d < -ROWS * ROW_H)
-            app.sel_vis = sel_target;
-        else
-            app.sel_vis += d * 2 / 5 ? d * 2 / 5 : (d > 0 ? 1 : -1);
-        redraw = true;
-    }
+    // the highlights in the list, the menus and the queue glide to the selection
+    redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, ROWS * ROW_H);
+    static int menu_was = -1, q_was = -1;
+    int menu_target = app.menu_sel * (app.ov_vis == OV_SETTINGS ? SET_H : 16);
+    if (menu_opened || app.menu_sel < 0 || menu_was < 0)
+        app.menu_vis = menu_target;         // nothing to glide from
+    else
+        redraw |= glide(&app.menu_vis, menu_target, elapsed, 1000);
+    menu_was = app.menu_sel;
+    int q_target = (app.q_sel - app.q_scroll) * ROW_H;
+    if (app.q_sel < 0 || q_was < 0)
+        app.q_vis = q_target;
+    else
+        redraw |= glide(&app.q_vis, q_target, elapsed, ROWS * ROW_H);
+    q_was = app.q_sel;
     if (lid_fade_in < LID_IN && !lid_closed)
     {
         lid_fade_in++;
@@ -1348,6 +1389,9 @@ static void on_vblank(void)
 int main(int argc, char **argv)
 {
     defaultExceptionHandler();
+    // the sound hardware (ARM7 side) reads the ring buffers from main RAM: give
+    // it priority, so copying whole screens around can't make it wait
+    REG_EXMEMCNT |= ARM7_MAIN_RAM_PRIORITY;
     gfx_init();
     player_init();
     keysSetRepeat(15, 4);

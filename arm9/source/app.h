@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Shared state of the player app: what the UI shows and how it is laid out.
 // main.c changes it (input, playback), ui.c draws it.
@@ -24,6 +24,7 @@
 #define C_ACC       COLOR(31, 17, 23)
 #define C_SEL       COLOR(11, 6, 10)
 #define C_ACC_DIM   COLOR(18, 10, 14)
+#define C_GLARE     COLOR(22, 12, 31)   // light on the record's grooves and rim, from the top left
 
 // ---- bottom screen layout ----
 #define TAB_H       20
@@ -33,6 +34,13 @@
 #define BAR_Y       164
 #define SCROLL_X    244             // scroll bar column, 12 px wide
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
+#define SET_Y       24              // settings: first row
+#define SET_H       21              // row pitch
+#define SET_ROWS    8               // the last one opens About
+
+#define APP_NAME    "alya-bangers"
+#define APP_VERSION "0.2"
+#define APP_URL     "github.com/alya-can-eat"
 // Animations run on real time (vblanks, 60 per second), so they take as long
 // on the DS as planned even when it draws fewer frames.
 #define SLIDE_TICKS 24              // browser <-> player, 0.4 s
@@ -122,8 +130,12 @@ typedef struct {
     uint32_t press_until;       // stays lit until this frame after release
     bool press_down;            // the stylus is still on it
     int sel_vis;                // y of the row highlight in the list (glides to the selection)
+    int menu_vis;               // the same for the highlight in a menu, from its first entry
+    int q_vis;                  // and in the queue
     int vinyl_rot;              // degrees x 3
     int vinyl_speed;            // 0..256 of 33 1/3 rpm (spins up and down)
+    bool about;                 // settings show the About page
+    int about_t;                // 0 = settings .. TAB_TICKS = About (slides in from the right)
 
     Settings set;
     bool album_queue;           // the queue is one album

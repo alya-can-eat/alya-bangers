@@ -9,9 +9,9 @@ WONDERFUL_TOOLCHAIN	?= /opt/wonderful
 # User config
 # ===========
 
-NAME		:= dsplayer
+NAME		:= alya-bangers
 
-GAME_TITLE	:= dsplayer
+GAME_TITLE	:= alya-bangers
 GAME_SUBTITLE	:= Music player for .dsa files
 GAME_AUTHOR	:= Alya
 GAME_ICON	:= icon.gif

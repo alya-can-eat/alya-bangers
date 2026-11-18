@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // PC stand-in for the DS: mock libnds functions and a simulated ARM7 that
 // "plays" the ring buffers block by block, recording what would be heard.

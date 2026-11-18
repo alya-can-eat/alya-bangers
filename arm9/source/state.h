@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Settings and where playback stopped, kept in one small file on the card
 // (/_nds/dsplayer/state.bin).

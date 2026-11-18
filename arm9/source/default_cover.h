@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef DSPLAYER_DEFAULT_COVER_H__
 #define DSPLAYER_DEFAULT_COVER_H__

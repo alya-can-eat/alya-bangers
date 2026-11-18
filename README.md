@@ -1,4 +1,4 @@
-# dsplayer
+# alya-bangers
 
 A music player for the Nintendo DS (made for the DS Lite with a DSpico). It
 plays the `.dsa` files written by [dsconv](../dsconv) from the `/music` folder
@@ -40,7 +40,9 @@ or folder, a player screen with a turning record, a queue you can edit.
 - **Lid closed:** the screens go dark and the music keeps playing; L/R change
   songs (both can be changed in the settings).
 - **Switching on** loads the last song at the same position, paused. Settings,
-  queue and sort orders are kept in `/_nds/dsplayer/state.bin`.
+  queue and sort orders are kept in `/_nds/alya-bangers/state.bin` (one saved
+  under the old name, `/_nds/dsplayer/state.bin`, is read once).
+- **Settings → About:** name, version, licence, where the code lives.
 - Songs without a cover show a built-in picture (a moonlit beach).
 - Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
   Cyrillic, Vietnamese and emoji show correctly.
@@ -59,9 +61,13 @@ or folder, a player screen with a turning record, a queue you can edit.
 
 Menus (settings, sort, the row menu, song info, queue) slide up when they
 open and down when they close. Buttons light up when tapped, play and pause morph
-into each other, the row highlight glides, the progress bars move smoothly
-and the seek knob grows while you drag it. In player mode the top screen's
+into each other, the highlight glides from row to row (lists, menus, queue,
+settings), the progress bars move smoothly and the seek knob grows while you
+drag it. About slides in over the settings from the right. The record has a
+soft purple glare at the top left. In player mode the top screen's
 background is the cover, blurred and darkened (settings: Cover background).
+A new song's background is made a slice per frame while the covers move and
+faded in once they have settled.
 Closing the lid fades both screens to black before the light goes off;
 opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
 "drops: N" appears at the top. Tell me if you see it on real hardware.
@@ -69,11 +75,11 @@ opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the ca
 ## The SD card
 
 ```
-/music/                  <- dsconv output folder
+/music/                      <- dsconv output folder
 /music/.dsmusic/font.bin
 /music/.dsmusic/library.idx
-/_nds/dsplayer/state.bin <- written by the player
-/dsplayer.nds            <- anywhere, start it from Pico Launcher
+/_nds/alya-bangers/state.bin <- written by the player
+/alya-bangers.nds            <- anywhere, start it from Pico Launcher
 ```
 
 ```sh
@@ -89,7 +95,7 @@ With the official BlocksDS container (needs Podman or Docker; on NixOS add
 ./build.sh
 ```
 
-This produces `dsplayer.nds`. The first run downloads the image (about
+This produces `alya-bangers.nds`. The first run downloads the image (about
 430 MB).
 
 ## Test in melonDS before using the card
@@ -99,7 +105,7 @@ melonDS is in nixpkgs (`nix-shell -p melonDS`).
 1. Convert some music into a test folder: `dsconv ~/Music/some-album /tmp/dscard/music`
 2. In melonDS's emulator settings (DLDI section): enable DLDI, set the folder
    to sync the SD image with to `/tmp/dscard`, and turn that sync on.
-3. *File → Open ROM*: `dsplayer.nds`.
+3. *File → Open ROM*: `alya-bangers.nds`.
 
 An emulator is not the real DS: timing and SD speed differ, so the final test
 is always the DS Lite.
@@ -109,13 +115,18 @@ is always the DS Lite.
 - The ARM9 reads the card, the ARM7 drives the sound hardware (messages in
   `common/include/ipc.h`).
 - Two hardware channels (left panned left, right panned right) loop over a
-  ring of 4 blocks each (0.5 s). The channel timer is `0x10000 - 512`, so they
+  ring of 8 blocks each (1 s). The channel timer is `0x10000 - 512`, so they
   play at 16756991 / 512 = 32728.5 Hz, exactly the DS mixer's rate.
 - An ARM7 timer with the /1024 prescaler ticks once per sample (same crystal,
   33513982 / 1024 Hz) and interrupts after every 4096 samples; the ARM9 then
   loads the next block into the slot that just finished. A `.dsa` block holds
   all left samples, then all right samples, so each half is read straight
   from the card into its ring.
+- Playback comes before drawing: while 3 blocks or more are ready ahead, the
+  ARM9 reads one block per call (twice per frame), so the reading is spread
+  out; when fewer are ready, it reads all that's missing at once. The ARM7
+  (and with it the sound hardware) has priority on main RAM, so copying
+  whole screens can't make the sound wait.
 - Pause and seek restart the stream at a block boundary (0.125 s steps).
 
 ## Tests on the PC
@@ -144,5 +155,8 @@ gapless playback.
 
 ## Licence
 
-MIT. Built-in fallback glyphs: GNU Unifont (GPL-2.0-or-later with the font
-embedding exception). Makefiles: BlocksDS templates (CC0).
+GNU GPL v3 or later (`LICENSE`). Built-in fallback glyphs: GNU Unifont
+(GPL-2.0-or-later with the font embedding exception, see `LICENSES/`).
+Makefiles: BlocksDS templates (CC0).
+
+Code: <https://github.com/alya-can-eat>

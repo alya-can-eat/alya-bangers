@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Reader for .dsa files (see FORMAT.md in the dsconv repository).
 

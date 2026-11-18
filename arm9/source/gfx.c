@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <string.h>
 
@@ -180,6 +180,19 @@ void gfx_triangle(Canvas *c, int x0, int y0, int x1, int y1, int x2, int y2, uin
     c->dirty = true;
 }
 
+void gfx_arrow(Canvas *c, int x0, int cy, int h, int len, int dir, uint16_t color)
+{
+    for (int dy = -h; dy <= h; dy++)
+    {
+        int w = len * (h - (dy < 0 ? -dy : dy)) / h;    // the same for dy and -dy
+        if (dir > 0)
+            span(c, cy + dy, x0, x0 + w + 1, color);
+        else
+            span(c, cy + dy, x0 - w, x0 + 1, color);
+    }
+    c->dirty = true;
+}
+
 void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src)
 {
     int x0 = x < c->cx0 ? c->cx0 : x;
@@ -225,19 +238,6 @@ void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128)
         return;
     }
     scaled_rows(c->px, x, y, size, src128, c->cx0, c->cy0, c->cx1, c->cy1);
-    c->dirty = true;
-}
-
-void gfx_darken(Canvas *c, int x, int y, int w, int h)
-{
-    int x0 = x < c->cx0 ? c->cx0 : x, x1 = x + w > c->cx1 ? c->cx1 : x + w;
-    int y0 = y < c->cy0 ? c->cy0 : y, y1 = y + h > c->cy1 ? c->cy1 : y + h;
-    for (int yy = y0; yy < y1; yy++)
-    {
-        uint16_t *p = c->px + yy * SCREEN_W;
-        for (int xx = x0; xx < x1; xx++)
-            p[xx] = ((p[xx] >> 1) & 0x3DEF) | 0x8000;
-    }
     c->dirty = true;
 }
 

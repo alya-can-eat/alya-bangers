@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Both screens as 256x192 16-bit bitmaps. Drawing goes to a back buffer in
 // RAM; gfx_present() copies changed screens to VRAM during vblank. Every
@@ -44,12 +44,12 @@ void gfx_rect(Canvas *c, int x, int y, int w, int h, uint16_t color);   // 1 px 
 void gfx_round_fill(Canvas *c, int x, int y, int w, int h, int r, uint16_t color);
 void gfx_disc(Canvas *c, int cx, int cy, int r, uint16_t color);
 void gfx_triangle(Canvas *c, int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color);
+// A triangle pointing right (dir 1) or left (dir -1): flat side at x0 from
+// cy - h to cy + h, tip len pixels away at cy. Exactly symmetric.
+void gfx_arrow(Canvas *c, int x0, int cy, int h, int len, int dir, uint16_t color);
 void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src);
 // A 128x128 picture drawn size x size (nearest pixel).
 void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128);
-
-// Halve the brightness of a rectangle (a shadow).
-void gfx_darken(Canvas *c, int x, int y, int w, int h);
 
 // Mix two colors: t = 0..256 parts of a.
 uint16_t gfx_mix(uint16_t a, uint16_t b, int t);

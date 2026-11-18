@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The play queue: track ids in play order. Shuffle reorders the list and
 // remembers the original order, so turning it off restores it.

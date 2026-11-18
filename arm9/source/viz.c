@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Visualizer: the loudness of 20 frequency bands (60 Hz to 11 kHz, spaced
 // evenly on a log scale), measured with one Goertzel filter per band on the

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // ARM7: input, power management, and the two sound channels that stream the
 // ring buffers the ARM9 fills.

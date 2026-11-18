@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Messages between the ARM9 (reads the card, runs the UI) and the ARM7 (drives
 // the sound hardware).

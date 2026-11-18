@@ -1,7 +1,7 @@
 #!/bin/sh
-# Build dsplayer.nds with the official BlocksDS container image.
+# Build alya-bangers.nds with the official BlocksDS container image.
 # Needs Podman or Docker (on NixOS: virtualisation.podman.enable = true;).
-#   ./build.sh          build dsplayer.nds
+#   ./build.sh          build alya-bangers.nds
 #   ./build.sh clean    remove build output
 set -e
 cd "$(dirname "$0")"
@@ -20,6 +20,6 @@ elif command -v docker >/dev/null 2>&1; then
         exec docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work -w /work "$IMAGE" make "$@"
     fi
 else
-    echo "dsplayer: install Podman or Docker first (see README.md)." >&2
+    echo "alya-bangers: install Podman or Docker first (see README.md)." >&2
     exit 1
 fi

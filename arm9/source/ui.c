@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Drawing of both screens, following the mockup pixel for pixel: 256x192 per
 // screen, Unifont 16 px, BGR555 colors.
@@ -58,6 +58,14 @@ static void text_r(Canvas *c, int xr, int y, const char *s, uint16_t color)
 static void text(Canvas *c, int x, int y, const char *s, uint16_t color)
 {
     font_draw_ex(c, x, y, 0, SCREEN_W, s, color, -1, 1);
+}
+
+// A selection highlight at y (it glides between rows), cut to the rows y0..y1.
+static void highlight(int x, int y, int w, int h, int y0, int y1, uint16_t color)
+{
+    int top = y < y0 ? y0 : y, bottom = y + h > y1 ? y1 : y + h;
+    if (bottom > top)
+        gfx_fill(B, x, top, w, bottom - top, color);
 }
 
 static void mmss(char *buf, int size, uint32_t ms)
@@ -404,6 +412,28 @@ static void top_progress(int y)
 #define VD (2 * VR + 1)
 static uint8_t *v_dist;
 static uint16_t *v_angle;
+static uint16_t v_groove[360], v_edge[360];     // their colors by angle, with the glare
+
+// A soft glare on the grooves and the rim, brightest at the top left (225°).
+// Called again when the theme colors change.
+static void vinyl_glare(void)
+{
+    const uint16_t c_edge = COLOR(8, 8, 10), c_groove = COLOR(5, 5, 7);
+    for (int a = 0; a < 360; a++)
+    {
+        int d = a - 225;
+        if (d < 0) d = -d;
+        if (d > 180) d = 360 - d;
+        int w = 0;
+        if (d < 56)
+        {
+            int t = 256 - d * d * 256 / (56 * 56);     // 1 - (d/56)^2, squared
+            w = t * t / 256;
+        }
+        v_groove[a] = gfx_mix(C_GLARE, c_groove, w * 45 / 100);
+        v_edge[a] = gfx_mix(C_GLARE, c_edge, w * 50 / 100);
+    }
+}
 
 static void vinyl_tables(void)
 {
@@ -413,6 +443,7 @@ static void vinyl_tables(void)
     v_angle = malloc(VD * VD * sizeof(uint16_t));
     if (!v_dist || !v_angle)
         return;
+    vinyl_glare();
     for (int j = 0; j < VD; j++)
     {
         for (int i = 0; i < VD; i++)
@@ -433,8 +464,7 @@ static const Mark marks[5] = { { 52, 5, 28 }, { 37, 62, 22 }, { 47, 156, 30 }, {
 static HOT void vinyl_pixels(uint16_t *px, int cx, int cy, int y0, int y1, int clip_x1, int rot,
                              const uint8_t *dist, const uint16_t *angle)
 {
-    const uint16_t c_vinyl = COLOR(3, 3, 4), c_edge = COLOR(8, 8, 10), c_groove = COLOR(5, 5, 7);
-    const uint16_t c_mark = COLOR(13, 13, 16);
+    const uint16_t c_vinyl = COLOR(3, 3, 4), c_mark = COLOR(13, 13, 16);
     // which light mark sits on each radius (-1: none)
     int8_t mark_at[VR + 1];
     for (int r = 0; r <= VR; r++)
@@ -458,11 +488,11 @@ static HOT void vinyl_pixels(uint16_t *px, int cx, int cy, int y0, int y1, int c
                 continue;
             uint16_t col = c_vinyl;
             if (d == VR)
-                col = c_edge;
+                col = v_edge[angle[j * VD + i]];
             else if (d <= 20)
                 col = C_ACC_DIM;
             else if (d == 52 || d == 42 || d == 32)
-                col = c_groove;
+                col = v_groove[angle[j * VD + i]];
             int m = mark_at[d];
             if (m >= 0)
             {
@@ -656,14 +686,20 @@ static void draw_song_change(uint32_t t)
 
 // ---- player mode background: the cover, blurred and darkened
 
-static uint16_t *bg_cur, *bg_old;
-static uint32_t bg_track = 0xFFFFFFFEu;
+static uint16_t *bg_cur, *bg_new;       // shown; being made / faded in
+static uint32_t bg_track = 0xFFFFFFFEu; // the song bg_cur belongs to (this value: none yet)
+static uint32_t bg_job = LIB_NONE;      // the song bg_new is made for
+static int bg_rows;                     // rows of bg_new done
+static bool bg_fading;
+static uint32_t bg_fade_from;           // frame (30 fps) the cross-fade began
+static int16_t bg_grid[13][17][3];
 
-// 17 x 13 colors (one every 16 px) from 8x8 blocks of the cover, made dark,
-// then stretched smoothly over the screen with a little dithering.
-static HOT void cover_bg(const uint16_t *cover, uint16_t *out)
+#define BG_SLICE 32                     // rows made per drawn frame (~2 ms)
+#define BG_FADE  12                     // frames of the cross-fade, 0.4 s
+
+// 17 x 13 colors (one every 16 px) from 8x8 blocks of the cover, made dark.
+static void bg_grid_from(const uint16_t *cover)
 {
-    int16_t grid[13][17][3];
     static const int bgc[3] = { 16, 16, 33 };   // C_BG in 8 bit
     for (int gy = 0; gy < 13; gy++)
     {
@@ -688,93 +724,159 @@ static HOT void cover_bg(const uint16_t *cover, uint16_t *out)
             // average (x 8 for 8 bit), then 30 % of it on top of half the theme color
             int v[3] = { r / 8, g / 8, b / 8 };
             for (int k = 0; k < 3; k++)
-                grid[gy][gx][k] = (int16_t)(v[k] * 3 / 10 + bgc[k] / 2);
-        }
-    }
-    static const uint8_t bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
-    for (int y = 0; y < SCREEN_H; y++)
-    {
-        int gy = y >> 4, fy = y & 15;
-        for (int x = 0; x < SCREEN_W; x++)
-        {
-            int gx = x >> 4, fx = x & 15;
-            int w00 = (16 - fx) * (16 - fy), w01 = fx * (16 - fy), w10 = (16 - fx) * fy, w11 = fx * fy;
-            int d = bayer[y & 3][x & 3] >> 1;
-            int c[3];
-            for (int k = 0; k < 3; k++)
-            {
-                int v = (grid[gy][gx][k] * w00 + grid[gy][gx + 1][k] * w01 + grid[gy + 1][gx][k] * w10
-                         + grid[gy + 1][gx + 1][k] * w11) >> 8;
-                v = (v + d) >> 3;
-                c[k] = v > 31 ? 31 : v;
-            }
-            out[y * SCREEN_W + x] = (uint16_t)(c[0] | (c[1] << 5) | (c[2] << 10) | 0x8000);
+                bg_grid[gy][gx][k] = (int16_t)(v[k] * 3 / 10 + bgc[k] / 2);
         }
     }
 }
 
+// Rows y0..y1 of the grid stretched smoothly over the screen, with a little
+// dithering: down the columns first, then along the row by adding a step.
+// (At most 90 in 8 bit, so no clamping.)
+static HOT void bg_rows_make(uint16_t *out, int y0, int y1)
+{
+    static const uint8_t bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    for (int y = y0; y < y1; y++)
+    {
+        int gy = y >> 4, fy = y & 15;
+        int col[17][3];
+        for (int gx = 0; gx < 17; gx++)
+            for (int k = 0; k < 3; k++)
+                col[gx][k] = bg_grid[gy][gx][k] * (16 - fy) + bg_grid[gy + 1][gx][k] * fy;
+        const uint8_t *d4 = bayer[y & 3];
+        uint16_t *o = out + y * SCREEN_W;
+        for (int gx = 0; gx < 16; gx++)
+        {
+            int r = col[gx][0] * 16, g = col[gx][1] * 16, b = col[gx][2] * 16;
+            int dr = col[gx + 1][0] - col[gx][0], dg = col[gx + 1][1] - col[gx][1], db = col[gx + 1][2] - col[gx][2];
+            for (int fx = 0; fx < 16; fx++)
+            {
+                int d = d4[fx & 3] >> 1;
+                *o++ = (uint16_t)((((r >> 8) + d) >> 3) | ((((g >> 8) + d) >> 3) << 5)
+                                  | ((((b >> 8) + d) >> 3) << 10) | 0x8000);
+                r += dr;
+                g += dg;
+                b += db;
+            }
+        }
+    }
+}
+
+// The average of two color pairs, rounded down per channel (equal colors stay equal).
+#define AVG(x, y) (((x) & (y)) + ((((x) ^ (y)) & 0x7BDE7BDE) >> 1))
+
 // dst = a with k quarters of b (b = NULL: the color pair bc), two pixels at a time
 static HOT void quarters(uint32_t *dst, const uint32_t *a, const uint32_t *b, uint32_t bc, int k, int words)
 {
-    const uint32_t m = 0x7BDE7BDE;
     for (int i = 0; i < words; i++)
     {
         uint32_t x = a[i], y = b ? b[i] : bc;
-        uint32_t half = ((x & m) >> 1) + ((y & m) >> 1);
+        uint32_t half = AVG(x, y);
         uint32_t r;
         if (k <= 0) r = x;
-        else if (k == 1) r = ((x & m) >> 1) + ((half & m) >> 1);
+        else if (k == 1) r = AVG(x, half);
         else if (k == 2) r = half;
-        else if (k == 3) r = ((y & m) >> 1) + ((half & m) >> 1);
+        else if (k == 3) r = AVG(y, half);
         else r = y;
         dst[i] = r | 0x80008000;
     }
 }
 
-// The background of the top screen. p2: how far the player layout is in (0..256).
-static void draw_background(int p2)
+static void bg_swap(void)
 {
-    bool want = !app.set.plain_bg && player_path() != NULL && p2 > 0;
-    if (want && !bg_cur)
+    uint16_t *t = bg_cur;
+    bg_cur = bg_new;
+    bg_new = t;
+    bg_track = bg_job;
+    bg_job = LIB_NONE;
+    bg_fading = false;
+}
+
+// The background of the top screen. p2: how far the player layout is in (0..256).
+// A new song's background is made a slice per frame while the covers move, and
+// faded in once they have settled. True while that is going on.
+static bool draw_background(int p2)
+{
+    bool on = !app.set.plain_bg && player_path() != NULL;
+    if (on && !bg_cur)
     {
         bg_cur = malloc(SCREEN_W * SCREEN_H * 2);
-        bg_old = malloc(SCREEN_W * SCREEN_H * 2);
+        bg_new = malloc(SCREEN_W * SCREEN_H * 2);
     }
-    if (!want || !bg_cur || !bg_old)
+    if (!on || !bg_cur || !bg_new)
     {
         gfx_fill(T, 0, 0, SCREEN_W, SCREEN_H, C_BG);
-        return;
+        return false;
     }
     uint32_t track = app_current_track();
-    if (track != bg_track)
+    if (bg_track == 0xFFFFFFFEu)
     {
-        uint16_t *t = bg_old;
-        bg_old = bg_cur;
-        bg_cur = t;
-        cover_bg(live_cover(), bg_cur);
-        if (bg_track == 0xFFFFFFFEu)
-            memcpy(bg_old, bg_cur, SCREEN_W * SCREEN_H * 2);
+        // the first one: made at once
+        bg_grid_from(live_cover());
+        bg_rows_make(bg_cur, 0, SCREEN_H);
         bg_track = track;
     }
+    else if (track == bg_track)
+    {
+        bg_job = LIB_NONE;          // back to the song it shows
+        bg_fading = false;
+    }
+    else if (track != bg_job)
+    {
+        if (bg_fading)
+            bg_swap();              // a fade still going: finish it at once
+        bg_grid_from(live_cover());
+        bg_job = track;
+        bg_rows = 0;
+    }
+    if (bg_job != LIB_NONE && bg_rows < SCREEN_H)
+    {
+        int y1 = bg_rows + BG_SLICE > SCREEN_H ? SCREEN_H : bg_rows + BG_SLICE;
+        bg_rows_make(bg_new, bg_rows, y1);
+        bg_rows = y1;
+    }
+    if (bg_job != LIB_NONE && bg_rows >= SCREEN_H && !bg_fading)
+    {
+        if (p2 <= 0)
+            bg_swap();              // not on screen: no need to fade
+        else if (!SA_PLAYER(app.sa_kind))
+        {
+            bg_fading = true;
+            bg_fade_from = app.frame;
+        }
+    }
+    if (p2 <= 0)
+    {
+        if (bg_fading)
+            bg_swap();
+        gfx_fill(T, 0, 0, SCREEN_W, SCREEN_H, C_BG);
+        return bg_job != LIB_NONE;
+    }
+    bool busy = bg_job != LIB_NONE;
     const int words = SCREEN_W * SCREEN_H / 2;
     uint32_t *dst = (uint32_t *)(void *)T->px;
     const uint32_t *src = (const uint32_t *)bg_cur;
-    // a song change cross-fades from the old background, in quarters
-    if (SA_PLAYER(app.sa_kind))
+    if (bg_fading)
     {
-        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_TICKS;
-        int k = app.sa_t * 5 / total;
-        if (k < 4)
+        int k = 1 + (int)(app.frame - bg_fade_from) * 3 / BG_FADE;
+        if (k >= 4)
         {
-            quarters(dst, (const uint32_t *)bg_old, (const uint32_t *)bg_cur, 0, k, words);
+            bg_swap();
+            src = (const uint32_t *)bg_cur;
+        }
+        else
+        {
+            quarters(dst, src, (const uint32_t *)bg_new, 0, k, words);
             src = dst;
         }
     }
     // sliding in from the browser: from the plain color, in quarters
     int k2 = p2 >= 256 ? 4 : p2 * 4 / 256;
-    uint32_t bgc = C_BG | ((uint32_t)C_BG << 16);
-    quarters(dst, src, NULL, bgc, 4 - k2, words);
+    if (k2 < 4)
+        quarters(dst, src, NULL, C_BG | ((uint32_t)C_BG << 16), 4 - k2, words);
+    else if (src != dst)
+        memcpy(dst, src, SCREEN_W * SCREEN_H * 2);
     T->dirty = true;
+    return busy;
 }
 
 bool ui_draw_top(void)
@@ -785,11 +887,11 @@ bool ui_draw_top(void)
     int p = app_slide_p256();
     int p1 = smooth256(p * 256 / 154);
     int p2 = smooth256((p - 102) * 256 / 154);
-    draw_background(p2);
+    bool bg_busy = draw_background(p2);
     header();
     bool playing = player_state() == PLAYER_PLAYING;
     // the record and the visualizer move while playing; the rest only if text scrolls
-    bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS);
+    bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS) || bg_busy;
 
     SongText st;
     song_text(app_current_track(), &st);
@@ -826,10 +928,6 @@ bool ui_draw_top(void)
         int mx = put ? -128 + 136 * ease_out(q) / 256 : 8 - 136 * ease_in(q) / 256;
         gfx_blit(T, 8, 24, 128, 128, under);
         gfx_blit(T, mx, 24, 128, 128, moving);
-        // a little shadow on the cover underneath
-        gfx_clip(T, 8, 24, 136, 152);
-        gfx_darken(T, mx + 128, 24, 4, 128);
-        gfx_unclip(T);
         // the old text fades out, the new one fades in
         if (q < 128)
         {
@@ -981,12 +1079,7 @@ static bool draw_list(int oy)
             for (int k = 0; k < ROWS; k++)
                 gfx_fill(B, 0, y0 + k * ROW_H, SCROLL_X, ROW_H, k % 2 ? C_ZEBRA : C_BG);
             if (app.sel >= 0 && app.sel < app.n_items)
-            {
-                int hy = y0 + app.sel_vis;
-                int top = hy < y0 ? y0 : hy, bottom = hy + ROW_H > y0 + ROWS * ROW_H ? y0 + ROWS * ROW_H : hy + ROW_H;
-                if (bottom > top)
-                    gfx_fill(B, 0, top, SCROLL_X, bottom - top, C_SEL);
-            }
+                highlight(0, y0 + app.sel_vis, SCROLL_X, ROW_H, y0, y0 + ROWS * ROW_H, C_SEL);
         }
         if (i >= app.n_items)
             continue;
@@ -1144,7 +1237,7 @@ static void play_pause(int cy, int l0, int l1, int r0, int r1, int h, int pl, in
     }
     if (t <= 0)
     {
-        gfx_triangle(B, pl, cy - ph, pl, cy + ph, pt, cy, col);
+        gfx_arrow(B, pl, cy, ph, pt - pl, 1, col);
         return;
     }
     int xs = (pl + pt) / 2, hs = ph / 2;
@@ -1167,7 +1260,7 @@ static void draw_bar(int oy)
     lit_box(16, y + 14, 28, 20, BTN_PLAY);
     play_pause(y + 14, 13, 14, 17, 18, 5, 12, 20, 5, pp_shape(), C_TEXT);
     lit_box(48, y + 14, 28, 20, BTN_NEXT);
-    icon(B, 40, y + 6, 0x23ED, C_TEXT);
+    icon(B, 40, y + 5, 0x23ED, C_TEXT);     // its glyph sits 1 px low
     if (app.add_mode)
         gfx_round_fill(B, 66, y + 4, 28, 20, 6, lit(BTN_ADD) ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
     else
@@ -1229,12 +1322,12 @@ static void draw_sort_menu(int oy)
     gfx_rect(B, x0, y0, x1 - x0, h + 1, C_LINE);
     static const char *const titles[SORT_SLOTS] = { "Sort artists", "Sort albums", "Sort songs", "Sort songs", "Sort folders" };
     text(B, x0 + 8, y0 + 2, titles[slot], C_DIM);
+    if (app.menu_sel >= 0)
+        highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * n, C_SEL);
     for (int i = 0; i < n; i++)
     {
         int y = y0 + 20 + i * 16;
         bool cur = app.set.sort[slot] == i;
-        if (cur || i == app.menu_sel)
-            gfx_fill(B, x0 + 1, y, x1 - x0 - 2, 16, i == app.menu_sel ? C_SEL : C_PANEL);
         icon(B, x0 + 4, y, cur ? 0x25CF : 0x25CB, cur ? C_ACC : C_DIM);
         text(B, x0 + 24, y, ui_sort_option(slot, i), C_TEXT);
     }
@@ -1260,11 +1353,11 @@ static void draw_row_menu(int oy)
     font_draw(B, x0 + 8, y0 + 2, x1 - x0 - 16, label, C_DIM);
     static const uint32_t icons[3] = { 0x25B6, 0x21B3, '+' };
     static const char *const names[3] = { "Play now", "Play next", "Add to queue" };
+    if (app.menu_sel >= 0)
+        highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * 3, C_SEL);
     for (int i = 0; i < 3; i++)
     {
         int y = y0 + 20 + i * 16;
-        if (i == app.menu_sel)
-            gfx_fill(B, x0 + 1, y, x1 - x0 - 2, 16, C_SEL);
         icon(B, x0 + 4, y, icons[i], C_ACC);
         text(B, x0 + 24, y, names[i], C_TEXT);
     }
@@ -1338,8 +1431,8 @@ static bool draw_panel(int oy)
 static void big_next(int cx, int cy, uint16_t c, bool flip)
 {
     int s = flip ? -1 : 1;
-    gfx_triangle(B, cx - 10 * s, cy - 9, cx - 10 * s, cy + 9, cx - 1 * s, cy, c);
-    gfx_triangle(B, cx - 1 * s, cy - 9, cx - 1 * s, cy + 9, cx + 8 * s, cy, c);
+    gfx_arrow(B, cx - 10 * s, cy, 9, 9, s, c);
+    gfx_arrow(B, cx - 1 * s, cy, 9, 9, s, c);
     int bx = cx + 8 * s;
     gfx_fill(B, s > 0 ? bx : bx - 2, cy - 9, 3, 19, c);
 }
@@ -1459,6 +1552,10 @@ static bool draw_queue(void)
     bool anim = false;
     bool dragging = app.q_drag_from >= 0;
     for (int r = 0; r < ROWS; r++)
+        gfx_fill(B, 0, 20 + r * ROW_H, SCROLL_X, ROW_H, r % 2 ? C_ZEBRA : C_BG);
+    if (!dragging && app.q_sel >= 0 && app.q_sel < n)
+        highlight(0, 20 + app.q_vis, SCROLL_X, ROW_H, 20, 20 + ROWS * ROW_H, C_LINE);
+    for (int r = 0; r < ROWS; r++)
     {
         int slot = app.q_scroll + r;
         int y = 20 + r * ROW_H;
@@ -1475,7 +1572,8 @@ static bool draw_queue(void)
             i = k >= app.q_drag_from ? k + 1 : k;
         }
         bool cur = i == queue_pos();
-        gfx_fill(B, 0, y, SCROLL_X, ROW_H, cur ? C_SEL : (i == app.q_sel ? C_LINE : (r % 2 ? C_ZEBRA : C_BG)));
+        if (cur)
+            gfx_fill(B, 0, y, SCROLL_X, ROW_H, C_SEL);
         if (i >= n)
             continue;
         uint32_t t = queue_track(i);
@@ -1516,37 +1614,83 @@ static void toggle(int x, int y, bool on)
     gfx_disc(B, on ? x + 20 : x + 7, y + 7, 5, on ? C_TEXT : C_DIM);
 }
 
-static bool draw_settings(void)
+static bool settings_page(void)
 {
     gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
     text(B, 8, 2, "Settings", C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
-    static const char *const labels[7] = { "Scroll all long rows", "Case-sensitive names",
-                                           "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
-                                           "Time on the right", "Cover background" };
+    static const char *const labels[SET_ROWS] = { "Scroll all long rows", "Case-sensitive names",
+                                                  "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
+                                                  "Time on the right", "Cover background", "About" };
     static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
     const uint8_t on[4] = { app.set.scroll_all, app.set.case_sensitive, app.set.pause_on_lid, app.set.lr_skip_lid };
     bool anim = false;
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < SET_ROWS - 1; i++)
+        gfx_fill(B, 8, SET_Y + i * SET_H + SET_H - 1, 240, 1, C_ZEBRA);
+    if (app.menu_sel >= 0)
+        highlight(0, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + SET_ROWS * SET_H, C_SEL);
+    for (int i = 0; i < SET_ROWS; i++)
     {
-        int y = 24 + i * 24;
-        if (i == app.menu_sel)
-            gfx_fill(B, 0, y, SCREEN_W, 23, C_SEL);
-        bool is_toggle = i < 4 || i == 6;
+        int y = SET_Y + i * SET_H;
+        bool has_value = i == 4 || i == 5;
         const char *value = i == 4 ? rg[app.set.rg_mode] : (app.set.show_remaining ? "Left" : "Length");
-        int w = is_toggle ? 196 : 232 - 8 - font_text_width(value) - 8;
-        anim |= marquee1(B, 8, y + 4, w, labels[i], C_TEXT, app.frame, false);
+        int w = has_value ? 232 - 8 - font_text_width(value) - 8 : 196;
+        anim |= marquee1(B, 8, y + 2, w, labels[i], C_TEXT, app.frame, false);
         if (i < 4)
-            toggle(216, y + 5, on[i]);
+            toggle(216, y + 3, on[i]);
         else if (i == 6)
-            toggle(216, y + 5, !app.set.plain_bg);
+            toggle(216, y + 3, !app.set.plain_bg);
+        else if (i == 7)
+            text_r(B, 244, y + 2, "›", C_DIM);
         else
-            text_r(B, 244, y + 4, value, C_ACC);
-        if (i < 6)
-            gfx_fill(B, 8, y + 23, 240, 1, C_ZEBRA);
+            text_r(B, 244, y + 2, value, C_ACC);
     }
     return anim;
+}
+
+static void centered_at(int cx, int y, const char *s, uint16_t color, int scale)
+{
+    font_draw_ex(B, cx - font_text_width(s) * scale / 2, y, 0, SCREEN_W, s, color, -1, scale);
+}
+
+// About, drawn with its left edge at x = dx (it slides in over the settings).
+static void about_page(int dx)
+{
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
+    gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
+    text(B, dx + 6, 2, "‹", C_TEXT);
+    text(B, dx + 18, 2, "About", C_TEXT);
+    text(B, dx + 236, 2, "×", C_TEXT);
+    int cx = dx + SCREEN_W / 2;
+    centered_at(cx, 26, APP_NAME, C_ACC, 2);
+    centered_at(cx, 60, "Version " APP_VERSION, C_DIM, 1);
+    centered_at(cx, 84, "Music player for the DS Lite", C_TEXT, 1);
+    centered_at(cx, 100, "© 2026 Alya", C_TEXT, 1);
+    centered_at(cx, 122, "Licence: GNU GPL v3", C_TEXT, 1);
+    centered_at(cx, 138, "Free software, no warranty", C_DIM, 1);
+    centered_at(cx, 158, APP_URL, C_ACC, 1);
+    centered_at(cx, 174, "Glyphs: GNU Unifont", C_DIM, 1);
+    gfx_unclip(B);
+}
+
+static bool draw_settings(void)
+{
+    // About pushes the settings out to the left
+    int q = ease_out(clamp256(app.about_t * 256 / TAB_TICKS));
+    int dx = SCREEN_W - SCREEN_W * q / 256;
+    bool anim = false;
+    if (dx > 0)
+    {
+        anim = settings_page();
+        if (dx < SCREEN_W)
+            for (int y = 0; y < SCREEN_H; y++)
+                memmove(B->px + y * SCREEN_W, B->px + y * SCREEN_W + (SCREEN_W - dx), dx * 2);
+    }
+    if (dx < SCREEN_W)
+        about_page(dx);
+    return anim || (app.about_t > 0 && app.about_t < TAB_TICKS);
 }
 
 static bool w_settings(int arg) { (void)arg; return draw_settings(); }

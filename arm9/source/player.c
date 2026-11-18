@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Streaming: two ring buffers (left, right) of RING_BLOCKS blocks each. The
 // ARM7 plays them in a loop and reports every finished block; we then load
@@ -15,7 +15,8 @@
 #include "ipc.h"
 #include "player.h"
 
-#define RING_BLOCKS     4                       // 4 x 125 ms = 0.5 s of buffer
+#define RING_BLOCKS     8                       // 8 x 125 ms = 1 s of buffer
+#define START_BLOCKS    4                       // read before starting; the rest follows
 #define BLOCK_FRAMES    4096
 #define BLOCK_BYTES     (BLOCK_FRAMES * 2)      // per channel
 #define RING_BYTES      (RING_BLOCKS * BLOCK_BYTES)
@@ -41,7 +42,7 @@ static uint8_t generation;
 static long file_pos = -1;
 static uint32_t underruns;
 static uint8_t volume = 127;
-static uint32_t tick_played, tick_frames;   // for player_peek
+static uint32_t tick_played, tick_frames;   // last report seen, frames since: player_peek, smooth position
 
 static void event_handler(u32 value, void *userdata)
 {
@@ -121,9 +122,11 @@ static void hw_start(uint32_t block)
     base_block = block;
     generation = (generation + 1) & 0xF; // first, so late events of the old run are ignored
     played = 0;
+    tick_played = 0;
+    tick_frames = 0;
     loaded = 0;
 
-    while (loaded < RING_BLOCKS)
+    while (loaded < START_BLOCKS)
         load_block(loaded++);
 
     StreamCmd c = { 0 };
@@ -225,10 +228,15 @@ void player_service(void)
         underruns++;
         loaded = p;
     }
+    // Playback comes first, but the reading is spread out: while at least
+    // 3 blocks (0.375 s) are ready ahead, one block per call; below that, all
+    // that's missing at once, however long drawing has to wait.
     while (loaded < p + RING_BLOCKS)
     {
         load_block(loaded++);
         p = played;
+        if (loaded >= p + 4)
+            break;
     }
 }
 
@@ -332,10 +340,15 @@ bool player_peek(int16_t *out, int n)
 
 uint32_t player_position_smooth_ms(void)
 {
-    uint32_t ms = player_position_ms();
     if (state != PLAYER_PLAYING)
-        return ms;
-    // the ARM7 reports whole 125 ms blocks; in between, count the frames
+        return player_position_ms();
+    // the ARM7 reports whole 125 ms blocks; in between, count the frames. Both
+    // from player_tick's snapshot: a report arriving in the middle of a frame
+    // would otherwise move the bar a block ahead and then back again.
+    uint64_t frames = (uint64_t)(base_block + tick_played) * BLOCK_FRAMES;
+    if (frames > hdr.frame_count)
+        frames = hdr.frame_count;
+    uint32_t ms = (uint32_t)(frames * 1000 * hdr.timer_divider / hdr.sound_clock_hz);
     uint32_t in_block = tick_frames * 1000 / 60;
     uint32_t block_ms = (uint32_t)((uint64_t)BLOCK_FRAMES * 1000 * hdr.timer_divider / hdr.sound_clock_hz);
     if (in_block > block_ms)

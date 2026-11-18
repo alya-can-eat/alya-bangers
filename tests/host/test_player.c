@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Streams real .dsa files through player.c with a simulated ARM7 and checks,
 // sample by sample, that what the hardware would play is the file's audio.

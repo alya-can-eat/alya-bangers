@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef DSPLAYER_VIZ_H__
 #define DSPLAYER_VIZ_H__

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // font.bin layout (dsconv FORMAT.md, section 3): 32-byte header, then a table
 // of 12-byte glyph entries sorted by code point (and variant), then 1-bit

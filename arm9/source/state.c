@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +25,10 @@ typedef struct {
     char path[512];
 } StateHeader;
 
-static char file_path[256] = "/_nds/dsplayer/state.bin";
+#define DEFAULT_FILE "/_nds/alya-bangers/state.bin"
+#define OLD_FILE     "/_nds/dsplayer/state.bin"     // before the app had its name
+
+static char file_path[256] = DEFAULT_FILE;
 
 void state_set_file(const char *path)
 {
@@ -44,6 +47,8 @@ bool state_load(Settings *s, Resume *r)
 {
     memset(r, 0, sizeof(*r));
     FILE *f = fopen(file_path, "rb");
+    if (f == NULL && strcmp(file_path, DEFAULT_FILE) == 0)
+        f = fopen(OLD_FILE, "rb");      // saved under the old name: read it, save under the new
     if (f == NULL)
         return false;
     StateHeader h;
