@@ -34,6 +34,7 @@
 #define SCROLL_X    244             // scroll bar column, 12 px wide
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
 #define SLIDE_FRAMES 15             // 0.5 s at 30 fps
+#define TAB_FRAMES  8               // sideways list slide, 0.27 s
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
@@ -52,6 +53,10 @@ typedef struct {
     uint32_t sel_frame;         // frame the selection last changed (scrolling text restarts)
 
     // modes and panels
+    int tab_anim;               // frames left of the sideways slide between lists
+    int tab_dir;                // +1: the new list comes in from the right
+    Tab tab_prev;               // where the tab highlight slides from
+
     bool player_mode;           // where the slide is heading
     int slide;                  // 0 = browser up .. SLIDE_FRAMES = player
     Overlay overlay;
@@ -89,6 +94,8 @@ extern App app;
 
 // ui.c
 void ui_init(void);
+// Keep the list as it is on screen now, to slide it out when the list changes.
+void ui_capture_list(void);
 // Draw both screens. Returns true if something on them moves by itself
 // (scrolling text, the record, the visualizer), so they need redrawing.
 bool ui_draw_top(void);

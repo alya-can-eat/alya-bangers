@@ -124,8 +124,19 @@ static bool select_item(ItemKind kind, uint32_t id)
     return false;
 }
 
-static void show_tab(Tab t)
+// Switch list. dir: +1 the new list slides in from the right, -1 from the
+// left, 0 no slide (default: from the side of the new tab).
+static void show_tab_dir(Tab t, int dir)
 {
+    if (dir == 0)
+        dir = t > app.tab ? 1 : (t < app.tab ? -1 : 0);
+    if (dir != 0 && app.slide == 0 && !app.player_mode && app.overlay != OV_SETTINGS)
+    {
+        ui_capture_list();
+        app.tab_prev = app.tab_anim ? app.tab_prev : app.tab;
+        app.tab_dir = dir;
+        app.tab_anim = TAB_FRAMES;
+    }
     app.tab = t;
     app.overlay = OV_NONE;
     app.sel = app.scroll = 0;
@@ -164,6 +175,11 @@ static void show_tab(Tab t)
     if (!found && app.n_items > 1 && app.items[0].kind == ITEM_UP)
         select_index(1);
     redraw = true;
+}
+
+static void show_tab(Tab t)
+{
+    show_tab_dir(t, 0);
 }
 
 static void slide_to(bool player)
@@ -359,7 +375,7 @@ static void activate(int i)
         lib_folder_name(it, app.folder, name, sizeof(name));
         size_t l = strlen(app.folder);
         snprintf(app.folder + l, sizeof(app.folder) - l, "%s%s", l ? "/" : "", name);
-        show_tab(TAB_FOLDER);
+        show_tab_dir(TAB_FOLDER, 1);
         break;
     }
     case ITEM_UP:
@@ -368,7 +384,7 @@ static void activate(int i)
         char left[512];
         snprintf(left, sizeof(left), "%s", slash ? slash + 1 : app.folder);
         if (slash) *slash = 0; else app.folder[0] = 0;
-        show_tab(TAB_FOLDER);
+        show_tab_dir(TAB_FOLDER, -1);
         // put the selection on the folder we came from
         for (int k = 0; k < app.n_items; k++)
         {
@@ -1022,6 +1038,11 @@ static void app_tick(void)
     if (app.slide != target)
     {
         app.slide += app.slide < target ? 1 : -1;
+        redraw = true;
+    }
+    if (app.tab_anim > 0)
+    {
+        app.tab_anim--;
         redraw = true;
     }
     app.frame++;

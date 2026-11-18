@@ -172,6 +172,10 @@ int main(int argc, char **argv)
 
     tap_row("Kivara");
     check(app.tab == TAB_ALBUM && app.artist >= 0, "tap artist -> Album tab");
+    check(app.tab_anim > 0 && app.tab_dir == 1, "the album list slides in from the right");
+    shot("02a_album_sliding");
+    run(20);
+    check(app.tab_anim == 0, "the slide ends");
     shot("02_album");
 
     tap_row("Paper Archive vol.1");

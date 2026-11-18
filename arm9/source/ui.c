@@ -504,19 +504,27 @@ bool ui_draw_top(void)
 
 // ------------------------------------------------------------ bottom: browser panel
 
+static int tab_progress(void);
+
 static void draw_tabs(int oy)
 {
     gfx_fill(B, 0, oy, SCREEN_W, TAB_H, C_PANEL);
     static const char *const names[TAB_COUNT] = { "Artist", "Album", "Title", NULL, NULL };
+    // the highlight glides from the old tab to the new one
+    int hx = tab_x[app.tab], hw = tab_x[app.tab + 1] - hx;
+    if (app.tab_anim > 0 && app.tab_prev != app.tab)
+    {
+        int q = tab_progress();
+        int px = tab_x[app.tab_prev], pw = tab_x[app.tab_prev + 1] - px;
+        hx = px + (hx - px) * q / 256;
+        hw = pw + (hw - pw) * q / 256;
+    }
+    gfx_fill(B, hx, oy, hw, TAB_H, C_BG);
+    gfx_fill(B, hx, oy, hw, 2, C_ACC);
     for (int i = 0; i < TAB_COUNT; i++)
     {
         int x = tab_x[i], w = tab_x[i + 1] - x;
         bool act = (int)app.tab == i;
-        if (act)
-        {
-            gfx_fill(B, x, oy, w, TAB_H, C_BG);
-            gfx_fill(B, x, oy, w, 2, C_ACC);
-        }
         if (i)
             gfx_fill(B, x, oy + 3, 1, 14, C_LINE);
         char label[200];
@@ -677,6 +685,47 @@ static bool draw_list(int oy)
     return anim;
 }
 
+// ---- sideways slide between lists
+
+#define LIST_PX (SCREEN_W * ROWS * ROW_H)
+static uint16_t old_list[LIST_PX];
+static uint16_t new_list[LIST_PX];
+
+void ui_capture_list(void)
+{
+    Canvas *c = gfx_canvas(SCREEN_BOTTOM);
+    memcpy(old_list, c->px + LIST_Y * SCREEN_W, sizeof(old_list));
+}
+
+static int tab_progress(void)
+{
+    // ease out: fast at first, settling at the end
+    int p = (TAB_FRAMES - app.tab_anim) * 256 / TAB_FRAMES;
+    return 256 - (256 - p) * (256 - p) / 256;
+}
+
+// The list area holds the new list; shift it in and the old one out.
+static void slide_lists(int oy)
+{
+    if (app.tab_anim <= 0 || oy != 0)
+        return;
+    uint16_t *area = B->px + LIST_Y * SCREEN_W;
+    memcpy(new_list, area, sizeof(new_list));
+    int off = app.tab_dir * (SCREEN_W - SCREEN_W * tab_progress() / 256);  // new list's x
+    int old_off = off - app.tab_dir * SCREEN_W;
+    for (int y = 0; y < ROWS * ROW_H; y++)
+    {
+        uint16_t *d = area + y * SCREEN_W;
+        const uint16_t *n = new_list + y * SCREEN_W, *o = old_list + y * SCREEN_W;
+        for (int x = 0; x < SCREEN_W; x++)
+        {
+            int nx = x - off, ox = x - old_off;
+            d[x] = (nx >= 0 && nx < SCREEN_W) ? n[nx] : ((ox >= 0 && ox < SCREEN_W) ? o[ox] : C_BG);
+        }
+    }
+    B->dirty = true;
+}
+
 static void pill(int cx, int y, uint32_t cp)
 {
     gfx_round_fill(B, cx - 20, y + 4, 40, 20, 6, C_LINE);
@@ -773,6 +822,8 @@ static bool draw_panel(int oy)
     if (oy < SCREEN_H - TAB_H)
     {
         anim |= draw_list(oy);
+        slide_lists(oy);
+        anim |= app.tab_anim > 0;
         draw_bar(oy);
         if (app.overlay == OV_SORT)
             draw_sort_menu(oy);
