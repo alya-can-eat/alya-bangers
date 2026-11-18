@@ -386,6 +386,17 @@ int main(int argc, char **argv)
     tap_row("Kivara");
     shot("09_folder");
 
+    // ---- sort: an artist option saved by an older version ("Most songs") falls back to name
+    check(ui_sort_option_count(SLOT_ARTIST) == 2, "artists sort by name only");
+    {
+        int tab = app.tab;
+        app.set.sort[SLOT_ARTIST] = 2;
+        show_tab(TAB_ARTIST);
+        check(app.set.sort[SLOT_ARTIST] == 0, "a removed sort option falls back to name");
+        show_tab(tab);
+        run(20);
+    }
+
     // ---- sort menu on the album list
     tap(36, 10);    // Artist tab label -> artist list
     tap_row("Kivara");

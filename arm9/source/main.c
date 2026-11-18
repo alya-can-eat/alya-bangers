@@ -87,6 +87,8 @@ static void rebuild_list(void)
     if (!lib_loaded())
         return;
     int slot = ui_sort_slot();
+    if (app.set.sort[slot] >= ui_sort_option_count(slot))
+        app.set.sort[slot] = 0;     // an option that's gone (saved by an older version)
     int sort = app.set.sort[slot];
     switch (app.tab)
     {

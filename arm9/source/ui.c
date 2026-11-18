@@ -281,7 +281,7 @@ int ui_sort_slot(void)
 }
 
 static const char *const sort_names[SORT_SLOTS][4] = {
-    { "Name  0→9 A→Z", "Name  Z→A 9→0", "Most songs", NULL },
+    { "Name  0→9 A→Z", "Name  Z→A 9→0", NULL, NULL },
     { "Name  0→9 A→Z", "Name  Z→A 9→0", "Year  old → new", "Year  new → old" },
     { "Name  0→9 A→Z", "Name  Z→A 9→0", "Year  old → new", NULL },
     { "Track order", "Name  0→9 A→Z", "Name  Z→A 9→0", NULL },

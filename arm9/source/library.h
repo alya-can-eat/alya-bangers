@@ -74,7 +74,7 @@ typedef struct {
 } Item;
 
 enum { SORT_NAME_UP, SORT_NAME_DOWN, SORT_THIRD, SORT_FOURTH };
-// Sort modes per list. Artist: name, name reversed, most songs.
+// Sort modes per list. Artist: name, name reversed.
 // Album: name, reversed, year old->new, year new->old.
 // Title: name, reversed, year old->new. Title inside an album: track order,
 // name, reversed. Folder: name, reversed.

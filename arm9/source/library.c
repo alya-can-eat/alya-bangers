@@ -380,8 +380,6 @@ static int cmp_groups(const void *pa, const void *pb)
     // "(no artist)" always comes last
     if (group_rank[a] == LIB_NONE || group_rank[b] == LIB_NONE)
         return cmp_u32(group_rank[a], group_rank[b]);
-    if (sort_mode == SORT_THIRD && group_size[a] != group_size[b])
-        return group_size[a] > group_size[b] ? -1 : 1;
     int c = cmp_u32(group_rank[a], group_rank[b]);
     return sort_reverse ? -c : c;
 }
