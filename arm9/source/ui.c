@@ -65,6 +65,18 @@ static void mmss(char *buf, int size, uint32_t ms)
     format_time(buf, size, ms);
 }
 
+// Right of a progress bar: the song's length, or the time left (setting).
+static void right_time(char *buf, int size, uint32_t pos, uint32_t dur)
+{
+    if (!app.set.show_remaining)
+    {
+        mmss(buf, size, dur);
+        return;
+    }
+    buf[0] = '-';
+    mmss(buf + 1, size - 1, dur > pos ? dur - pos : 0);
+}
+
 // Scrolling text made of colored pieces. Returns true if it scrolls.
 static bool marquee(Canvas *c, int x, int y, int w, const char *const *s, const uint16_t *col,
                     int n, uint32_t t, bool center)
@@ -342,8 +354,7 @@ static void top_progress(int y)
     char s[16];
     mmss(s, sizeof(s), pos);
     text(T, 8, y + 8, s, C_TEXT);
-    s[0] = '-';
-    mmss(s + 1, sizeof(s) - 1, dur > pos ? dur - pos : 0);
+    right_time(s, sizeof(s), pos, dur);
     text_r(T, 248, y + 8, s, C_DIM);
 }
 
@@ -873,8 +884,7 @@ static bool draw_player_area(void)
     char s[16];
     mmss(s, sizeof(s), pos);
     text(B, 16, y + 12, s, C_TEXT);
-    s[0] = '-';
-    mmss(s + 1, sizeof(s) - 1, dur > pos ? dur - pos : 0);
+    right_time(s, sizeof(s), pos, dur);
     text_r(B, 240, y + 12, s, C_DIM);
 
     int cy = 100;
@@ -1025,21 +1035,24 @@ static bool draw_settings(void)
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
     text(B, 8, 2, "Settings", C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
-    static const char *const labels[5] = { "Scroll all long rows", "Case-sensitive names",
-                                           "Pause when lid closes", "L/R skip, lid closed", "ReplayGain" };
+    static const char *const labels[6] = { "Scroll all long rows", "Case-sensitive names",
+                                           "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
+                                           "Time on the right" };
     static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
     const uint8_t on[4] = { app.set.scroll_all, app.set.case_sensitive, app.set.pause_on_lid, app.set.lr_skip_lid };
     bool anim = false;
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 6; i++)
     {
         int y = 24 + i * 28;
         if (i == app.menu_sel)
             gfx_fill(B, 0, y, SCREEN_W, 27, C_SEL);
-        anim |= marquee1(B, 8, y + 6, 196, labels[i], C_TEXT, app.frame, false);
+        const char *value = i == 4 ? rg[app.set.rg_mode] : (app.set.show_remaining ? "Left" : "Length");
+        int w = i < 4 ? 196 : 232 - 8 - font_text_width(value) - 8;
+        anim |= marquee1(B, 8, y + 6, w, labels[i], C_TEXT, app.frame, false);
         if (i < 4)
             toggle(216, y + 7, on[i]);
         else
-            text_r(B, 244, y + 6, rg[app.set.rg_mode], C_ACC);
+            text_r(B, 244, y + 6, value, C_ACC);
         gfx_fill(B, 8, y + 27, 240, 1, C_ZEBRA);
     }
     return anim;

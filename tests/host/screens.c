@@ -270,7 +270,11 @@ int main(int argc, char **argv)
     // ---- settings
     tap(240, BAR_Y + 14);
     check(app.overlay == OV_SETTINGS, "settings open");
+    check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
+    tap(100, 24 + 5 * 28 + 10);
+    check(app.set.show_remaining, "time left can be chosen");
+    tap(100, 24 + 5 * 28 + 10);
     tap(100, 24 + 1 * 28 + 10);     // case-sensitive
     check(app.set.case_sensitive, "case-sensitive on");
     tap(240, 8);

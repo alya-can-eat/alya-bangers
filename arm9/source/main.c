@@ -504,6 +504,7 @@ static void settings_toggle(int row)
         app.set.rg_mode = (app.set.rg_mode + 1) % RG_MODES;
         player_set_volume(replaygain_volume());
         break;
+    case 5: app.set.show_remaining ^= 1; break;
     default: return;
     }
     touch_state();
@@ -676,7 +677,7 @@ static void tap_settings(int x, int y)
         if (x >= 224)
             app.overlay = OV_NONE;
     }
-    else if (y >= 24 && y < 24 + 5 * 28)
+    else if (y >= 24 && y < 24 + 6 * 28)
         settings_toggle((y - 24) / 28);
     redraw = true;
 }
@@ -811,7 +812,7 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        menu_keys(rep, down, 5, settings_toggle);
+        menu_keys(rep, down, 6, settings_toggle);
         return;
     case OV_SORT:
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);

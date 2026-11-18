@@ -20,7 +20,8 @@ or folder, a player screen with a turning record, a queue you can edit.
 - **Player:** tap ⮟ and the browser slides down until only the tabs are left.
   Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all,
   one), ⓘ song info, ☰ queue, ⮝ back to browsing (tapping a tab does too).
-- **Top screen:** time and date, cover, title, artist, album, progress. In
+- **Top screen:** time and date, cover, title, artist, album, progress (the
+  song's length on the right, or the time left: see settings). In
   player mode: the record turning at 33⅓ rpm, a visualizer, the next song.
 - **Add to queue:** hold a row for *Play now / Play next / Add to queue*, or
   turn on the add-to-queue button: then tapping rows adds them instead of

@@ -20,7 +20,8 @@ typedef struct {
     uint8_t rg_mode;
     uint8_t brightness;       // 2..5 (DS Lite levels)
     uint8_t sort[SORT_SLOTS];
-    uint8_t reserved[5];
+    uint8_t show_remaining;   // right of the progress bar: time left instead of the length
+    uint8_t reserved[4];
 } Settings;
 
 _Static_assert(sizeof(Settings) == 16, "settings are 16 bytes in the file");
