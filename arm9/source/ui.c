@@ -89,10 +89,12 @@ static void right_time(char *buf, int size, uint32_t pos, uint32_t dur)
 // Scrolling text fades out over EDGE_W pixels at each end instead of being
 // cut off: save the 16 px tall strips at both ends, draw the text, then blend
 // the strips back towards what was under them, more the closer to the end.
+// amount (0..256) scales the whole fade.
 #define EDGE_W 8
+#define EDGE_RAMP 16    // the left fade comes and goes over this many px of scrolling
 enum { EDGE_SAVE, EDGE_LEFT, EDGE_RIGHT };
 
-static void edge(Canvas *c, int x, int y, uint16_t *buf, int mode)
+static void edge(Canvas *c, int x, int y, uint16_t *buf, int mode, int amount)
 {
     for (int j = 0; j < ROW_H; j++)
     {
@@ -111,7 +113,7 @@ static void edge(Canvas *c, int x, int y, uint16_t *buf, int mode)
             else if (*p != *b)
             {
                 int k = mode == EDGE_LEFT ? i + 1 : EDGE_W - i;   // 1 at the outer end
-                *p = gfx_mix(*p, *b, k * 256 / (EDGE_W + 1));
+                *p = gfx_mix(*p, *b, 256 - (EDGE_W + 1 - k) * amount / (EDGE_W + 1));
             }
         }
     }
@@ -144,17 +146,20 @@ static bool marquee(Canvas *c, int x, int y, int w, const char *const *s, const 
     int off = tt < HOLD_FRAMES ? 0 : (int)(tt - HOLD_FRAMES);
     // soft edges: keep what is under both ends, draw, then blend the ends back
     uint16_t left[EDGE_W * ROW_H], right[EDGE_W * ROW_H];
-    edge(c, x, y, left, EDGE_SAVE);
-    edge(c, x + w - EDGE_W, y, right, EDGE_SAVE);
+    edge(c, x, y, left, EDGE_SAVE, 0);
+    edge(c, x + w - EDGE_W, y, right, EDGE_SAVE, 0);
     for (int k = 0; k < 2; k++)
     {
         int pen = x - off + k * period;
         for (int i = 0; i < n; i++)
             pen += font_draw_ex(c, pen, y, x, x + w, s[i], col[i], jp, 1);
     }
-    if (off > 0)
-        edge(c, x, y, left, EDGE_LEFT);         // the start is cut off only once it moves
-    edge(c, x + w - EDGE_W, y, right, EDGE_RIGHT);
+    // the start is cut off only while it's away: the fade grows as the text
+    // leaves and shrinks as it comes back, instead of switching on and off
+    int away = off < period - off ? off : period - off;
+    if (away > 0)
+        edge(c, x, y, left, EDGE_LEFT, (away > EDGE_RAMP ? EDGE_RAMP : away) * 256 / EDGE_RAMP);
+    edge(c, x + w - EDGE_W, y, right, EDGE_RIGHT, 256);
     return true;
 }
 
