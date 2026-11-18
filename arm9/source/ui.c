@@ -77,6 +77,37 @@ static void right_time(char *buf, int size, uint32_t pos, uint32_t dur)
     mmss(buf + 1, size - 1, dur > pos ? dur - pos : 0);
 }
 
+// Scrolling text fades out over EDGE_W pixels at each end instead of being
+// cut off: save the 16 px tall strips at both ends, draw the text, then blend
+// the strips back towards what was under them, more the closer to the end.
+#define EDGE_W 8
+enum { EDGE_SAVE, EDGE_LEFT, EDGE_RIGHT };
+
+static void edge(Canvas *c, int x, int y, uint16_t *buf, int mode)
+{
+    for (int j = 0; j < ROW_H; j++)
+    {
+        int yy = y + j;
+        if (yy < c->cy0 || yy >= c->cy1)
+            continue;
+        for (int i = 0; i < EDGE_W; i++)
+        {
+            int xx = x + i;
+            if (xx < c->cx0 || xx >= c->cx1)
+                continue;
+            uint16_t *p = &c->px[yy * SCREEN_W + xx];
+            uint16_t *b = &buf[j * EDGE_W + i];
+            if (mode == EDGE_SAVE)
+                *b = *p;
+            else if (*p != *b)
+            {
+                int k = mode == EDGE_LEFT ? i + 1 : EDGE_W - i;   // 1 at the outer end
+                *p = gfx_mix(*p, *b, k * 256 / (EDGE_W + 1));
+            }
+        }
+    }
+}
+
 // Scrolling text made of colored pieces. Returns true if it scrolls.
 static bool marquee(Canvas *c, int x, int y, int w, const char *const *s, const uint16_t *col,
                     int n, uint32_t t, bool center)
@@ -102,12 +133,19 @@ static bool marquee(Canvas *c, int x, int y, int w, const char *const *s, const 
     uint32_t lap = HOLD_FRAMES + period;
     uint32_t tt = t % lap;
     int off = tt < HOLD_FRAMES ? 0 : (int)(tt - HOLD_FRAMES);
+    // soft edges: keep what is under both ends, draw, then blend the ends back
+    uint16_t left[EDGE_W * ROW_H], right[EDGE_W * ROW_H];
+    edge(c, x, y, left, EDGE_SAVE);
+    edge(c, x + w - EDGE_W, y, right, EDGE_SAVE);
     for (int k = 0; k < 2; k++)
     {
         int pen = x - off + k * period;
         for (int i = 0; i < n; i++)
             pen += font_draw_ex(c, pen, y, x, x + w, s[i], col[i], jp, 1);
     }
+    if (off > 0)
+        edge(c, x, y, left, EDGE_LEFT);         // the start is cut off only once it moves
+    edge(c, x + w - EDGE_W, y, right, EDGE_RIGHT);
     return true;
 }
 
