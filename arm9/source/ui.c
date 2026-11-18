@@ -450,11 +450,12 @@ static bool top_next_column(int x, uint32_t t)
     if (x >= SCREEN_W)
         return false;
     int w = 48 < SCREEN_W - x ? 48 : SCREEN_W - x;
-    font_draw_ex(T, x, 24, x, SCREEN_W, "Next", C_DIM, 0, 1);
+    // everything centred in the 48 px column, so "Next" lines up with the picture
+    font_draw_ex(T, x + (48 - font_text_width("Next")) / 2, 24, x, SCREEN_W, "Next", C_DIM, 0, 1);
     int np = queue_next_pos(true);
     if (np < 0 || !lib_loaded())
     {
-        font_draw_ex(T, x, 80, x, x + w, "–", C_DIM, 0, 1);
+        font_draw_ex(T, x + 20, 80, x, x + w, "–", C_DIM, 0, 1);
         return false;
     }
     uint32_t nt = queue_track(np);
@@ -463,8 +464,8 @@ static bool top_next_column(int x, uint32_t t)
     char title[200];
     track_title(nt, title, sizeof(title));
     const LibTrack *tr = lib_track(nt);
-    bool anim = marquee1(T, x, 80, w, title, C_TEXT, t, false);
-    anim |= marquee1(T, x, 96, w, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, false);
+    bool anim = marquee1(T, x, 80, w, title, C_TEXT, t, true);
+    anim |= marquee1(T, x, 96, w, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
     return anim;
 }
 
