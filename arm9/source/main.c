@@ -1026,12 +1026,21 @@ static void handle_lid(uint32_t held, uint32_t down)
         }
         // fade to black first, so a screen that keeps showing its last frame
         // shows black when the lid opens again; then the light goes off
-        if (lid_fade < LID_OUT)
+        if (lid_fade <= LID_OUT)
         {
             lid_fade++;
-            setBrightness(3, -16 * lid_fade / LID_OUT);
+            if (lid_fade <= LID_OUT)
+                setBrightness(3, -16 * lid_fade / LID_OUT);
             if (lid_fade == LID_OUT)
-                powerOff(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);
+            {
+                // and then really black: both screens filled and shown, so the
+                // last frame is black whatever the display keeps
+                for (int s = 0; s < 2; s++)
+                    gfx_fill(gfx_canvas((Screen)s), 0, 0, SCREEN_W, SCREEN_H, COLOR(0, 0, 0));
+                gfx_present();
+            }
+            else if (lid_fade == LID_OUT + 1)
+                powerOff(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);   // a frame later
         }
         if (app.set.lr_skip_lid)
         {
@@ -1046,6 +1055,7 @@ static void handle_lid(uint32_t held, uint32_t down)
         setBrightness(3, -16);
         lid_fade_in = 0;
         powerOn(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);
+        redraw = true;      // the screens were filled black: draw them again
         if (paused_by_lid && player_state() == PLAYER_PAUSED)
             player_toggle_pause();
         paused_by_lid = false;

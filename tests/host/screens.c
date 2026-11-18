@@ -290,10 +290,16 @@ int main(int argc, char **argv)
     for (int i = 0; i < LID_OUT + 2; i++)
         tick(KEY_LID);
     check(lid_closed && sim_brightness == -16, "lid closed: faded to black");
+    bool all_black = true;
+    for (int s = 0; s < 2; s++)
+        for (int k = 0; k < 256 * 192; k++)
+            all_black &= (gfx_canvas((Screen)s)->px[k] & 0x7FFF) == 0;
+    check(all_black, "and both screens filled black");
     run(2);
     check(sim_brightness < 0, "lid opened: still dark at first");
     run(LID_IN + 2);
     check(sim_brightness == 0, "then faded in");
+    check((gfx_canvas(SCREEN_TOP)->px[100 * 256 + 100] & 0x7FFF) != 0, "and drawn again");
 
     // ---- slide down to the player
     tap(128, BAR_Y + 14);
