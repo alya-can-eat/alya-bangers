@@ -320,7 +320,13 @@ static void song_text(uint32_t t, SongText *st)
         snprintf(st->extra + n, sizeof(st->extra) - n, "%s%d", n ? " · " : "", tr->track);
 }
 
-static bool top_text_column(int x0, const SongText *st, uint32_t t)
+// Text color faded towards the background: a = 256 full, 0 gone.
+static uint16_t fade(uint16_t c, int a)
+{
+    return a >= 256 ? c : gfx_mix(c, C_BG, a < 0 ? 0 : a);
+}
+
+static bool top_text_column(int x0, const SongText *st, uint32_t t, int alpha)
 {
     if (x0 >= SCREEN_W)
         return false;
@@ -332,10 +338,10 @@ static bool top_text_column(int x0, const SongText *st, uint32_t t)
         font_draw_ex(T, x0, 40, x0, x0 + w, "playing", C_DIM, 0, 1);
         return false;
     }
-    anim |= marquee1(T, x0, 24, w, st->title, C_TEXT, t, false);
-    anim |= marquee1(T, x0, 44, w, st->artist, C_ACC, t, false);
-    anim |= marquee1(T, x0, 64, w, st->album, C_DIM, t, false);
-    font_draw_ex(T, x0, 84, x0, x0 + w, st->extra, C_DIM, -1, 1);
+    anim |= marquee1(T, x0, 24, w, st->title, fade(C_TEXT, alpha), t, false);
+    anim |= marquee1(T, x0, 44, w, st->artist, fade(C_ACC, alpha), t, false);
+    anim |= marquee1(T, x0, 64, w, st->album, fade(C_DIM, alpha), t, false);
+    font_draw_ex(T, x0, 84, x0, x0 + w, st->extra, fade(C_DIM, alpha), -1, 1);
     // shuffle and repeat, since the controls are hidden while browsing
     icon(T, x0, 136, 0x1F500, queue_shuffle() ? C_ACC : C_FAINT);
     icon(T, x0 + 20, 136, queue_repeat() == REPEAT_ONE ? 0x1F502 : 0x1F501,
@@ -507,18 +513,37 @@ static const uint16_t *thumb_of(uint32_t track, bool saved)
     return app.has_thumb && app.thumb_track == track ? app.thumb : default_thumb;
 }
 
-static void next_texts(int x, uint32_t track, uint32_t t)
+static void next_texts(int x, uint32_t track, uint32_t t, int alpha)
 {
+    if (alpha <= 0)
+        return;
     if (track == LIB_NONE)
     {
-        font_draw_ex(T, x + 20, 80, x, SCREEN_W, "\u2013", C_DIM, 0, 1);
+        font_draw_ex(T, x + 20, 80, x, SCREEN_W, "\u2013", fade(C_DIM, alpha), 0, 1);
         return;
     }
     char title[200];
     track_title(track, title, sizeof(title));
     const LibTrack *tr = lib_track(track);
-    marquee1(T, x, 80, 48, title, C_TEXT, t, true);
-    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
+    marquee1(T, x, 80, 48, title, fade(C_TEXT, alpha), t, true);
+    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", fade(C_DIM, alpha), t, true);
+}
+
+// "Album · year" under the cover in player mode.
+static void album_line(uint32_t track, uint32_t t, int alpha)
+{
+    if (alpha <= 0 || track == LIB_NONE)
+        return;
+    const LibTrack *tr = lib_track(track);
+    if (tr->album == LIB_NONE)
+        return;
+    char line[260];
+    const char *name = lib_value(lib_album(tr->album)->name);
+    if (tr->year)
+        snprintf(line, sizeof(line), "%s \u00b7 %d", name, tr->year);
+    else
+        snprintf(line, sizeof(line), "%s", name);
+    marquee1(T, 8, 164, 240, line, fade(C_DIM, alpha), t, true);
 }
 
 static void draw_song_change(uint32_t t)
@@ -555,13 +580,14 @@ static void draw_song_change(uint32_t t)
         int q = ease_out(clamp256(app.sa_t * 256 / SA_PRE_TICKS));
         int bx = 256 + (208 - 256) * q / 256;
         gfx_blit(T, 208, 44, 32, 32, thumb_of(app.sa_n, true));
-        gfx_clip(T, 200, 0, bx - 8, SCREEN_H);
-        next_texts(200, app.sa_n, t);
-        gfx_unclip(T);
         gfx_blit_scaled(T, bx, 44, 32, bc);
-        gfx_clip(T, bx - 8 > 200 ? bx - 8 : 200, 0, SCREEN_W, SCREEN_H);
-        next_texts(bx - 8, app.sa_b, t);
-        gfx_unclip(T);
+        // the old Next name fades out, the chosen song's fades in
+        int k = app.sa_t * 512 / SA_PRE_TICKS;    // 0..512: out, then in
+        if (k < 256)
+            next_texts(200, app.sa_n, t, 256 - k);
+        else
+            next_texts(200, app.sa_b, t, clamp256(k - 256));
+        album_line(app.sa_a, t, 256);
         return;
     }
     // ... waits in the Next spot until the old cover is out of the way, then
@@ -569,18 +595,23 @@ static void draw_song_change(uint32_t t)
     int f = ease_out(fl);
     gfx_blit_scaled(T, 208 + (64 - 208) * f / 256, 44 + (24 - 44) * f / 256, 32 + 96 * f / 256, bc);
 
-    // its name leaves the Next column to the right before it sets off
+    // its name fades out of the Next column before it sets off
     int nq = clamp256((u - SA_FLY_START / 2) * 256 / (SA_FLY_START - SA_FLY_START / 2));
-    if (nq < 256)
-        next_texts(200 + 64 * ease_in(nq) / 256, app.sa_b, t);
-    // and the song after it comes in
+    next_texts(200, app.sa_b, t, 256 - nq);
+    // and the song after it comes in: picture slides, name fades in
     if (b > 0)
     {
         int off = 64 * (256 - ease_out(b)) / 256;
         if (app.sa_c != LIB_NONE)
             gfx_blit(T, 208 + off, 44, 32, 32, thumb_of(app.sa_c, back));
-        next_texts(200 + off, app.sa_c, t);
+        next_texts(200, app.sa_c, t, b);
     }
+    // the album line under the cover: out with the old song, in with the new
+    int out = 256 - clamp256(u * 512 / SA_OUT_TICKS);
+    if (out > 0)
+        album_line(app.sa_a, t, out);
+    else
+        album_line(app.sa_b, t, b);
 }
 
 bool ui_draw_top(void)
@@ -602,6 +633,7 @@ bool ui_draw_top(void)
     song_text(app_current_track(), &st);
     const uint16_t *cover = player_cover();
     int cover_x = 8 + 56 * p1 / 256;
+    int text_alpha = 256;
 
     if (SA_PLAYER(app.sa_kind) && p2 >= 256)
     {
@@ -636,15 +668,23 @@ bool ui_draw_top(void)
         gfx_clip(T, 8, 24, 136, 152);
         gfx_darken(T, mx + 128, 24, 4, 128);
         gfx_unclip(T);
-        // the text changes halfway, when the new cover is mostly showing
-        if (q < 128 && app.sa_a != LIB_NONE)
-            song_text(app.sa_a, &st);
+        // the old text fades out, the new one fades in
+        if (q < 128)
+        {
+            if (app.sa_a != LIB_NONE)
+                song_text(app.sa_a, &st);
+            else
+                memset(&st, 0, sizeof(st));
+            text_alpha = 256 - 2 * q;
+        }
+        else
+            text_alpha = 2 * q - 256;
         anim = true;
     }
     else
         gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
 
-    anim |= top_text_column(144 + 112 * p1 / 256, &st, t);
+    anim |= top_text_column(144 + 112 * p1 / 256, &st, t, text_alpha);
     if (p2 > 0)
         anim |= top_next_column(200 + 64 * (256 - p2) / 256, t);
     top_progress(162 + 40 * p1 / 256);
