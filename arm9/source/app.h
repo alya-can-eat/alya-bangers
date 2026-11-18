@@ -11,19 +11,21 @@
 
 #include "gfx.h"
 #include "library.h"
+#include "palette.h"
 #include "state.h"
 
-// ---- colors (the default theme of the mockup) ----
-#define C_BG        COLOR(2, 2, 4)
-#define C_PANEL     COLOR(4, 4, 7)
-#define C_ZEBRA     COLOR(3, 3, 5)
-#define C_LINE      COLOR(7, 7, 10)
-#define C_TEXT      COLOR(29, 29, 30)
-#define C_DIM       COLOR(15, 15, 19)
-#define C_FAINT     COLOR(9, 9, 12)
-#define C_ACC       COLOR(31, 17, 23)
-#define C_SEL       COLOR(11, 6, 10)
-#define C_ACC_DIM   COLOR(18, 10, 14)
+// ---- colors ----
+// the theme's colours (see palette.h)
+#define C_BG        pal[P_BG]
+#define C_PANEL     pal[P_PANEL]
+#define C_ZEBRA     pal[P_ZEBRA]
+#define C_LINE      pal[P_LINE]
+#define C_TEXT      pal[P_TEXT]
+#define C_DIM       pal[P_DIM]
+#define C_FAINT     pal[P_FAINT]
+#define C_ACC       pal[P_ACC]
+#define C_SEL       pal[P_SEL]
+#define C_ACC_DIM   pal[P_ACC_DIM]
 #define C_GLARE     C_ACC               // light on the record's grooves and rim, from the top left
 
 // ---- bottom screen layout ----
@@ -155,6 +157,7 @@ typedef struct {
     int set_back_sel;           // the top page's highlighted row, for coming back
 
     Settings set;
+    Theme theme;
     bool album_queue;           // the queue is one album
 
     uint32_t frame;             // time in 1/30 s (scrolling text, the record)

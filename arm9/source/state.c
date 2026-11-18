@@ -9,7 +9,9 @@
 #include "state.h"
 #include "util.h"
 
-#define STATE_VERSION 1
+#include <stddef.h>
+
+#define STATE_VERSION 2     // 2: the theme at the end of the header
 #define MAX_SAVED 65536
 
 typedef struct {
@@ -22,7 +24,11 @@ typedef struct {
     uint32_t queue_count;
     uint8_t shuffle, repeat, album_queue, reserved;
     char path[512];
+    uint16_t theme[3];          // background, text, accent (version 2)
+    uint16_t reserved2;
 } StateHeader;
+
+#define HEADER_V1 offsetof(StateHeader, theme)
 
 #define DEFAULT_FILE "/_nds/alya-bangers/state.bin"
 #define OLD_FILE     "/_nds/dsplayer/state.bin"     // before the app had its name
@@ -42,17 +48,24 @@ void state_defaults(Settings *s)
     s->rg_mode = RG_OFF;
 }
 
-bool state_load(Settings *s, Resume *r)
+bool state_load(Settings *s, Theme *t, Resume *r)
 {
     memset(r, 0, sizeof(*r));
+    *t = theme_default;
     FILE *f = fopen(file_path, "rb");
     if (f == NULL && strcmp(file_path, DEFAULT_FILE) == 0)
         f = fopen(OLD_FILE, "rb");      // saved under the old name: read it, save under the new
     if (f == NULL)
         return false;
+    // version 1 is version 2 without the theme at the end
     StateHeader h;
-    bool ok = fread(&h, 1, sizeof(h), f) == sizeof(h) && memcmp(h.magic, "DSPS", 4) == 0
-              && h.version == STATE_VERSION && h.header_size == sizeof(h) && h.queue_count <= MAX_SAVED;
+    memset(&h, 0, sizeof(h));
+    const size_t head = offsetof(StateHeader, settings);
+    bool ok = fread(&h, 1, head, f) == head && memcmp(h.magic, "DSPS", 4) == 0
+              && ((h.version == STATE_VERSION && h.header_size == sizeof(h))
+                  || (h.version == 1 && h.header_size == HEADER_V1));
+    ok = ok && fread((char *)&h + head, 1, h.header_size - head, f) == h.header_size - head
+         && h.queue_count <= MAX_SAVED;
     QueueEntry *e = NULL;
     if (ok && h.queue_count)
     {
@@ -63,7 +76,7 @@ bool state_load(Settings *s, Resume *r)
     if (ok)
     {
         ok = fread(&crc, 1, 4, f) == 4;
-        uint32_t c = crc32(&h, sizeof(h));
+        uint32_t c = crc32(&h, h.header_size);
         if (h.queue_count)
             c ^= crc32(e, h.queue_count * sizeof(QueueEntry));
         ok = ok && c == crc;
@@ -76,6 +89,12 @@ bool state_load(Settings *s, Resume *r)
     }
 
     *s = h.settings;
+    if (h.version >= 2 && (h.theme[0] & h.theme[1] & h.theme[2] & 0x8000))
+    {
+        t->bg = h.theme[0];
+        t->text = h.theme[1];
+        t->acc = h.theme[2];
+    }
     if (s->brightness < 2 || s->brightness > 5)
         s->brightness = 5;
     if (s->rg_mode >= RG_MODES)
@@ -101,7 +120,7 @@ bool state_load(Settings *s, Resume *r)
     return true;
 }
 
-bool state_save(const Settings *s, const Resume *r)
+bool state_save(const Settings *s, const Theme *t, const Resume *r)
 {
     make_dirs_for(file_path);
 
@@ -119,6 +138,9 @@ bool state_save(const Settings *s, const Resume *r)
     h.repeat = queue_repeat();
     h.album_queue = r->album_queue;
     snprintf(h.path, sizeof(h.path), "%s", r->path);
+    h.theme[0] = t->bg;
+    h.theme[1] = t->text;
+    h.theme[2] = t->acc;
 
     uint32_t crc = crc32(&h, sizeof(h));
     if (h.queue_count)

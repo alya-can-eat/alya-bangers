@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "palette.h"
+
 enum { RG_OFF, RG_TRACK, RG_ALBUM, RG_AUTO, RG_MODES };
 enum { SLOT_ARTIST, SLOT_ALBUM, SLOT_TITLE, SLOT_TITLE_IN_ALBUM, SLOT_FOLDER, SORT_SLOTS };
 
@@ -36,8 +38,9 @@ typedef struct {
 
 void state_defaults(Settings *s);
 void state_set_file(const char *path);
-// Restores settings, the position and, if the library is unchanged, the queue.
-bool state_load(Settings *s, Resume *r);
-bool state_save(const Settings *s, const Resume *r);
+// Restores settings, the theme, the position and, if the library is
+// unchanged, the queue. A file from before themes gives the default theme.
+bool state_load(Settings *s, Theme *t, Resume *r);
+bool state_save(const Settings *s, const Theme *t, const Resume *r);
 
 #endif

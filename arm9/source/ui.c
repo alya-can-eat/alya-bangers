@@ -441,7 +441,7 @@ static uint16_t v_groove[360], v_edge[360];     // their colors by angle, with t
 // Called again when the theme colors change.
 static void vinyl_glare(void)
 {
-    const uint16_t c_edge = COLOR(8, 8, 10), c_groove = COLOR(5, 5, 7);
+    const uint16_t c_edge = pal[P_RIM], c_groove = pal[P_GROOVE];
     for (int a = 0; a < 360; a++)
     {
         int d = a - 225;
@@ -487,7 +487,7 @@ static const Mark marks[5] = { { 52, 5, 28 }, { 37, 62, 22 }, { 47, 156, 30 }, {
 static HOT void vinyl_pixels(uint16_t *px, int cx, int cy, int y0, int y1, int clip_x1, int rot,
                              const uint8_t *dist, const uint16_t *angle)
 {
-    const uint16_t c_vinyl = COLOR(3, 3, 4), c_mark = COLOR(13, 13, 16);
+    const uint16_t c_vinyl = pal[P_VINYL], c_mark = pal[P_MARK];
     // which light mark sits on each radius (-1: none)
     int8_t mark_at[VR + 1];
     for (int r = 0; r <= VR; r++)
@@ -534,6 +534,12 @@ static void draw_vinyl(int cx, int cy, int clip_x1, int rot)
     vinyl_tables();
     if (!v_dist)
         return;
+    static uint32_t glare_for;
+    if (glare_for != palette_version())
+    {
+        vinyl_glare();              // the theme changed
+        glare_for = palette_version();
+    }
     vinyl_pixels(T->px, cx, cy, T->cy0, T->cy1, clip_x1, rot, v_dist, v_angle);
     T->dirty = true;
 }
@@ -723,7 +729,12 @@ static int16_t bg_grid[13][17][3];
 // 17 x 13 colors (one every 16 px) from 8x8 blocks of the cover, made dark.
 static void bg_grid_from(const uint16_t *cover)
 {
-    static const int bgc[3] = { 16, 16, 33 };   // C_BG in 8 bit
+    int bgc[3];                                 // the background in 8 bit
+    for (int k = 0; k < 3; k++)
+    {
+        int v = (C_BG >> (5 * k)) & 31;
+        bgc[k] = (v << 3) | (v >> 2);
+    }
     for (int gy = 0; gy < 13; gy++)
     {
         for (int gx = 0; gx < 17; gx++)
@@ -829,6 +840,15 @@ static bool draw_background(int p2)
     {
         gfx_fill(T, 0, 0, SCREEN_W, SCREEN_H, C_BG);
         return false;
+    }
+    static uint32_t bg_pal;
+    if (bg_pal != palette_version())
+    {
+        // the theme changed: start over (made at once below)
+        bg_pal = palette_version();
+        bg_track = 0xFFFFFFFEu;
+        bg_job = LIB_NONE;
+        bg_fading = false;
     }
     uint32_t track = app_current_track();
     if (bg_track == 0xFFFFFFFEu)

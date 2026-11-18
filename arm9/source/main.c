@@ -1208,7 +1208,7 @@ static void save_now(void)
         snprintf(r.path, sizeof(r.path), "%s", lib_path(cur));
     r.pos_ms = player_position_ms();
     r.album_queue = app.album_queue;
-    state_save(&app.set, &r);
+    state_save(&app.set, &app.theme, &r);
     last_save = ticks;
     save_at = 0;
 }
@@ -1217,7 +1217,8 @@ static void restore(void)
 {
     Resume r;
     state_defaults(&app.set);
-    bool ok = state_load(&app.set, &r);
+    bool ok = state_load(&app.set, &app.theme, &r);
+    palette_make(&app.theme);
     lib_group_artists(app.set.case_sensitive);
     if (!ok || !r.path[0] || !lib_loaded())
         return;
@@ -1525,6 +1526,7 @@ static void on_vblank(void)
 int main(int argc, char **argv)
 {
     defaultExceptionHandler();
+    palette_make(&theme_default);
     // the sound hardware (ARM7 side) reads the ring buffers from main RAM: give
     // it priority, so copying whole screens around can't make it wait
     REG_EXMEMCNT |= ARM7_MAIN_RAM_PRIORITY;

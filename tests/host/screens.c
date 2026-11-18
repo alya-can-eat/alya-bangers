@@ -612,7 +612,41 @@ int main(int argc, char **argv)
     Settings s2;
     Resume r2;
     queue_clear();
-    check(state_load(&s2, &r2) && queue_count() == 15 && r2.path[0], "state saved and restored");
+    Theme t2;
+    check(state_load(&s2, &t2, &r2) && queue_count() == 15 && r2.path[0], "state saved and restored");
+
+    // the theme is saved; a file from before themes still loads, with the default theme
+    {
+        Theme mine = { COLOR(3, 6, 2), COLOR(28, 30, 26), COLOR(10, 25, 31) }, kept = app.theme;
+        app.theme = mine;
+        save_now();
+        Settings s3;
+        Theme t3;
+        Resume r3;
+        check(state_load(&s3, &t3, &r3) && t3.bg == mine.bg && t3.text == mine.text && t3.acc == mine.acc,
+              "the theme is saved");
+        FILE *f = fopen(state, "rb");
+        static uint8_t buf[1 << 20];
+        size_t n = fread(buf, 1, sizeof(buf), f);
+        fclose(f);
+        uint16_t hs;
+        memcpy(&hs, buf + 6, 2);
+        size_t v1 = hs - 8, entries = n - hs - 4;      // version 1: the header without the theme
+        uint16_t one = 1, v1s = (uint16_t)v1;
+        memcpy(buf + 4, &one, 2);
+        memcpy(buf + 6, &v1s, 2);
+        memmove(buf + v1, buf + hs, entries);
+        uint32_t crc = crc32(buf, v1) ^ crc32(buf + v1, entries);
+        memcpy(buf + v1 + entries, &crc, 4);
+        f = fopen(state, "wb");
+        fwrite(buf, 1, v1 + entries + 4, f);
+        fclose(f);
+        bool ok = state_load(&s3, &t3, &r3);
+        check(ok && t3.bg == theme_default.bg && t3.acc == theme_default.acc && s3.brightness == app.set.brightness
+              && r3.path[0], "a state file from before themes: everything loads, the default theme");
+        app.theme = kept;
+        save_now();
+    }
 
     // ---- shuffle by rating: a 5-star song comes next far more often among 1-star ones
     {
