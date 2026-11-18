@@ -298,7 +298,7 @@ void player_set_volume(uint8_t v)
         hw_start(base_block + played);  // the new volume starts with the next block
 }
 
-void player_tick(void)
+void player_tick(uint32_t elapsed)
 {
     uint32_t p = played;
     if (p != tick_played)
@@ -307,7 +307,7 @@ void player_tick(void)
         tick_frames = 0;
     }
     else if (tick_frames < 1000)
-        tick_frames++;
+        tick_frames += elapsed;
 }
 
 bool player_peek(int16_t *out, int n)

@@ -184,8 +184,8 @@ int font_text_width(const char *s)
     return width_jp(s, font_has_kana(s));
 }
 
-static void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const Glyph *g,
-                       uint16_t color, int scale)
+static HOT void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const Glyph *g,
+                           uint16_t color, int scale)
 {
     if (clip_x0 < cv->cx0) clip_x0 = cv->cx0;
     if (clip_x1 > cv->cx1) clip_x1 = cv->cx1;

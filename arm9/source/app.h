@@ -33,8 +33,10 @@
 #define BAR_Y       164
 #define SCROLL_X    244             // scroll bar column, 12 px wide
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
-#define SLIDE_FRAMES 15             // 0.5 s at 30 fps
-#define TAB_FRAMES  8               // sideways list slide, 0.27 s
+// Animations run on real time (vblanks, 60 per second), so they take as long
+// on the DS as planned even when it draws fewer frames.
+#define SLIDE_TICKS 24              // browser <-> player, 0.4 s
+#define TAB_TICKS   15              // sideways list slide, 0.25 s
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
@@ -53,12 +55,12 @@ typedef struct {
     uint32_t sel_frame;         // frame the selection last changed (scrolling text restarts)
 
     // modes and panels
-    int tab_anim;               // frames left of the sideways slide between lists
+    int tab_anim;               // vblanks left of the sideways slide between lists
     int tab_dir;                // +1: the new list comes in from the right
     Tab tab_prev;               // where the tab highlight slides from
 
     bool player_mode;           // where the slide is heading
-    int slide;                  // 0 = browser up .. SLIDE_FRAMES = player
+    int slide;                  // 0 = browser up .. SLIDE_TICKS = player
     Overlay overlay;
     int menu_item;              // row menu: the item it belongs to
     int menu_sel;               // highlighted entry of a menu (D-pad)
@@ -79,7 +81,7 @@ typedef struct {
     Settings set;
     bool album_queue;           // the queue is one album
 
-    uint32_t frame;             // drawn frames (30 per second)
+    uint32_t frame;             // time in 1/30 s (scrolling text, the record)
     bool idle_hint;             // nothing loaded yet
 
     // next song thumbnail

@@ -154,8 +154,11 @@ bool dsa_read_cover(FILE *f, const DsaHeader *h, uint16_t *dst)
         || h->cover_height != DSA_COVER_SIZE
         || h->cover_size != DSA_COVER_SIZE * DSA_COVER_SIZE * 2)
         return false;
-    return fseek(f, h->cover_offset, SEEK_SET) == 0
-           && fread(dst, 1, h->cover_size, f) == h->cover_size;
+    if (fseek(f, h->cover_offset, SEEK_SET) != 0 || fread(dst, 1, h->cover_size, f) != h->cover_size)
+        return false;
+    for (int i = 0; i < DSA_COVER_SIZE * DSA_COVER_SIZE; i++)
+        dst[i] |= 0x8000;   // opaque, so it can be copied straight to the screen
+    return true;
 }
 
 bool dsa_read_thumb(FILE *f, const DsaHeader *h, uint16_t *dst)
@@ -164,6 +167,9 @@ bool dsa_read_thumb(FILE *f, const DsaHeader *h, uint16_t *dst)
         || h->thumb_height != DSA_THUMB_SIZE
         || h->thumb_size != DSA_THUMB_SIZE * DSA_THUMB_SIZE * 2)
         return false;
-    return fseek(f, h->thumb_offset, SEEK_SET) == 0
-           && fread(dst, 1, h->thumb_size, f) == h->thumb_size;
+    if (fseek(f, h->thumb_offset, SEEK_SET) != 0 || fread(dst, 1, h->thumb_size, f) != h->thumb_size)
+        return false;
+    for (int i = 0; i < DSA_THUMB_SIZE * DSA_THUMB_SIZE; i++)
+        dst[i] |= 0x8000;   // opaque, so it can be copied straight to the screen
+    return true;
 }

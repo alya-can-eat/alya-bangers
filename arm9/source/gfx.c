@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+#include <string.h>
+
 #include <nds.h>
 
 #include "gfx.h"
@@ -189,10 +191,8 @@ void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src)
         int yy = y + j;
         if (yy < c->cy0 || yy >= c->cy1)
             continue;
-        const uint16_t *s = src + j * w + (x0 - x);
-        uint16_t *d = c->px + yy * SCREEN_W + x0;
-        for (int i = 0; i < x1 - x0; i++)
-            d[i] = s[i] | 0x8000;
+        // pixels must already be opaque (bit 15 set), as dsconv writes them
+        memcpy(c->px + yy * SCREEN_W + x0, src + j * w + (x0 - x), (x1 - x0) * 2);
     }
     c->dirty = true;
 }

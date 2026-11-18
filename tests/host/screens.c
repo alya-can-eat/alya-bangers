@@ -20,6 +20,7 @@ static int failures;
 // One vblank. The simulated ARM7 finishes a 4096-frame block every 7.5 vblanks.
 static void tick(uint32_t held)
 {
+    vblank_count++;
     sim_set_keys(0, held);
     app_tick();
     play_clock += 2;
@@ -38,6 +39,7 @@ static void run(int n)
 
 static void press(uint32_t key)
 {
+    vblank_count++;
     sim_set_keys(key, key);
     app_tick();
     run(2);
@@ -162,6 +164,19 @@ int main(int argc, char **argv)
 
     // ---- Artist tab: KIVARA and Kivara are one artist by default
     check(app.tab == TAB_ARTIST, "starts on the Artist tab");
+    // D-pad left/right switch tabs and stop at the ends
+    press(KEY_LEFT);
+    check(app.tab == TAB_ARTIST, "left on the first tab stays there");
+    press(KEY_RIGHT);
+    check(app.tab == TAB_ALBUM && app.tab_dir == 1, "right goes to the next tab, sliding in from the right");
+    for (int i = 0; i < 6; i++)
+        press(KEY_RIGHT);
+    check(app.tab == TAB_SEARCH, "right on the last tab stays there");
+    press(KEY_LEFT);
+    check(app.tab == TAB_FOLDER && app.tab_dir == -1, "left goes back, sliding in from the left");
+    for (int i = 0; i < 6; i++)
+        press(KEY_LEFT);
+    run(30);
     int k = find_row("Kivara");
     check(k >= 0 && find_row("KIVARA") < 0, "KIVARA and Kivara grouped");
     check(k >= 0 && lib_group_size(app.items[k].id) == 20, "Kivara has 13+3+4 songs");
@@ -193,7 +208,7 @@ int main(int argc, char **argv)
     run(16);
     shot("04_slide_mid");
     run(30);
-    check(app.slide == SLIDE_FRAMES, "slid to the player");
+    check(app.slide == SLIDE_TICKS, "slid to the player");
     shot("05_player");
     run(9);
     shot("05_player_b");

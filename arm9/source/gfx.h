@@ -10,6 +10,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Hot loops: ARM code in ITCM (fast memory) on the DS.
+#ifdef __NDS__
+#include <nds/ndstypes.h>
+#define HOT ARM_CODE ITCM_CODE __attribute__((noinline))
+#else
+#define HOT
+#endif
+
 #define SCREEN_W 256
 #define SCREEN_H 192
 

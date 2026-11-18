@@ -40,7 +40,7 @@ or folder, a player screen with a turning record, a queue you can edit.
 | Button | Browsing | Player |
 |---|---|---|
 | Up / Down | move (faster when held) | |
-| Left / Right | page up / down | −10 s / +10 s |
+| Left / Right | tab to the left / right | −10 s / +10 s |
 | A | open / play | play / pause |
 | B | back one tab or folder | back to browsing |
 | X | add-to-queue mode | song info |

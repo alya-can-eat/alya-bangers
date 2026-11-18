@@ -31,7 +31,9 @@ static char music_root[64];
 static int item_cap;
 static uint32_t *tracks_buf;
 static int tracks_cap;
-static uint32_t ticks;              // vblanks (60 per second)
+volatile uint32_t vblank_count;    // counted in the vblank interrupt: real time
+static uint32_t ticks;              // vblanks (60 per second) at the start of this loop
+static uint32_t last_vblank;
 static bool redraw = true;
 static uint32_t save_at, last_save;
 static bool lid_closed, paused_by_lid;
@@ -135,7 +137,7 @@ static void show_tab_dir(Tab t, int dir)
         ui_capture_list();
         app.tab_prev = app.tab_anim ? app.tab_prev : app.tab;
         app.tab_dir = dir;
-        app.tab_anim = TAB_FRAMES;
+        app.tab_anim = TAB_TICKS;
     }
     app.tab = t;
     app.overlay = OV_NONE;
@@ -855,8 +857,9 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     }
     if (rep & KEY_UP) select_index(app.sel - step);
     if (rep & KEY_DOWN) select_index(app.sel + step);
-    if (rep & KEY_LEFT) select_index(app.sel - ROWS);
-    if (rep & KEY_RIGHT) select_index(app.sel + ROWS);
+    // left / right: the tab next to this one (no wrapping at the ends)
+    if ((down & KEY_LEFT) && app.tab > TAB_ARTIST) show_tab(app.tab - 1);
+    if ((down & KEY_RIGHT) && app.tab < TAB_SEARCH) show_tab(app.tab + 1);
     if (down & KEY_A) activate(app.sel);
     if (down & KEY_B) go_back();
     if (down & KEY_Y) open_row_menu(app.sel);
@@ -997,11 +1000,16 @@ static void app_init(void)
     last_save = ticks;
 }
 
-// One step of the app: input at 60 Hz, drawing at 30 fps.
+// One step of the app, once per vblank: input, playback, then one screen
+// drawn (they take turns). Animations follow the vblank counter, so they
+// keep their speed even when drawing takes longer than a frame.
 static void app_tick(void)
 {
-    ticks++;
-    player_tick();
+    uint32_t now = vblank_count;
+    uint32_t elapsed = now - last_vblank ? now - last_vblank : 1;
+    last_vblank = now;
+    ticks = now;
+    player_tick(elapsed);
     scanKeys();
     uint32_t down = keysDown(), rep = keysDownRepeat(), held = keysHeld();
 
@@ -1031,35 +1039,59 @@ static void app_tick(void)
     else if (player_state() == PLAYER_PLAYING && ticks - last_save > SAVE_EVERY)
         save_now();
 
-    if (ticks & 1)
-        return;     // draw every other frame
-
     // slide between browsing and the player
-    int target = app.player_mode ? SLIDE_FRAMES : 0;
+    int target = app.player_mode ? SLIDE_TICKS : 0;
     if (app.slide != target)
     {
-        app.slide += app.slide < target ? 1 : -1;
+        int step = (int)elapsed;
+        if (app.slide < target)
+            app.slide = app.slide + step > target ? target : app.slide + step;
+        else
+            app.slide = app.slide - step < target ? target : app.slide - step;
         redraw = true;
     }
     if (app.tab_anim > 0)
     {
-        app.tab_anim--;
+        app.tab_anim = app.tab_anim > (int)elapsed ? app.tab_anim - (int)elapsed : 0;
         redraw = true;
     }
-    app.frame++;
-    if (app.frame % 30 == 0)
-        redraw = true;      // the clock
+    uint32_t prev_frame = app.frame;
+    app.frame = now / 2;
+    // progress bars and times twice a second while playing, the clock always
+    if (app.frame / 15 != prev_frame / 15 && (player_state() == PLAYER_PLAYING || app.frame / 30 != prev_frame / 30))
+        redraw = true;
     if (lid_closed)
         return;
     update_thumb();
-    static bool anim_top = true, anim_bottom = true;
-    if (redraw || anim_top)
+
+    static bool anim_top = true, anim_bottom = true, dirty_top = true, dirty_bottom = true, top_turn = true;
+    if (redraw)
+    {
+        dirty_top = dirty_bottom = true;
+        redraw = false;
+    }
+    bool need_top = dirty_top || anim_top, need_bottom = dirty_bottom || anim_bottom;
+    if (need_top && (top_turn || !need_bottom))
+    {
         anim_top = ui_draw_top();
-    player_service();
-    if (redraw || anim_bottom)
+        dirty_top = false;
+        top_turn = false;
+    }
+    else if (need_bottom)
+    {
         anim_bottom = ui_draw_bottom();
-    redraw = false;
+        dirty_bottom = false;
+        top_turn = true;
+    }
+    player_service();
 }
+
+#ifndef DSPLAYER_NO_MAIN
+static void on_vblank(void)
+{
+    vblank_count++;
+}
+#endif
 
 #ifndef DSPLAYER_NO_MAIN
 int main(int argc, char **argv)
@@ -1069,6 +1101,8 @@ int main(int argc, char **argv)
     player_init();
     keysSetRepeat(15, 4);
     disableSleep();
+    irqSet(IRQ_VBLANK, on_vblank);
+    irqEnable(IRQ_VBLANK);
 
     if (!fatInitDefault())
         fatal_screen("Can't read the SD card.", "Is the flashcart's DLDI driver OK?");

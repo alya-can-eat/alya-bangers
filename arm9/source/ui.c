@@ -126,7 +126,7 @@ static int smooth256(int p)
 
 int app_slide_p256(void)
 {
-    return app.slide * 256 / SLIDE_FRAMES;
+    return app.slide * 256 / SLIDE_TICKS;
 }
 
 int app_panel_offset(void)
@@ -390,27 +390,30 @@ typedef struct { uint8_t r; uint16_t a, len; } Mark;
 static const Mark marks[5] = { { 52, 5, 28 }, { 37, 62, 22 }, { 47, 156, 30 }, { 32, 213, 24 }, { 42, 296, 26 } };
 
 // Draw the part of the record left of clip_x1.
-static void draw_vinyl(int cx, int cy, int clip_x1, int rot)
+static HOT void vinyl_pixels(uint16_t *px, int cx, int cy, int y0, int y1, int clip_x1, int rot,
+                             const uint8_t *dist, const uint16_t *angle)
 {
-    vinyl_tables();
-    if (!v_dist)
-        return;
     const uint16_t c_vinyl = COLOR(3, 3, 4), c_edge = COLOR(8, 8, 10), c_groove = COLOR(5, 5, 7);
     const uint16_t c_mark = COLOR(13, 13, 16);
+    // which light mark sits on each radius (-1: none)
+    int8_t mark_at[VR + 1];
+    for (int r = 0; r <= VR; r++)
+        mark_at[r] = -1;
+    for (int m = 0; m < 5; m++)
+        mark_at[marks[m].r] = m;
     for (int j = 0; j < VD; j++)
     {
         int y = cy - VR + j;
-        if (y < T->cy0 || y >= T->cy1)
+        if (y < y0 || y >= y1)
             continue;
-        uint16_t *line = T->px + y * SCREEN_W;
+        uint16_t *line = px + y * SCREEN_W;
         int i0 = cx - VR < 0 ? VR - cx : 0;
         int i1 = clip_x1 - (cx - VR);
         if (i1 > VD) i1 = VD;
         if (i1 > SCREEN_W - (cx - VR)) i1 = SCREEN_W - (cx - VR);
         for (int i = i0; i < i1; i++)
         {
-            int x = cx - VR + i;
-            int d = v_dist[j * VD + i];
+            int d = dist[j * VD + i];
             if (d > VR)
                 continue;
             uint16_t col = c_vinyl;
@@ -420,17 +423,25 @@ static void draw_vinyl(int cx, int cy, int clip_x1, int rot)
                 col = C_ACC_DIM;
             else if (d == 52 || d == 42 || d == 32)
                 col = c_groove;
-            for (int m = 0; m < 5; m++)
+            int m = mark_at[d];
+            if (m >= 0)
             {
-                if (d != marks[m].r)
-                    continue;
-                int a = (v_angle[j * VD + i] - marks[m].a - rot + 720) % 360;
+                int a = angle[j * VD + i] - marks[m].a - rot;
+                while (a < 0) a += 360;
                 if (a <= marks[m].len)
                     col = c_mark;
             }
-            line[x] = col;
+            line[cx - VR + i] = col;
         }
     }
+}
+
+static void draw_vinyl(int cx, int cy, int clip_x1, int rot)
+{
+    vinyl_tables();
+    if (!v_dist)
+        return;
+    vinyl_pixels(T->px, cx, cy, T->cy0, T->cy1, clip_x1, rot, v_dist, v_angle);
     T->dirty = true;
 }
 
@@ -481,7 +492,8 @@ bool ui_draw_top(void)
     int p1 = smooth256(p * 256 / 154);
     int p2 = smooth256((p - 102) * 256 / 154);
     bool playing = player_state() == PLAYER_PLAYING;
-    bool anim = playing || (app.slide > 0 && app.slide < SLIDE_FRAMES);
+    // the record and the visualizer move while playing; the rest only if text scrolls
+    bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS);
 
     SongText st;
     song_text(app_current_track(), &st);
@@ -493,7 +505,9 @@ bool ui_draw_top(void)
         if (playing)
             viz_update();
         draw_viz(p2);
-        int rot = (int)((app.frame * 20 / 3) % 360);    // 33 1/3 rpm at 30 fps
+        int rot = (int)((app.frame * 20 / 3) % 360);    // 33 1/3 rpm (frame = 1/30 s)
+        if (playing)
+            anim = true;
         draw_vinyl(cover_x + 24 + 40 * (256 - p2) / 256, 88, cover_x, rot);
     }
     gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
@@ -712,7 +726,7 @@ void ui_capture_list(void)
 static int tab_progress(void)
 {
     // ease out: fast at first, settling at the end
-    int p = (TAB_FRAMES - app.tab_anim) * 256 / TAB_FRAMES;
+    int p = (TAB_TICKS - app.tab_anim) * 256 / TAB_TICKS;
     return 256 - (256 - p) * (256 - p) / 256;
 }
 
@@ -725,15 +739,17 @@ static void slide_lists(int oy)
     memcpy(new_list, area, sizeof(new_list));
     int off = app.tab_dir * (SCREEN_W - SCREEN_W * tab_progress() / 256);  // new list's x
     int old_off = off - app.tab_dir * SCREEN_W;
+    // new list at x = off, old list at x = old_off; each is one piece per row
+    int nx0 = off < 0 ? 0 : off, nx1 = off < 0 ? SCREEN_W + off : SCREEN_W;
+    int ox0 = old_off < 0 ? 0 : old_off, ox1 = old_off < 0 ? SCREEN_W + old_off : SCREEN_W;
     for (int y = 0; y < ROWS * ROW_H; y++)
     {
         uint16_t *d = area + y * SCREEN_W;
         const uint16_t *n = new_list + y * SCREEN_W, *o = old_list + y * SCREEN_W;
-        for (int x = 0; x < SCREEN_W; x++)
-        {
-            int nx = x - off, ox = x - old_off;
-            d[x] = (nx >= 0 && nx < SCREEN_W) ? n[nx] : ((ox >= 0 && ox < SCREEN_W) ? o[ox] : C_BG);
-        }
+        if (nx1 > nx0)
+            memcpy(d + nx0, n + (nx0 - off), (nx1 - nx0) * 2);
+        if (ox1 > ox0)
+            memcpy(d + ox0, o + (ox0 - old_off), (ox1 - ox0) * 2);
     }
     B->dirty = true;
 }
@@ -909,7 +925,7 @@ static bool draw_player_area(void)
     icon(B, 12, 140, 0x24D8, C_TEXT);
     icon(B, 228, 140, 0x2630, C_TEXT);
     pill(128, 140, 0x2B9D);
-    return anim || player_state() == PLAYER_PLAYING;
+    return anim;
 }
 
 static bool draw_info(void)
@@ -1067,7 +1083,7 @@ bool ui_draw_bottom(void)
         return draw_settings();
 
     int oy = app_panel_offset();
-    bool anim = app.slide > 0 && app.slide < SLIDE_FRAMES;
+    bool anim = app.slide > 0 && app.slide < SLIDE_TICKS;
     if (oy > 0)
     {
         if (app.overlay == OV_INFO)

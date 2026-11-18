@@ -31,8 +31,9 @@ void player_seek_ms(uint32_t ms);
 // Hardware volume 0..127 (ReplayGain is applied this way).
 void player_set_volume(uint8_t v);
 
-// Call once per frame: tracks where inside a block playback is.
-void player_tick(void);
+// Call every loop with the vblanks since the last call: tracks where inside
+// a block playback is.
+void player_tick(uint32_t elapsed);
 
 // The n (<= 4096) mono samples playing right now, for the visualizer.
 bool player_peek(int16_t *out, int n);
