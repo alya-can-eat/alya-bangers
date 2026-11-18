@@ -4,38 +4,58 @@ A music player for the Nintendo DS (made for the DS Lite with a DSpico). It
 plays the `.dsa` files written by [dsconv](../dsconv) from the `/music` folder
 of the SD card.
 
-Version 0.1: a folder browser that plays music. Plain on purpose; it gets
-pretty later.
+Version 0.2: the interface from the mockup. Browse by artist, album, title
+or folder, a player screen with a turning record, a queue you can edit.
 
 ## What it does
 
-- **Bottom screen:** the folders and songs of `/music`, folders first, in
-  natural order (Track 2 before Track 10), no limit on entries per folder.
-  Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
+- **Bottom screen, browsing:** tabs Artist · Album · Title · Folder · Search.
+  Picking an artist opens their albums, picking an album its songs; the tabs
+  then show your choice (tap the name to go back to that list, tap the small
+  × to clear it). Tapping a song plays the list it is in. Artists that differ
+  only in case ("KIVARA", "Kivara") are one artist unless you change that in
+  the settings.
+- **Bottom bar:** play/pause, next, add to queue, ⮟ (the player), sort,
+  brightness (4 levels), ⋮ settings.
+- **Player:** tap ⮟ and the browser slides down until only the tabs are left.
+  Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all,
+  one), ⓘ song info, ☰ queue, ⮝ back to browsing (tapping a tab does too).
+- **Top screen:** time and date, cover, title, artist, album, progress. In
+  player mode: the record turning at 33⅓ rpm, a visualizer, the next song.
+- **Add to queue:** hold a row for *Play now / Play next / Add to queue*, or
+  turn on the add-to-queue button: then tapping rows adds them instead of
+  playing them (an artist or album adds all its songs).
+- **Queue (☰):** tap a song to jump to it, × removes it, hold and drag to
+  move it.
+- **Lid closed:** the screens go dark and the music keeps playing; L/R change
+  songs (both can be changed in the settings).
+- **Switching on** loads the last song at the same position, paused. Settings,
+  queue and sort orders are kept in `/_nds/dsplayer/state.bin`.
+- Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
   Cyrillic, Vietnamese and emoji show correctly.
-- **Top screen:** cover, title, artist · album, elapsed / total time.
-- Plays the selected song, then the next one in the same folder.
-- **Lid closed:** both screens go dark, the music keeps playing.
 
-| Button | |
-|---|---|
-| Up / Down | move |
-| Left / Right | page up / down |
-| A | open folder / play song |
-| B | back to the parent folder |
-| START | pause / resume |
-| L / R | previous / next song (L restarts the song after 3 s) |
-| X / Y | +10 s / −10 s |
-| SELECT | jump to the folder of the song that's playing |
+| Button | Browsing | Player |
+|---|---|---|
+| Up / Down | move (faster when held) | |
+| Left / Right | page up / down | −10 s / +10 s |
+| A | open / play | play / pause |
+| B | back one tab or folder | back to browsing |
+| X | add-to-queue mode | song info |
+| Y | row menu | queue |
+| SELECT | player | back to browsing |
+| START | play / pause | play / pause |
+| L / R | previous / next song (L restarts the song after 3 s) | same |
 
-If the card is ever too slow, a red "dropouts: N" appears in the top-left
-corner. Tell me if you see it on real hardware.
+In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
+"drops: N" appears at the top. Tell me if you see it on real hardware.
 
 ## The SD card
 
 ```
 /music/                  <- dsconv output folder
 /music/.dsmusic/font.bin
+/music/.dsmusic/library.idx
+/_nds/dsplayer/state.bin <- written by the player
 /dsplayer.nds            <- anywhere, start it from Pico Launcher
 ```
 
@@ -89,16 +109,19 @@ simulated ARM7 that "plays" the ring buffers:
 ```sh
 cd tests/host
 make test FILES="/tmp/dscard/music/some/song.dsa"   # checks the audio sample by sample
-make screens-run CARD=/tmp/dscard/music             # screenshots of the UI in shots/
+make screens-run CARD=/tmp/dscard/music             # clicks through the UI, checks it, screenshots in shots/
 ```
 
 They need a gcc that can build 32-bit programs (`-m32`), e.g.
 `nix-shell -p gcc_multi`.
 
-## Not in 0.1
+`tools/gen_builtin_font.py` regenerates the built-in glyphs (ASCII, UI
+symbols and icons) from dsconv's copy of Unifont.
 
-Artist/album/tag views (from `library.idx`), playlists, shuffle,
-ReplayGain, gapless playback, touch, a nicer look.
+## Not yet
+
+Search, playlists, genre and other tags as tabs, colours from the cover,
+gapless playback.
 
 ## Licence
 

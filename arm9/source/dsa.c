@@ -157,3 +157,13 @@ bool dsa_read_cover(FILE *f, const DsaHeader *h, uint16_t *dst)
     return fseek(f, h->cover_offset, SEEK_SET) == 0
            && fread(dst, 1, h->cover_size, f) == h->cover_size;
 }
+
+bool dsa_read_thumb(FILE *f, const DsaHeader *h, uint16_t *dst)
+{
+    if (!(h->flags & DSA_FLAG_COVER) || h->thumb_width != DSA_THUMB_SIZE
+        || h->thumb_height != DSA_THUMB_SIZE
+        || h->thumb_size != DSA_THUMB_SIZE * DSA_THUMB_SIZE * 2)
+        return false;
+    return fseek(f, h->thumb_offset, SEEK_SET) == 0
+           && fread(dst, 1, h->thumb_size, f) == h->thumb_size;
+}

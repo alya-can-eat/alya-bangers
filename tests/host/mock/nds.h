@@ -33,3 +33,6 @@ static inline void keysSetRepeat(u8 a, u8 b) { (void)a; (void)b; }
 void powerOn(u32 bits); void powerOff(u32 bits);
 static inline void disableSleep(void) {}
 static inline void defaultExceptionHandler(void) {}
+typedef struct touchPosition { u16 rawx, rawy, px, py, z1, z2; } touchPosition;
+void touchRead(touchPosition *t);
+u32 systemSetBacklightLevel(u32 level);

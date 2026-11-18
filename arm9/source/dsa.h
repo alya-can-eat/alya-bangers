@@ -15,6 +15,7 @@
 #define DSA_FLAG_RG_TRACK   (1u << 1)
 #define DSA_FLAG_RG_ALBUM   (1u << 2)
 #define DSA_COVER_SIZE      128
+#define DSA_THUMB_SIZE      32
 
 typedef struct {
     uint32_t flags;
@@ -54,5 +55,8 @@ bool dsa_read_tags(FILE *f, const DsaHeader *h, DsaTags *t);
 
 // Reads the 128x128 cover (BGR555, ready for VRAM) into dst.
 bool dsa_read_cover(FILE *f, const DsaHeader *h, uint16_t *dst);
+
+// Reads the 32x32 thumbnail into dst.
+bool dsa_read_thumb(FILE *f, const DsaHeader *h, uint16_t *dst);
 
 #endif

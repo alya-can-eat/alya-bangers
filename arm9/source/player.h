@@ -22,6 +22,23 @@ void player_init(void);
 // Open a song and start playing it. On failure returns false and fills err.
 bool player_play(const char *path, char *err, int err_size);
 
+// Open a song at a position, playing or paused.
+bool player_open(const char *path, uint32_t start_ms, bool play, char *err, int err_size);
+
+// Jump to a position (rounded to the nearest 125 ms block).
+void player_seek_ms(uint32_t ms);
+
+// Hardware volume 0..127 (ReplayGain is applied this way).
+void player_set_volume(uint8_t v);
+
+// Call once per frame: tracks where inside a block playback is.
+void player_tick(void);
+
+// The n (<= 4096) mono samples playing right now, for the visualizer.
+bool player_peek(int16_t *out, int n);
+
+const DsaHeader *player_header(void);
+
 // Keep the ring buffers full. Call often: every frame, and inside long loops.
 void player_service(void);
 

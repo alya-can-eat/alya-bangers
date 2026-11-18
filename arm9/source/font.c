@@ -152,7 +152,7 @@ static Glyph get_glyph(uint32_t cp, bool japanese)
     return g;
 }
 
-static bool has_kana(const char *s)
+bool font_has_kana(const char *s)
 {
     uint32_t c;
     while ((c = utf8_next(&s)) != 0)
@@ -164,9 +164,8 @@ static bool has_kana(const char *s)
     return false;
 }
 
-int font_text_width(const char *s)
+static int width_jp(const char *s, bool jp)
 {
-    bool jp = has_kana(s);
     int w = 0;
     uint32_t c;
     while ((c = utf8_next(&s)) != 0)
@@ -180,35 +179,78 @@ int font_text_width(const char *s)
     return w;
 }
 
-static void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const Glyph *g,
-                       uint16_t color)
+int font_text_width(const char *s)
 {
+    return width_jp(s, font_has_kana(s));
+}
+
+static void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const Glyph *g,
+                       uint16_t color, int scale)
+{
+    if (clip_x0 < cv->cx0) clip_x0 = cv->cx0;
+    if (clip_x1 > cv->cx1) clip_x1 = cv->cx1;
+    if (x >= clip_x1 || x + g->width * scale <= clip_x0)
+        return;
     int bytes = g->width / 8;
     for (int row = 0; row < FONT_HEIGHT; row++)
     {
-        int yy = y + row;
-        if (yy < 0 || yy >= SCREEN_H)
-            continue;
         uint16_t bits = bytes == 1 ? (uint16_t)(g->bitmap[row] << 8)
                                    : (uint16_t)((g->bitmap[2 * row] << 8) | g->bitmap[2 * row + 1]);
         if (bits == 0)
             continue;
-        uint16_t *line = cv->px + yy * SCREEN_W;
-        for (int col = 0; col < g->width; col++)
+        for (int sy = 0; sy < scale; sy++)
         {
-            if (!(bits & (0x8000 >> col)))
+            int yy = y + row * scale + sy;
+            if (yy < cv->cy0 || yy >= cv->cy1)
                 continue;
-            int xx = x + col;
-            if (xx >= clip_x0 && xx < clip_x1 && xx >= 0 && xx < SCREEN_W)
-                line[xx] = color;
+            uint16_t *line = cv->px + yy * SCREEN_W;
+            for (int col = 0; col < g->width; col++)
+            {
+                if (!(bits & (0x8000 >> col)))
+                    continue;
+                for (int sx = 0; sx < scale; sx++)
+                {
+                    int xx = x + col * scale + sx;
+                    if (xx >= clip_x0 && xx < clip_x1)
+                        line[xx] = color;
+                }
+            }
         }
     }
 }
 
+int font_draw_ex(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const char *s,
+                 uint16_t color, int jp, int scale)
+{
+    bool j = jp < 0 ? font_has_kana(s) : jp;
+    int pen = x;
+    uint32_t c;
+    while ((c = utf8_next(&s)) != 0)
+    {
+        if (c < 0x20)
+            continue;
+        Glyph g = get_glyph(c, j);
+        if (g.combining)
+        {
+            draw_glyph(cv, pen + g.xoff * scale, y, clip_x0, clip_x1, &g, color, scale);
+            continue;
+        }
+        if (pen >= clip_x1)
+        {
+            pen += g.width * scale;     // keep counting the width
+            continue;
+        }
+        draw_glyph(cv, pen, y, clip_x0, clip_x1, &g, color, scale);
+        pen += g.width * scale;
+    }
+    cv->dirty = true;
+    return pen - x;
+}
+
 int font_draw(Canvas *cv, int x, int y, int max_w, const char *s, uint16_t color)
 {
-    bool jp = has_kana(s);
-    int total = font_text_width(s);
+    bool jp = font_has_kana(s);
+    int total = width_jp(s, jp);
     int clip_x1 = x + max_w;
     int limit = max_w;
     Glyph ellipsis = get_glyph(0x2026, false);
@@ -225,17 +267,17 @@ int font_draw(Canvas *cv, int x, int y, int max_w, const char *s, uint16_t color
         Glyph g = get_glyph(c, jp);
         if (g.combining)
         {
-            draw_glyph(cv, x + pen + g.xoff, y, x, clip_x1, &g, color);
+            draw_glyph(cv, x + pen + g.xoff, y, x, clip_x1, &g, color, 1);
             continue;
         }
         if (pen + g.width > limit)
             break;
-        draw_glyph(cv, x + pen, y, x, clip_x1, &g, color);
+        draw_glyph(cv, x + pen, y, x, clip_x1, &g, color, 1);
         pen += g.width;
     }
     if (cut)
     {
-        draw_glyph(cv, x + pen, y, x, clip_x1, &ellipsis, color);
+        draw_glyph(cv, x + pen, y, x, clip_x1, &ellipsis, color, 1);
         pen += ellipsis.width;
     }
     cv->dirty = true;

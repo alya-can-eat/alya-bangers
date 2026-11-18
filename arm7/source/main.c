@@ -122,7 +122,11 @@ int main(int argc, char *argv[])
 
     irqInit();
     fifoInit();
-    installSystemFIFO(); // power, sleep, storage
+    installSystemFIFO(); // power, backlight, sleep, storage
+
+    // Keeps time() on the ARM9 up to date (the clock in the header). Timer 3;
+    // the stream uses timer 1.
+    initClockIRQTimer(LIBNDS_DEFAULT_TIMER_RTC);
 
     // A music player keeps playing with the lid closed: never sleep on lid close.
     inputSetLidSleepDuration(0);

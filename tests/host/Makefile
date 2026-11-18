@@ -1,7 +1,7 @@
 # PC tests: the ARM9 code compiled for the PC against a mock libnds, with a
 # simulated ARM7. Needs a 32-bit capable gcc (pointers are 32-bit on the DS).
 #   make test FILES="a.dsa b.dsa"      check streaming sample by sample
-#   make screens CARD=/path/to/music   render screenshots into shots/
+#   make screens-run CARD=/path/to/music   click through the UI, check it, screenshots in shots/
 
 CC      ?= gcc
 SRC     := ../../arm9/source
@@ -14,8 +14,11 @@ all: test_player screens
 test_player: test_player.c $(CORE)
 	$(CC) $(CFLAGS) -o $@ $^
 
-screens: screens.c $(CORE) $(SRC)/font.c $(SRC)/gfx.c $(SRC)/browser.c $(SRC)/builtin_font.c $(SRC)/main.c
-	$(CC) $(CFLAGS) -o $@ screens.c $(CORE) $(SRC)/font.c $(SRC)/gfx.c $(SRC)/browser.c $(SRC)/builtin_font.c
+APP     := $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
+           $(SRC)/state.c $(SRC)/ui.c $(SRC)/viz.c
+
+screens: screens.c $(CORE) $(APP) $(SRC)/main.c
+	$(CC) $(CFLAGS) -o $@ screens.c $(CORE) $(APP) -lm
 
 test: test_player
 	./test_player $(FILES)

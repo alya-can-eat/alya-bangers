@@ -19,7 +19,6 @@
 #define BLOCK_FRAMES    4096
 #define BLOCK_BYTES     (BLOCK_FRAMES * 2)      // per channel
 #define RING_BYTES      (RING_BLOCKS * BLOCK_BYTES)
-#define VOLUME          127
 
 static int16_t ring_l[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
 static int16_t ring_r[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
@@ -41,6 +40,8 @@ static volatile bool stop_ack;
 static uint8_t generation;
 static long file_pos = -1;
 static uint32_t underruns;
+static uint8_t volume = 127;
+static uint32_t tick_played, tick_frames;   // for player_peek
 
 static void event_handler(u32 value, void *userdata)
 {
@@ -132,7 +133,7 @@ static void hw_start(uint32_t block)
     c.ring_bytes = RING_BYTES;
     c.block_frames = BLOCK_FRAMES;
     c.timer_divider = hdr.timer_divider;
-    c.volume = VOLUME;
+    c.volume = volume;
     c.generation = generation;
     send_cmd(&c);
     running = true;
@@ -149,7 +150,16 @@ static void close_file(void)
     state = PLAYER_IDLE;
 }
 
-bool player_play(const char *path, char *err, int err_size)
+static uint32_t ms_to_block(uint32_t ms)
+{
+    uint64_t frames = (uint64_t)ms * hdr.sound_clock_hz / hdr.timer_divider / 1000;
+    uint32_t block = (uint32_t)((frames + BLOCK_FRAMES / 2) / BLOCK_FRAMES);
+    if (hdr.block_count && block >= hdr.block_count)
+        block = hdr.block_count - 1;
+    return block;
+}
+
+bool player_open(const char *path, uint32_t start_ms, bool play, char *err, int err_size)
 {
     close_file();
 
@@ -176,9 +186,23 @@ bool player_play(const char *path, char *err, int err_size)
 
     snprintf(cur_path, sizeof(cur_path), "%s", path);
     underruns = 0;
-    hw_start(0);
-    state = PLAYER_PLAYING;
+    uint32_t block = start_ms ? ms_to_block(start_ms) : 0;
+    if (play)
+    {
+        hw_start(block);
+        state = PLAYER_PLAYING;
+    }
+    else
+    {
+        paused_block = block;
+        state = PLAYER_PAUSED;
+    }
     return true;
+}
+
+bool player_play(const char *path, char *err, int err_size)
+{
+    return player_open(path, 0, true, err, err_size);
 }
 
 void player_service(void)
@@ -255,6 +279,60 @@ void player_seek_seconds(int seconds)
     int64_t frames = (int64_t)seconds * hdr.sound_clock_hz / hdr.timer_divider;
     int64_t delta = (frames + (frames >= 0 ? BLOCK_FRAMES / 2 : -BLOCK_FRAMES / 2)) / BLOCK_FRAMES;
     jump_to_block((int64_t)current_block() + delta);
+}
+
+void player_seek_ms(uint32_t ms)
+{
+    if (state != PLAYER_IDLE)
+        jump_to_block(ms_to_block(ms));
+}
+
+void player_set_volume(uint8_t v)
+{
+    if (v > 127)
+        v = 127;
+    if (v == volume)
+        return;
+    volume = v;
+    if (state == PLAYER_PLAYING)
+        hw_start(base_block + played);  // the new volume starts with the next block
+}
+
+void player_tick(void)
+{
+    uint32_t p = played;
+    if (p != tick_played)
+    {
+        tick_played = p;
+        tick_frames = 0;
+    }
+    else if (tick_frames < 1000)
+        tick_frames++;
+}
+
+bool player_peek(int16_t *out, int n)
+{
+    if (state != PLAYER_PLAYING || n > BLOCK_FRAMES)
+        return false;
+    // The ARM7 reports whole blocks; within one, estimate from the frames
+    // since the last report (60 frames per second).
+    uint32_t rate = hdr.sound_clock_hz / hdr.timer_divider;
+    uint32_t off = tick_frames * rate / 60;
+    if (off > BLOCK_FRAMES - (uint32_t)n)
+        off = BLOCK_FRAMES - n;
+    uint32_t start = (tick_played % RING_BLOCKS) * BLOCK_FRAMES + off;
+    const int16_t *r = hdr.channels == 2 ? ring_r : ring_l;
+    for (int i = 0; i < n; i++)
+    {
+        uint32_t k = (start + i) % (RING_BLOCKS * BLOCK_FRAMES);
+        out[i] = (int16_t)(((int32_t)ring_l[k] + r[k]) >> 1);
+    }
+    return true;
+}
+
+const DsaHeader *player_header(void)
+{
+    return state == PLAYER_IDLE ? NULL : &hdr;
 }
 
 void player_restart(void)

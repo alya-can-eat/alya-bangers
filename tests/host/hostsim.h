@@ -30,6 +30,10 @@ bool sim_play_block(int16_t *left, int16_t *right);
 // Key state for the next scanKeys().
 void sim_set_keys(uint32_t down, uint32_t held);
 
+// Stylus position for the next touchRead() (KEY_TOUCH goes in the held keys).
+void sim_set_touch(int x, int y);
+extern int sim_backlight;
+
 // Write a 256x192 BGR555 canvas as a binary PPM image.
 void sim_write_ppm(const char *path, const uint16_t *px);
 
