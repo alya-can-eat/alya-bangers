@@ -1119,7 +1119,7 @@ static void app_tick(void)
     // song change on the top screen
     if (app.sa_kind != SA_NONE)
     {
-        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_A_TICKS + SA_B_TICKS;
+        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_TICKS;
         app.sa_t += (int)elapsed;
         if (app.sa_t >= total || !app.player_mode)
         {

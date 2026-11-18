@@ -525,9 +525,10 @@ static void draw_song_change(uint32_t t)
 {
     int pre = app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0;
     // position on the forward timeline (backwards runs it from the end)
-    int u = app.sa_kind == SA_BACK ? SA_A_TICKS + SA_B_TICKS - app.sa_t : app.sa_t - pre;
-    int a = clamp256(u * 256 / SA_A_TICKS);
-    int b = clamp256((u - SA_A_TICKS) * 256 / SA_B_TICKS);
+    int u = app.sa_kind == SA_BACK ? SA_TICKS - app.sa_t : app.sa_t - pre;
+    int a = clamp256(u * 256 / SA_OUT_TICKS);                                    // old cover out
+    int fl = clamp256((u - SA_FLY_START) * 256 / SA_FLY_TICKS);                  // new cover in
+    int b = clamp256((u - SA_FLY_START - SA_FLY_TICKS) * 256 / SA_B_TICKS);      // record out
     int rot = app.vinyl_rot / 3;
     bool back = app.sa_kind == SA_BACK;
 
@@ -541,7 +542,7 @@ static void draw_song_change(uint32_t t)
         gfx_blit(T, ax, 24, 128, 128, role_cover(false));
     }
     // the arriving song's record rolls out from behind its cover
-    if (a >= 256 && b > 0)
+    if (b > 0)
     {
         int travel = 40 * (256 - ease_out(b)) / 256;
         draw_vinyl(88 + travel, 88, 64, rot + travel * 955 / 1000);
@@ -563,13 +564,15 @@ static void draw_song_change(uint32_t t)
         gfx_unclip(T);
         return;
     }
-    // ... then grows from the Next spot into the middle
-    int f = ease_out(a);
+    // ... waits in the Next spot until the old cover is out of the way, then
+    // grows into the middle
+    int f = ease_out(fl);
     gfx_blit_scaled(T, 208 + (64 - 208) * f / 256, 44 + (24 - 44) * f / 256, 32 + 96 * f / 256, bc);
 
-    // its name leaves the Next column to the right
-    if (a < 256)
-        next_texts(200 + 64 * ease_in(clamp256(u * 512 / SA_A_TICKS)) / 256, app.sa_b, t);
+    // its name leaves the Next column to the right before it sets off
+    int nq = clamp256((u - SA_FLY_START / 2) * 256 / (SA_FLY_START - SA_FLY_START / 2));
+    if (nq < 256)
+        next_texts(200 + 64 * ease_in(nq) / 256, app.sa_b, t);
     // and the song after it comes in
     if (b > 0)
     {

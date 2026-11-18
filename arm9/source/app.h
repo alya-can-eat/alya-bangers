@@ -44,8 +44,13 @@
 // first slides over the Next spot, then forward.
 typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP } SongAnim;
 #define SA_PRE_TICKS 15             // jump: the chosen song slides over "Next"
-#define SA_A_TICKS  21              // covers move
-#define SA_B_TICKS  21              // the record rolls out
+#define SA_OUT_TICKS 16             // the old cover leaves to the left
+// The new cover only starts once the old one has cleared the middle (at 80 %
+// of its way out its right edge is left of x = 64), so they never overlap.
+#define SA_FLY_START ((SA_OUT_TICKS * 4 + 4) / 5)
+#define SA_FLY_TICKS 18             // the new cover grows into the middle
+#define SA_B_TICKS  18              // then its record rolls out
+#define SA_TICKS    (SA_FLY_START + SA_FLY_TICKS + SA_B_TICKS)
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
