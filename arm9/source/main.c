@@ -304,12 +304,10 @@ static void add_to_queue(const Item *it, bool next)
     }
     for (int i = 0; i < n; i++)
         mark(tracks_buf[i]);
-    char label[200];
-    ui_item_label(it, label, sizeof(label));
     if (n == 1)
-        toast("%s %s", label, next ? "plays next" : "added to the queue");
+        toast("%s", next ? "Plays next" : "Added to the queue");
     else
-        toast("%d songs %s", n, next ? "play next" : "added to the queue");
+        toast("%d %s", n, next ? "songs play next" : "added to the queue");
     if (was_empty)
         open_pos(0, 0, false);
     touch_state();

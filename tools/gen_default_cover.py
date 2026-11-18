@@ -30,7 +30,12 @@ def artwork():
         y = 340 + i * 12
         d.line([(0, y), (s, y)], fill=(250, 200, 200) if i % 2 else (120, 60, 120), width=3)
     d.polygon([(0, 330), (90, 250), (170, 300), (260, 220), (380, 330)], fill=(24, 12, 40))
-    d.rectangle([0, 430, s, s], fill=(30, 14, 46))
+    # the beach: lit by the moon, light enough to stand out from the dark UI
+    d.rectangle([0, 430, s, s], fill=(104, 58, 104))
+    d.rectangle([0, 430, s, 437], fill=(170, 104, 150))     # where the water meets the sand
+    for _ in range(160):
+        x, y = rnd.randrange(s), rnd.randrange(440, s)
+        d.point((x, y), fill=(128, 76, 124))
     return img
 
 
