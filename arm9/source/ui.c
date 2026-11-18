@@ -991,6 +991,8 @@ static void draw_tabs(int oy)
 {
     gfx_fill(B, 0, oy, SCREEN_W, TAB_H, C_PANEL);
     static const char *const names[TAB_COUNT] = { "Artist", "Album", "Title", NULL, NULL };
+    // in the player the tabs just wait: their pink fades to gray as the browser slides down
+    uint16_t acc = gfx_mix(C_DIM, C_ACC, clamp256(oy * 256 / PANEL_DOWN));
     // the highlight glides from the old tab to the new one
     int hx = tab_x[app.tab], hw = tab_x[app.tab + 1] - hx;
     if (app.tab_anim > 0 && app.tab_prev != app.tab)
@@ -1001,7 +1003,7 @@ static void draw_tabs(int oy)
         hw = pw + (hw - pw) * q / 256;
     }
     gfx_fill(B, hx, oy, hw, TAB_H, C_BG);
-    gfx_fill(B, hx, oy, hw, 2, C_ACC);
+    gfx_fill(B, hx, oy, hw, 2, acc);
     for (int i = 0; i < TAB_COUNT; i++)
     {
         int x = tab_x[i], w = tab_x[i + 1] - x;
@@ -1020,7 +1022,7 @@ static void draw_tabs(int oy)
         if (label[0])
         {
             // the tab shows the choice; the small × clears it
-            font_draw(B, x + 4, oy + 2, w - 18, label, act ? C_TEXT : C_ACC);
+            font_draw(B, x + 4, oy + 2, w - 18, label, act ? C_TEXT : acc);
             text(B, x + w - 12, oy + 2, "×", C_DIM);
         }
         else if (i == TAB_FOLDER)
