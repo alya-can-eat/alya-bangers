@@ -104,20 +104,23 @@ static void shot(const char *name)
     fclose(f);
 }
 
-// Run n vblanks; with filming on, save the top screen of every one.
-static void film(const char *prefix, int n)
+// Run n vblanks; with filming on, save the top (or bottom) screen of every one.
+static void film_screen(const char *prefix, int n, Screen which)
 {
     for (int i = 0; i < n; i++)
     {
         tick(0);
         if (!film_on)
             continue;
-        ui_draw_top();
+        if (which == SCREEN_TOP)
+            ui_draw_top();
+        else
+            ui_draw_bottom();
         char path[512];
         snprintf(path, sizeof(path), "%s/%s_%03d.ppm", out_dir, prefix, i);
         FILE *f = fopen(path, "wb");
         fprintf(f, "P6\n256 192\n255\n");
-        const uint16_t *s = gfx_canvas(SCREEN_TOP)->px;
+        const uint16_t *s = gfx_canvas(which)->px;
         for (int k = 0; k < 256 * 192; k++)
         {
             int r = s[k] & 31, g = (s[k] >> 5) & 31, b = (s[k] >> 10) & 31;
@@ -127,6 +130,11 @@ static void film(const char *prefix, int n)
         }
         fclose(f);
     }
+}
+
+static void film(const char *prefix, int n)
+{
+    film_screen(prefix, n, SCREEN_TOP);
 }
 
 static void check(bool ok, const char *what)
@@ -357,7 +365,10 @@ int main(int argc, char **argv)
 
     // ---- settings
     tap(240, BAR_Y + 14);
-    check(app.overlay == OV_SETTINGS, "settings open");
+    check(app.overlay == OV_SETTINGS && app.ov_vis == OV_SETTINGS && app.ov_t < OV_TICKS,
+          "settings open, sliding up");
+    run(20);
+    check(app.ov_t == OV_TICKS, "settings in place");
     check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
     tap(100, 24 + 5 * 28 + 10);
@@ -443,6 +454,23 @@ int main(int argc, char **argv)
         run(20);
         tap_row("Gone");        // further down: lifted off
         film("stack_lift", 24);
+
+        // menus sliding up and down
+        run(40);
+        tap(240, BAR_Y + 14);                       // settings
+        film_screen("menu_settings_open", 18, SCREEN_BOTTOM);
+        tap(240, 8);
+        film_screen("menu_settings_close", 18, SCREEN_BOTTOM);
+        tap(176, BAR_Y + 14);                       // sort
+        film_screen("menu_sort_open", 18, SCREEN_BOTTOM);
+        tap(20, LIST_Y + 8);
+        film_screen("menu_sort_close", 18, SCREEN_BOTTOM);
+        slide_to(true);
+        run(40);
+        tap(236, 146);                              // queue
+        film_screen("menu_queue_open", 18, SCREEN_BOTTOM);
+        tap(240, 8);
+        film_screen("menu_queue_close", 18, SCREEN_BOTTOM);
     }
 
     printf("%s\n", failures ? "SOME CHECKS FAILED" : "all checks passed");

@@ -1157,6 +1157,30 @@ static void app_tick(void)
         app.vinyl_speed = app.vinyl_speed > 15 * (int)elapsed ? app.vinyl_speed - 15 * (int)elapsed : 0;
     app.vinyl_rot = (app.vinyl_rot + 10 * (int)elapsed * app.vinyl_speed / 256) % 1080;
 
+    // menus slide up when they open and down when they close
+    static Overlay last_overlay;
+    if (app.overlay != last_overlay)
+    {
+        if (app.overlay != OV_NONE)
+        {
+            app.ov_vis = app.overlay;
+            app.ov_t = 0;
+        }
+        last_overlay = app.overlay;
+        redraw = true;
+    }
+    int ov_target = app.overlay != OV_NONE ? OV_TICKS : 0;
+    if (app.ov_t != ov_target)
+    {
+        if (app.ov_t < ov_target)
+            app.ov_t = app.ov_t + (int)elapsed > ov_target ? ov_target : app.ov_t + (int)elapsed;
+        else
+            app.ov_t = app.ov_t - (int)elapsed < 0 ? 0 : app.ov_t - (int)elapsed;
+        redraw = true;
+    }
+    if (app.ov_t == 0 && app.overlay == OV_NONE)
+        app.ov_vis = OV_NONE;
+
     uint32_t prev_frame = app.frame;
     app.frame = now / 2;
     // progress bars and times twice a second while playing, the clock always

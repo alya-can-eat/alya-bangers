@@ -37,6 +37,7 @@
 // on the DS as planned even when it draws fewer frames.
 #define SLIDE_TICKS 24              // browser <-> player, 0.4 s
 #define TAB_TICKS   15              // sideways list slide, 0.25 s
+#define OV_TICKS    15              // menus slide up / down, 0.25 s
 
 // Song change on the top screen (player layout). Forward: the cover leaves to
 // the left over its record, the next cover grows from the Next spot, its
@@ -81,7 +82,9 @@ typedef struct {
 
     bool player_mode;           // where the slide is heading
     int slide;                  // 0 = browser up .. SLIDE_TICKS = player
-    Overlay overlay;
+    Overlay overlay;            // the open menu (gets the input)
+    Overlay ov_vis;             // the menu on screen: stays while it slides down
+    int ov_t;                   // 0 = hidden .. OV_TICKS = in place
     int menu_item;              // row menu: the item it belongs to
     int menu_sel;               // highlighted entry of a menu (D-pad)
     bool add_mode;

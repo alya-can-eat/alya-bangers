@@ -989,6 +989,37 @@ static void draw_bar(int oy)
     icon(B, 232, y + 6, 0x22EE, C_TEXT);
 }
 
+// ---- menus slide up when they open and down when they close: a menu is drawn
+// into a scratch screen, then its rows are copied onto the real one, moved down
+
+static uint16_t scratch_px[SCREEN_W * SCREEN_H] __attribute__((aligned(4)));
+static Canvas scratch = { scratch_px, true, 0, 0, SCREEN_W, SCREEN_H };
+
+static int ov_progress(void)
+{
+    return ease_out(clamp256(app.ov_t * 256 / OV_TICKS));
+}
+
+static bool shifted(bool (*fn)(int), int arg, int x0, int y0, int x1, int y1, int dy, int clip_y1)
+{
+    Canvas *real = B;
+    B = &scratch;
+    gfx_unclip(B);
+    bool a = fn(arg);
+    B = real;
+    if (x0 < 0) x0 = 0;
+    if (x1 > SCREEN_W) x1 = SCREEN_W;
+    for (int y = y0 < 0 ? 0 : y0; y < y1 && y < SCREEN_H; y++)
+    {
+        int ty = y + dy;
+        if (ty < real->cy0 || ty >= clip_y1 || ty >= real->cy1)
+            continue;
+        memcpy(real->px + ty * SCREEN_W + x0, scratch_px + y * SCREEN_W + x0, (x1 - x0) * 2);
+    }
+    real->dirty = true;
+    return a;
+}
+
 static void draw_sort_menu(int oy)
 {
     int slot = ui_sort_slot();
@@ -1052,6 +1083,37 @@ static bool draw_toast(int oy)
     return true;
 }
 
+static bool w_sort(int oy) { draw_sort_menu(oy); return false; }
+static bool w_row(int oy) { draw_row_menu(oy); return false; }
+
+// Both menus rise from behind the bottom bar.
+static bool sort_menu_moving(int oy)
+{
+    int p = ov_progress();
+    if (p >= 256)
+    {
+        draw_sort_menu(oy);
+        return false;
+    }
+    int h = 20 + 16 * ui_sort_option_count(ui_sort_slot()) + 4;
+    int y0 = oy + BAR_Y - h;
+    shifted(w_sort, oy, 96, y0, 248, oy + BAR_Y + 1, (h + 1) * (256 - p) / 256, oy + BAR_Y + 1);
+    return true;
+}
+
+static bool row_menu_moving(int oy)
+{
+    int p = ov_progress();
+    if (p >= 256)
+    {
+        draw_row_menu(oy);
+        return false;
+    }
+    int y0 = oy + ui_rowmenu_y(LIST_Y + (app.menu_item - app.scroll) * ROW_H);
+    shifted(w_row, oy, 88, y0, 240, y0 + 72, (oy + BAR_Y - y0) * (256 - p) / 256, oy + BAR_Y);
+    return true;
+}
+
 static bool draw_panel(int oy)
 {
     gfx_clip(B, 0, oy, SCREEN_W, SCREEN_H);
@@ -1063,10 +1125,10 @@ static bool draw_panel(int oy)
         slide_lists(oy);
         anim |= app.tab_anim > 0;
         draw_bar(oy);
-        if (app.overlay == OV_SORT)
-            draw_sort_menu(oy);
-        if (app.overlay == OV_ROWMENU)
-            draw_row_menu(oy);
+        if (app.ov_vis == OV_SORT)
+            anim |= sort_menu_moving(oy);
+        if (app.ov_vis == OV_ROWMENU)
+            anim |= row_menu_moving(oy);
         anim |= draw_toast(oy);
     }
     gfx_unclip(B);
@@ -1285,24 +1347,42 @@ static bool draw_settings(void)
     return anim;
 }
 
+static bool w_settings(int arg) { (void)arg; return draw_settings(); }
+static bool w_info(int arg) { (void)arg; return draw_info(); }
+static bool w_queue(int arg) { (void)arg; return draw_queue(); }
+
 bool ui_draw_bottom(void)
 {
     B = gfx_canvas(SCREEN_BOTTOM);
     gfx_unclip(B);
-    if (app.overlay == OV_SETTINGS)
+    int p = ov_progress();
+    if (app.ov_vis == OV_SETTINGS && p >= 256)
         return draw_settings();
 
     int oy = app_panel_offset();
     bool anim = app.slide > 0 && app.slide < SLIDE_TICKS;
     if (oy > 0)
     {
-        if (app.overlay == OV_INFO)
-            anim |= draw_info();
-        else if (app.overlay == OV_QUEUE)
-            anim |= draw_queue();
+        bool panel = app.ov_vis == OV_INFO || app.ov_vis == OV_QUEUE;
+        if (panel && p >= 256)
+            anim |= app.ov_vis == OV_INFO ? draw_info() : draw_queue();
         else
+        {
             anim |= draw_player_area();
+            if (panel)
+            {
+                // rises from behind the tabs
+                shifted(app.ov_vis == OV_INFO ? w_info : w_queue, 0, 0, 0, SCREEN_W, PANEL_DOWN,
+                        PANEL_DOWN * (256 - p) / 256, PANEL_DOWN);
+                anim = true;
+            }
+        }
     }
     anim |= draw_panel(oy);
+    if (app.ov_vis == OV_SETTINGS)
+    {
+        shifted(w_settings, 0, 0, 0, SCREEN_W, SCREEN_H, SCREEN_H * (256 - p) / 256, SCREEN_H);
+        anim = true;
+    }
     return anim;
 }

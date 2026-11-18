@@ -57,7 +57,8 @@ or folder, a player screen with a turning record, a queue you can edit.
 | START | play / pause | play / pause |
 | L / R | previous / next song (L restarts the song after 3 s) | same |
 
-In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
+Menus (settings, sort, the row menu, song info, queue) slide up when they
+open and down when they close. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
 "drops: N" appears at the top. Tell me if you see it on real hardware.
 
 ## The SD card
