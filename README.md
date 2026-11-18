@@ -120,7 +120,8 @@ They need a gcc that can build 32-bit programs (`-m32`), e.g.
 
 `tools/gen_builtin_font.py` regenerates the built-in glyphs (ASCII, UI
 symbols and icons) from dsconv's copy of Unifont, `tools/gen_default_cover.py`
-the picture shown for songs without a cover.
+the picture shown for songs without a cover, `tools/gen_icon.py` the
+icon of the `.nds` file.
 
 ## Not yet
 
