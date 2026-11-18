@@ -24,7 +24,7 @@
 #define C_ACC       COLOR(31, 17, 23)
 #define C_SEL       COLOR(11, 6, 10)
 #define C_ACC_DIM   COLOR(18, 10, 14)
-#define C_GLARE     COLOR(22, 12, 31)   // light on the record's grooves and rim, from the top left
+#define C_GLARE     C_ACC               // light on the record's grooves and rim, from the top left
 
 // ---- bottom screen layout ----
 #define TAB_H       20

@@ -8,16 +8,17 @@ SRC     := ../../arm9/source
 CFLAGS  := -m32 -std=gnu2x -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-function \
            -fsanitize=address,undefined -Imock -I../../common/include -I$(SRC)
 CORE    := hostsim.c $(SRC)/player.c $(SRC)/dsa.c $(SRC)/util.c
+HDRS    := $(wildcard $(SRC)/*.h ../../common/include/*.h mock/*.h mock/nds/*.h) hostsim.h
 
 all: test_player screens
 
-test_player: test_player.c $(CORE)
-	$(CC) $(CFLAGS) -o $@ $^
+test_player: test_player.c $(CORE) $(HDRS)
+	$(CC) $(CFLAGS) -o $@ test_player.c $(CORE)
 
 APP     := $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
            $(SRC)/state.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
 
-screens: screens.c $(CORE) $(APP) $(SRC)/main.c
+screens: screens.c $(CORE) $(APP) $(SRC)/main.c $(HDRS)
 	$(CC) $(CFLAGS) -o $@ screens.c $(CORE) $(APP) -lm
 
 test: test_player
