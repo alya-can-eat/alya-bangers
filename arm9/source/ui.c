@@ -1667,7 +1667,7 @@ static void about_page(int dx)
     centered_at(cx, 26, APP_NAME, C_ACC, 2);
     centered_at(cx, 60, "Version " APP_VERSION, C_DIM, 1);
     centered_at(cx, 84, "Music player for the DS Lite", C_TEXT, 1);
-    centered_at(cx, 100, "© 2026 Alya", C_TEXT, 1);
+    centered_at(cx, 100, "© 2026 Alya (alya-can-eat)", C_TEXT, 1);
     centered_at(cx, 122, "Licence: GNU GPL v3", C_TEXT, 1);
     centered_at(cx, 138, "Free software, no warranty", C_DIM, 1);
     centered_at(cx, 158, APP_URL, C_ACC, 1);

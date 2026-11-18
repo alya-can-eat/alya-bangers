@@ -155,7 +155,7 @@ gapless playback.
 
 ## Licence
 
-GNU GPL v3 or later (`LICENSE`). Built-in fallback glyphs: GNU Unifont
+© 2026 Alya (alya-can-eat). GNU GPL v3 or later (`LICENSE`). Built-in fallback glyphs: GNU Unifont
 (GPL-2.0-or-later with the font embedding exception, see `LICENSES/`).
 Makefiles: BlocksDS templates (CC0).
 
