@@ -258,6 +258,43 @@ int main(int argc, char **argv)
     run(90);
     shot("03_title_playing");
 
+    // ---- small things: lit buttons, play/pause morph, gliding highlight
+    sim_set_touch(48, BAR_Y + 14);
+    tick(KEY_TOUCH);
+    check(app.press_id == BTN_NEXT && app.press_down, "a button lights up under the stylus");
+    sim_set_touch(48, BAR_Y - 40);      // slid off: no tap
+    tick(KEY_TOUCH);
+    check(app.press_id == BTN_NONE, "sliding off a button cancels it");
+    run(4);
+    check(app.pp_t == PP_TICKS, "playing: the pause shape");
+    press(KEY_START);
+    run(4);
+    check(app.pp_t > 0 && app.pp_t < PP_TICKS, "pausing: the shape is morphing");
+    run(20);
+    check(app.pp_t == 0, "paused: the play shape");
+    press(KEY_START);
+    select_index(0);
+    run(20);
+    select_index(3);
+    tick(0);
+    check(app.sel_vis > 0 && app.sel_vis < 3 * ROW_H, "the row highlight glides to the selection");
+    run(20);
+    check(app.sel_vis == 3 * ROW_H, "and arrives");
+    select_index(0);
+    run(20);
+
+    // ---- lid: fade to black, then the light goes off; fade in when opened
+    sim_set_keys(KEY_LID, KEY_LID);
+    vblank_count++;
+    app_tick();
+    for (int i = 0; i < LID_OUT + 2; i++)
+        tick(KEY_LID);
+    check(lid_closed && sim_brightness == -16, "lid closed: faded to black");
+    run(2);
+    check(sim_brightness < 0, "lid opened: still dark at first");
+    run(LID_IN + 2);
+    check(sim_brightness == 0, "then faded in");
+
     // ---- slide down to the player
     tap(128, BAR_Y + 14);
     run(16);
@@ -371,16 +408,20 @@ int main(int argc, char **argv)
     check(app.ov_t == OV_TICKS, "settings in place");
     check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
-    tap(100, 24 + 5 * 28 + 10);
+    tap(100, 24 + 5 * 24 + 10);
     check(app.set.show_remaining, "time left can be chosen");
-    tap(100, 24 + 5 * 28 + 10);
-    tap(100, 24 + 1 * 28 + 10);     // case-sensitive
+    tap(100, 24 + 5 * 24 + 10);
+    check(!app.set.plain_bg, "cover background on by default");
+    tap(100, 24 + 6 * 24 + 10);
+    check(app.set.plain_bg, "cover background can be turned off");
+    tap(100, 24 + 6 * 24 + 10);
+    tap(100, 24 + 1 * 24 + 10);     // case-sensitive
     check(app.set.case_sensitive, "case-sensitive on");
     tap(240, 8);
     tap(36, 10);
     check(find_row("KIVARA") >= 0, "KIVARA separate when case-sensitive");
     tap(240, BAR_Y + 14);
-    tap(100, 24 + 1 * 28 + 10);
+    tap(100, 24 + 1 * 24 + 10);
     tap(240, 8);
 
     // ---- scroll bar drag with the letter bubble
@@ -471,6 +512,29 @@ int main(int argc, char **argv)
         film_screen("menu_queue_open", 18, SCREEN_BOTTOM);
         tap(240, 8);
         film_screen("menu_queue_close", 18, SCREEN_BOTTOM);
+        run(20);
+
+        // play/pause morph with the lit button
+        sim_set_touch(128, 100);
+        tick(KEY_TOUCH);
+        film_screen("fx_pause", 4, SCREEN_BOTTOM);
+        film_screen("fx_pause_b", 16, SCREEN_BOTTOM);
+        run(20);
+        tap(128, 100);
+        film_screen("fx_play", 16, SCREEN_BOTTOM);
+
+        // the row highlight gliding
+        slide_to(false);
+        run(40);
+        select_index(0);
+        run(20);
+        for (int k = 1; k <= 3; k++)
+        {
+            select_index(k * 2);
+            char nm[24];
+            snprintf(nm, sizeof(nm), "fx_glide%d", k);
+            film_screen(nm, 10, SCREEN_BOTTOM);
+        }
     }
 
     printf("%s\n", failures ? "SOME CHECKS FAILED" : "all checks passed");

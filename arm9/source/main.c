@@ -38,6 +38,7 @@ static uint32_t last_vblank;
 static bool redraw = true;
 static uint32_t save_at, last_save;
 static bool lid_closed, paused_by_lid;
+static int lid_fade, lid_fade_in = LID_IN;
 
 // ------------------------------------------------------------------ helpers
 
@@ -147,6 +148,7 @@ static void show_tab_dir(Tab t, int dir)
     rebuild_list();
     uint32_t cur = app_current_track();
     bool found = false;
+    app.sel_vis = 0;
     if (t == TAB_ARTIST && app.artist >= 0)
         found = select_item(ITEM_ARTIST, app.artist);
     else if (t == TAB_ALBUM && app.album != LIB_NONE)
@@ -177,6 +179,7 @@ static void show_tab_dir(Tab t, int dir)
     }
     if (!found && app.n_items > 1 && app.items[0].kind == ITEM_UP)
         select_index(1);
+    app.sel_vis = (app.sel - app.scroll) * ROW_H;     // a new list: no gliding
     redraw = true;
 }
 
@@ -587,6 +590,7 @@ static void settings_toggle(int row)
         player_set_volume(replaygain_volume());
         break;
     case 5: app.set.show_remaining ^= 1; break;
+    case 6: app.set.plain_bg ^= 1; break;
     default: return;
     }
     touch_state();
@@ -635,6 +639,7 @@ static void scroll_to_y(int y)
     if (app.sel < s) app.sel = s;
     if (app.sel >= s + ROWS) app.sel = s + ROWS - 1;
     app.sel_frame = app.frame;
+    app.sel_vis = (app.sel - app.scroll) * ROW_H;
     redraw = true;
 }
 
@@ -759,13 +764,61 @@ static void tap_settings(int x, int y)
         if (x >= 224)
             app.overlay = OV_NONE;
     }
-    else if (y >= 24 && y < 24 + 6 * 28)
-        settings_toggle((y - 24) / 28);
+    else if (y >= 24 && y < 24 + 7 * 24)
+        settings_toggle((y - 24) / 24);
+    redraw = true;
+}
+
+// The button under the stylus, to light it up.
+static int button_at(int x, int y)
+{
+    if (app.overlay != OV_NONE)
+        return BTN_NONE;
+    int oy = app_panel_offset();
+    if (oy == 0 && y >= BAR_Y)
+    {
+        if (x < 32) return BTN_PLAY;
+        if (x < 64) return BTN_NEXT;
+        if (x < 100) return BTN_ADD;
+        if (x >= 104 && x < 152) return BTN_DOWN;
+        if (x >= 160 && x < 192) return BTN_SORT;
+        if (x >= 192 && x < 224) return BTN_BRIGHT;
+        if (x >= 224) return BTN_SETTINGS;
+        return BTN_NONE;
+    }
+    if (oy == PANEL_DOWN && y < PANEL_DOWN)
+    {
+        if (y >= 76 && y < 124)
+        {
+            if (x < 48) return BTN_SHUFFLE;
+            if (x < 100) return BTN_PREV;
+            if (x < 156) return BTN_PPLAY;
+            if (x < 204) return BTN_PNEXT;
+            return BTN_REPEAT;
+        }
+        if (y >= 132 && y < 164)
+        {
+            if (x < 48) return BTN_INFO;
+            if (x >= 104 && x < 152) return BTN_UP;
+            if (x >= 208) return BTN_QUEUE;
+        }
+    }
+    return BTN_NONE;
+}
+
+// Light a button briefly (for the buttons that keys also press).
+static void flash(int id)
+{
+    app.press_id = id;
+    app.press_down = false;
+    app.press_until = app.frame + 6;
     redraw = true;
 }
 
 static void touch_down(int x, int y)
 {
+    app.press_id = button_at(x, y);
+    app.press_down = app.press_id != BTN_NONE;
     tp = (typeof(tp)){ true, x, y, x, y, ticks, false, false };
     int oy = app_panel_offset();
     if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= LIST_Y && y < BAR_Y && app.n_items > ROWS)
@@ -792,7 +845,11 @@ static void touch_move(int x, int y)
     tp.x = x;
     tp.y = y;
     if (abs(x - tp.x0) > TAP_SLOP || abs(y - tp.y0) > TAP_SLOP)
+    {
         tp.moved = true;
+        app.press_down = false;
+        app.press_id = BTN_NONE;    // slid off: no tap, no light
+    }
     if (app.scroll_drag)
         scroll_to_y(y);
     else if (app.seek_drag)
@@ -831,6 +888,11 @@ static void touch_move(int x, int y)
 static void touch_up(void)
 {
     tp.down = false;
+    if (app.press_down)
+    {
+        app.press_down = false;
+        app.press_until = app.frame + 6;    // stays lit a moment after the tap
+    }
     if (app.scroll_drag)
         app.scroll_drag = false;
     else if (app.seek_drag)
@@ -881,9 +943,9 @@ static uint32_t vert_since;
 
 static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
 {
-    if (down & KEY_L) previous_song();
-    if (down & KEY_R) next_song(false);
-    if (down & KEY_START) toggle_pause();
+    if (down & KEY_L) { previous_song(); if (app.player_mode) flash(BTN_PREV); }
+    if (down & KEY_R) { next_song(false); flash(app.player_mode ? BTN_PNEXT : BTN_NEXT); }
+    if (down & KEY_START) { toggle_pause(); flash(app.player_mode ? BTN_PPLAY : BTN_PLAY); }
     if (down | rep)
         redraw = true;
 
@@ -894,7 +956,7 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        menu_keys(rep, down, 6, settings_toggle);
+        menu_keys(rep, down, 7, settings_toggle);
         return;
     case OV_SORT:
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);
@@ -954,13 +1016,22 @@ static void handle_lid(uint32_t held, uint32_t down)
         if (!lid_closed)
         {
             lid_closed = true;
-            powerOff(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);
+            lid_fade = 0;
             if (app.set.pause_on_lid && player_state() == PLAYER_PLAYING)
             {
                 player_toggle_pause();
                 paused_by_lid = true;
             }
             save_at = ticks;    // the DS may be switched off while closed
+        }
+        // fade to black first, so a screen that keeps showing its last frame
+        // shows black when the lid opens again; then the light goes off
+        if (lid_fade < LID_OUT)
+        {
+            lid_fade++;
+            setBrightness(3, -16 * lid_fade / LID_OUT);
+            if (lid_fade == LID_OUT)
+                powerOff(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);
         }
         if (app.set.lr_skip_lid)
         {
@@ -972,6 +1043,8 @@ static void handle_lid(uint32_t held, uint32_t down)
     if (lid_closed)
     {
         lid_closed = false;
+        setBrightness(3, -16);
+        lid_fade_in = 0;
         powerOn(PM_BACKLIGHT_TOP | PM_BACKLIGHT_BOTTOM);
         if (paused_by_lid && player_state() == PLAYER_PAUSED)
             player_toggle_pause();
@@ -1181,11 +1254,53 @@ static void app_tick(void)
     if (app.ov_t == 0 && app.overlay == OV_NONE)
         app.ov_vis = OV_NONE;
 
+    // play <-> pause shape, seek knob size
+    int pp_target = player_state() == PLAYER_PLAYING ? PP_TICKS : 0;
+    if (app.pp_t != pp_target)
+    {
+        app.pp_t += app.pp_t < pp_target ? (int)elapsed : -(int)elapsed;
+        if ((pp_target == PP_TICKS && app.pp_t > PP_TICKS) || (pp_target == 0 && app.pp_t < 0))
+            app.pp_t = pp_target;
+        redraw = true;
+    }
+    int knob_target = app.seek_drag ? KNOB_TICKS : 0;
+    if (app.knob_t != knob_target)
+    {
+        app.knob_t += app.knob_t < knob_target ? (int)elapsed : -(int)elapsed;
+        if ((knob_target && app.knob_t > KNOB_TICKS) || (!knob_target && app.knob_t < 0))
+            app.knob_t = knob_target;
+        redraw = true;
+    }
+    // the row highlight glides to the selection
+    int sel_target = (app.sel - app.scroll) * ROW_H;
+    for (uint32_t k = 0; k < elapsed && app.sel_vis != sel_target; k++)
+    {
+        int d = sel_target - app.sel_vis;
+        if (d > ROWS * ROW_H || d < -ROWS * ROW_H)
+            app.sel_vis = sel_target;
+        else
+            app.sel_vis += d * 2 / 5 ? d * 2 / 5 : (d > 0 ? 1 : -1);
+        redraw = true;
+    }
+    if (lid_fade_in < LID_IN && !lid_closed)
+    {
+        lid_fade_in++;
+        setBrightness(3, -16 + 16 * lid_fade_in / LID_IN);
+    }
+
     uint32_t prev_frame = app.frame;
     app.frame = now / 2;
-    // progress bars and times twice a second while playing, the clock always
-    if (app.frame / 15 != prev_frame / 15 && (player_state() == PLAYER_PLAYING || app.frame / 30 != prev_frame / 30))
+    // progress bars: redraw when they move a pixel or the time a second; the clock
+    static int last_px = -1;
+    static uint32_t last_sec;
+    uint32_t pos = player_position_smooth_ms(), dur = player_duration_ms();
+    int px = dur ? (int)((uint64_t)240 * pos / dur) : 0;
+    if (px != last_px || pos / 1000 != last_sec || app.frame / 30 != prev_frame / 30)
+    {
+        last_px = px;
+        last_sec = pos / 1000;
         redraw = true;
+    }
     if (lid_closed)
         return;
     update_thumb();

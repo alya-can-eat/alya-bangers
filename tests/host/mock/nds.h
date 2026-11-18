@@ -36,3 +36,5 @@ static inline void defaultExceptionHandler(void) {}
 typedef struct touchPosition { u16 rawx, rawy, px, py, z1, z2; } touchPosition;
 void touchRead(touchPosition *t);
 u32 systemSetBacklightLevel(u32 level);
+extern int sim_brightness;
+static inline void setBrightness(int screen, int level) { (void)screen; sim_brightness = level; }

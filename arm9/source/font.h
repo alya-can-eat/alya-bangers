@@ -33,4 +33,7 @@ int font_draw_ex(Canvas *c, int x, int y, int clip_x0, int clip_x1, const char *
 
 bool font_has_kana(const char *s);
 
+// Opacity of the text drawn from now on: 256 solid, 0 invisible (for fades).
+void font_set_alpha(int a);
+
 #endif

@@ -38,6 +38,9 @@ void player_tick(uint32_t elapsed);
 // The n (<= 4096) mono samples playing right now, for the visualizer.
 bool player_peek(int16_t *out, int n);
 
+// Like player_position_ms(), but moving smoothly between block reports.
+uint32_t player_position_smooth_ms(void);
+
 const DsaHeader *player_header(void);
 
 // Keep the ring buffers full. Call often: every frame, and inside long loops.

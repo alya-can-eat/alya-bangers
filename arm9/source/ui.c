@@ -358,12 +358,6 @@ static void song_text(uint32_t t, SongText *st)
         snprintf(st->extra + n, sizeof(st->extra) - n, "%s%d", n ? " · " : "", tr->track);
 }
 
-// Text color faded towards the background: a = 256 full, 0 gone.
-static uint16_t fade(uint16_t c, int a)
-{
-    return a >= 256 ? c : gfx_mix(c, C_BG, a < 0 ? 0 : a);
-}
-
 static bool top_text_column(int x0, const SongText *st, uint32_t t, int alpha)
 {
     if (x0 >= SCREEN_W)
@@ -376,10 +370,12 @@ static bool top_text_column(int x0, const SongText *st, uint32_t t, int alpha)
         font_draw_ex(T, x0, 40, x0, x0 + w, "playing", C_DIM, 0, 1);
         return false;
     }
-    anim |= marquee1(T, x0, 24, w, st->title, fade(C_TEXT, alpha), t, false);
-    anim |= marquee1(T, x0, 44, w, st->artist, fade(C_ACC, alpha), t, false);
-    anim |= marquee1(T, x0, 64, w, st->album, fade(C_DIM, alpha), t, false);
-    font_draw_ex(T, x0, 84, x0, x0 + w, st->extra, fade(C_DIM, alpha), -1, 1);
+    font_set_alpha(alpha);      // fading in or out on a song change
+    anim |= marquee1(T, x0, 24, w, st->title, C_TEXT, t, false);
+    anim |= marquee1(T, x0, 44, w, st->artist, C_ACC, t, false);
+    anim |= marquee1(T, x0, 64, w, st->album, C_DIM, t, false);
+    font_draw_ex(T, x0, 84, x0, x0 + w, st->extra, C_DIM, -1, 1);
+    font_set_alpha(256);
     // shuffle and repeat, since the controls are hidden while browsing
     icon(T, x0, 136, 0x1F500, queue_shuffle() ? C_ACC : C_FAINT);
     icon(T, x0 + 20, 136, queue_repeat() == REPEAT_ONE ? 0x1F502 : 0x1F501,
@@ -391,7 +387,7 @@ static void top_progress(int y)
 {
     if (y >= SCREEN_H || player_path() == NULL)
         return;
-    uint32_t pos = player_position_ms(), dur = player_duration_ms();
+    uint32_t pos = player_position_smooth_ms(), dur = player_duration_ms();
     int fill = dur ? (int)((uint64_t)240 * pos / dur) : 0;
     gfx_fill(T, 8, y, 240, 4, C_LINE);
     gfx_fill(T, 8, y, fill, 4, C_ACC);
@@ -557,14 +553,18 @@ static void next_texts(int x, uint32_t track, uint32_t t, int alpha)
         return;
     if (track == LIB_NONE)
     {
-        font_draw_ex(T, x + 20, 80, x, SCREEN_W, "\u2013", fade(C_DIM, alpha), 0, 1);
+        font_set_alpha(alpha);
+        font_draw_ex(T, x + 20, 80, x, SCREEN_W, "\u2013", C_DIM, 0, 1);
+        font_set_alpha(256);
         return;
     }
     char title[200];
     track_title(track, title, sizeof(title));
     const LibTrack *tr = lib_track(track);
-    marquee1(T, x, 80, 48, title, fade(C_TEXT, alpha), t, true);
-    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", fade(C_DIM, alpha), t, true);
+    font_set_alpha(alpha);
+    marquee1(T, x, 80, 48, title, C_TEXT, t, true);
+    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
+    font_set_alpha(256);
 }
 
 // "Album · year" under the cover in player mode.
@@ -581,7 +581,9 @@ static void album_line(uint32_t track, uint32_t t, int alpha)
         snprintf(line, sizeof(line), "%s \u00b7 %d", name, tr->year);
     else
         snprintf(line, sizeof(line), "%s", name);
-    marquee1(T, 8, 164, 240, line, fade(C_DIM, alpha), t, true);
+    font_set_alpha(alpha);
+    marquee1(T, 8, 164, 240, line, C_DIM, t, true);
+    font_set_alpha(256);
 }
 
 static void draw_song_change(uint32_t t)
@@ -652,17 +654,139 @@ static void draw_song_change(uint32_t t)
         album_line(app.sa_b, t, b);
 }
 
+// ---- player mode background: the cover, blurred and darkened
+
+static uint16_t *bg_cur, *bg_old;
+static uint32_t bg_track = 0xFFFFFFFEu;
+
+// 17 x 13 colors (one every 16 px) from 8x8 blocks of the cover, made dark,
+// then stretched smoothly over the screen with a little dithering.
+static HOT void cover_bg(const uint16_t *cover, uint16_t *out)
+{
+    int16_t grid[13][17][3];
+    static const int bgc[3] = { 16, 16, 33 };   // C_BG in 8 bit
+    for (int gy = 0; gy < 13; gy++)
+    {
+        for (int gx = 0; gx < 17; gx++)
+        {
+            int cx = gx * 8 - 4, cy = gy * 128 / 12 - 4;
+            if (cx < 0) cx = 0;
+            if (cx > 120) cx = 120;
+            if (cy < 0) cy = 0;
+            if (cy > 120) cy = 120;
+            int r = 0, g = 0, b = 0;
+            for (int j = 0; j < 8; j++)
+            {
+                const uint16_t *p = cover + (cy + j) * 128 + cx;
+                for (int i = 0; i < 8; i++)
+                {
+                    r += p[i] & 31;
+                    g += (p[i] >> 5) & 31;
+                    b += (p[i] >> 10) & 31;
+                }
+            }
+            // average (x 8 for 8 bit), then 30 % of it on top of half the theme color
+            int v[3] = { r / 8, g / 8, b / 8 };
+            for (int k = 0; k < 3; k++)
+                grid[gy][gx][k] = (int16_t)(v[k] * 3 / 10 + bgc[k] / 2);
+        }
+    }
+    static const uint8_t bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    for (int y = 0; y < SCREEN_H; y++)
+    {
+        int gy = y >> 4, fy = y & 15;
+        for (int x = 0; x < SCREEN_W; x++)
+        {
+            int gx = x >> 4, fx = x & 15;
+            int w00 = (16 - fx) * (16 - fy), w01 = fx * (16 - fy), w10 = (16 - fx) * fy, w11 = fx * fy;
+            int d = bayer[y & 3][x & 3] >> 1;
+            int c[3];
+            for (int k = 0; k < 3; k++)
+            {
+                int v = (grid[gy][gx][k] * w00 + grid[gy][gx + 1][k] * w01 + grid[gy + 1][gx][k] * w10
+                         + grid[gy + 1][gx + 1][k] * w11) >> 8;
+                v = (v + d) >> 3;
+                c[k] = v > 31 ? 31 : v;
+            }
+            out[y * SCREEN_W + x] = (uint16_t)(c[0] | (c[1] << 5) | (c[2] << 10) | 0x8000);
+        }
+    }
+}
+
+// dst = a with k quarters of b (b = NULL: the color pair bc), two pixels at a time
+static HOT void quarters(uint32_t *dst, const uint32_t *a, const uint32_t *b, uint32_t bc, int k, int words)
+{
+    const uint32_t m = 0x7BDE7BDE;
+    for (int i = 0; i < words; i++)
+    {
+        uint32_t x = a[i], y = b ? b[i] : bc;
+        uint32_t half = ((x & m) >> 1) + ((y & m) >> 1);
+        uint32_t r;
+        if (k <= 0) r = x;
+        else if (k == 1) r = ((x & m) >> 1) + ((half & m) >> 1);
+        else if (k == 2) r = half;
+        else if (k == 3) r = ((y & m) >> 1) + ((half & m) >> 1);
+        else r = y;
+        dst[i] = r | 0x80008000;
+    }
+}
+
+// The background of the top screen. p2: how far the player layout is in (0..256).
+static void draw_background(int p2)
+{
+    bool want = !app.set.plain_bg && player_path() != NULL && p2 > 0;
+    if (want && !bg_cur)
+    {
+        bg_cur = malloc(SCREEN_W * SCREEN_H * 2);
+        bg_old = malloc(SCREEN_W * SCREEN_H * 2);
+    }
+    if (!want || !bg_cur || !bg_old)
+    {
+        gfx_fill(T, 0, 0, SCREEN_W, SCREEN_H, C_BG);
+        return;
+    }
+    uint32_t track = app_current_track();
+    if (track != bg_track)
+    {
+        uint16_t *t = bg_old;
+        bg_old = bg_cur;
+        bg_cur = t;
+        cover_bg(live_cover(), bg_cur);
+        if (bg_track == 0xFFFFFFFEu)
+            memcpy(bg_old, bg_cur, SCREEN_W * SCREEN_H * 2);
+        bg_track = track;
+    }
+    const int words = SCREEN_W * SCREEN_H / 2;
+    uint32_t *dst = (uint32_t *)(void *)T->px;
+    const uint32_t *src = (const uint32_t *)bg_cur;
+    // a song change cross-fades from the old background, in quarters
+    if (SA_PLAYER(app.sa_kind))
+    {
+        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_TICKS;
+        int k = app.sa_t * 5 / total;
+        if (k < 4)
+        {
+            quarters(dst, (const uint32_t *)bg_old, (const uint32_t *)bg_cur, 0, k, words);
+            src = dst;
+        }
+    }
+    // sliding in from the browser: from the plain color, in quarters
+    int k2 = p2 >= 256 ? 4 : p2 * 4 / 256;
+    uint32_t bgc = C_BG | ((uint32_t)C_BG << 16);
+    quarters(dst, src, NULL, bgc, 4 - k2, words);
+    T->dirty = true;
+}
+
 bool ui_draw_top(void)
 {
     T = gfx_canvas(SCREEN_TOP);
     gfx_unclip(T);
-    gfx_fill(T, 0, 0, SCREEN_W, SCREEN_H, C_BG);
-    header();
-
     uint32_t t = app.frame;
     int p = app_slide_p256();
     int p1 = smooth256(p * 256 / 154);
     int p2 = smooth256((p - 102) * 256 / 154);
+    draw_background(p2);
+    header();
     bool playing = player_state() == PLAYER_PLAYING;
     // the record and the visualizer move while playing; the rest only if text scrolls
     bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS);
@@ -851,7 +975,19 @@ static bool draw_list(int oy)
         int i = app.scroll + r;
         int y = y0 + r * ROW_H;
         bool sel = i == app.sel && i < app.n_items;
-        gfx_fill(B, 0, y, SCROLL_X, ROW_H, sel ? C_SEL : (r % 2 ? C_ZEBRA : C_BG));
+        if (r == 0)
+        {
+            // all row backgrounds first, then the highlight gliding to the selection
+            for (int k = 0; k < ROWS; k++)
+                gfx_fill(B, 0, y0 + k * ROW_H, SCROLL_X, ROW_H, k % 2 ? C_ZEBRA : C_BG);
+            if (app.sel >= 0 && app.sel < app.n_items)
+            {
+                int hy = y0 + app.sel_vis;
+                int top = hy < y0 ? y0 : hy, bottom = hy + ROW_H > y0 + ROWS * ROW_H ? y0 + ROWS * ROW_H : hy + ROW_H;
+                if (bottom > top)
+                    gfx_fill(B, 0, top, SCROLL_X, bottom - top, C_SEL);
+            }
+        }
         if (i >= app.n_items)
             continue;
         const Item *it = &app.items[i];
@@ -964,10 +1100,63 @@ static void slide_lists(int oy)
     B->dirty = true;
 }
 
-static void pill(int cx, int y, uint32_t cp)
+static void pill(int cx, int y, uint32_t cp, bool lit)
 {
-    gfx_round_fill(B, cx - 20, y + 4, 40, 20, 6, C_LINE);
+    gfx_round_fill(B, cx - 20, y + 4, 40, 20, 6, lit ? C_DIM : C_LINE);
     icon(B, cx - 8, y + 6, cp, C_TEXT);
+}
+
+// A button lit up by the stylus (and shortly after the tap).
+static bool lit(int id)
+{
+    return app.press_id == id && (app.press_down || app.frame < app.press_until);
+}
+
+static void lit_box(int cx, int cy, int w, int h, int id)
+{
+    if (lit(id))
+        gfx_round_fill(B, cx - w / 2, cy - h / 2, w, h, 6, C_LINE);
+}
+
+typedef struct { int x, y; } Pt;
+
+static Pt lerp_pt(Pt a, Pt b, int t)
+{
+    return (Pt){ a.x + (b.x - a.x) * t / 256, a.y + (b.y - a.y) * t / 256 };
+}
+
+static void quad(Pt a, Pt b, Pt c, Pt d, uint16_t col)
+{
+    gfx_triangle(B, a.x, a.y, b.x, b.y, c.x, c.y, col);
+    gfx_triangle(B, a.x, a.y, c.x, c.y, d.x, d.y, col);
+}
+
+// Play triangle (t = 0) turning into the pause bars (t = 256): each bar comes
+// from one half of the triangle. Pause: bars x l0..l1 and r0..r1, half height
+// h. Play: from pl to the tip pt, half height ph.
+static void play_pause(int cy, int l0, int l1, int r0, int r1, int h, int pl, int pt, int ph, int t, uint16_t col)
+{
+    if (t >= 256)
+    {
+        gfx_fill(B, l0, cy - h, l1 - l0 + 1, 2 * h + 1, col);
+        gfx_fill(B, r0, cy - h, r1 - r0 + 1, 2 * h + 1, col);
+        return;
+    }
+    if (t <= 0)
+    {
+        gfx_triangle(B, pl, cy - ph, pl, cy + ph, pt, cy, col);
+        return;
+    }
+    int xs = (pl + pt) / 2, hs = ph / 2;
+    quad(lerp_pt((Pt){ pl, cy - ph }, (Pt){ l0, cy - h }, t), lerp_pt((Pt){ xs, cy - hs }, (Pt){ l1, cy - h }, t),
+         lerp_pt((Pt){ xs, cy + hs }, (Pt){ l1, cy + h }, t), lerp_pt((Pt){ pl, cy + ph }, (Pt){ l0, cy + h }, t), col);
+    quad(lerp_pt((Pt){ xs, cy - hs }, (Pt){ r0, cy - h }, t), lerp_pt((Pt){ pt, cy }, (Pt){ r1, cy - h }, t),
+         lerp_pt((Pt){ pt, cy }, (Pt){ r1, cy + h }, t), lerp_pt((Pt){ xs, cy + hs }, (Pt){ r0, cy + h }, t), col);
+}
+
+static int pp_shape(void)
+{
+    return smooth256(app.pp_t * 256 / PP_TICKS);
 }
 
 static void draw_bar(int oy)
@@ -975,19 +1164,26 @@ static void draw_bar(int oy)
     int y = oy + BAR_Y;
     gfx_fill(B, 0, y, SCREEN_W, 28, C_PANEL);
     gfx_fill(B, 0, y, SCREEN_W, 1, C_LINE);
-    icon(B, 8, y + 6, player_state() == PLAYER_PLAYING ? 0x23F8 : 0x25B6, C_TEXT);
+    lit_box(16, y + 14, 28, 20, BTN_PLAY);
+    play_pause(y + 14, 13, 14, 17, 18, 5, 12, 20, 5, pp_shape(), C_TEXT);
+    lit_box(48, y + 14, 28, 20, BTN_NEXT);
     icon(B, 40, y + 6, 0x23ED, C_TEXT);
     if (app.add_mode)
-        gfx_round_fill(B, 66, y + 4, 28, 20, 6, C_ACC);
+        gfx_round_fill(B, 66, y + 4, 28, 20, 6, lit(BTN_ADD) ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
+    else
+        lit_box(80, y + 14, 28, 20, BTN_ADD);
     icon(B, 72, y + 6, 0xE000, app.add_mode ? C_BG : C_TEXT);
-    pill(128, y, 0x2B9F);
+    pill(128, y, 0x2B9F, lit(BTN_DOWN));
     bool sort_open = app.overlay == OV_SORT;
     if (sort_open)
         gfx_fill(B, 160, y + 1, 32, 27, C_BG);
+    lit_box(176, y + 14, 28, 20, BTN_SORT);
     icon(B, 168, y + 6, 0x21C5, sort_open ? C_ACC : C_TEXT);
     // the sun shows the level: circle, sun, half full, full (DS Lite levels 2..5)
     int level = app.set.brightness < 2 ? 2 : (app.set.brightness > 5 ? 5 : app.set.brightness);
+    lit_box(208, y + 14, 28, 20, BTN_BRIGHT);
     icon(B, 200, y + 6, 0xE001 + (level - 2), C_TEXT);
+    lit_box(240, y + 14, 28, 20, BTN_SETTINGS);
     icon(B, 232, y + 6, 0x22EE, C_TEXT);
 }
 
@@ -1165,13 +1361,13 @@ static bool draw_player_area(void)
         centered(B, 8, "Nothing playing", C_DIM);
 
     uint32_t dur = player_duration_ms();
-    uint32_t pos = app.seek_drag ? app.seek_preview_ms : player_position_ms();
+    uint32_t pos = app.seek_drag ? app.seek_preview_ms : player_position_smooth_ms();
     int y = 40;
     gfx_fill(B, 16, y, 224, 4, C_LINE);
     int kx = 16 + (dur ? (int)((uint64_t)224 * pos / dur) : 0);
     gfx_fill(B, 16, y, kx - 16, 4, C_ACC);
     if (player_path() != NULL)
-        gfx_disc(B, kx, y + 2, 5, C_TEXT);
+        gfx_disc(B, kx, y + 2, 5 + 2 * app.knob_t / KNOB_TICKS, C_TEXT);   // grows while dragged
     char s[16];
     mmss(s, sizeof(s), pos);
     text(B, 16, y + 12, s, C_TEXT);
@@ -1180,25 +1376,25 @@ static bool draw_player_area(void)
 
     int cy = 100;
     bool sh = queue_shuffle();
+    lit_box(28, cy + 1, 32, 30, BTN_SHUFFLE);
     icon(B, 20, cy - 8, 0x1F500, sh ? C_ACC : C_DIM);
     if (sh)
         gfx_fill(B, 26, cy + 10, 4, 2, C_ACC);
+    lit_box(78, cy, 36, 32, BTN_PREV);
     big_next(78, cy, C_TEXT, true);
-    gfx_disc(B, 128, cy, 24, C_ACC);
-    if (player_state() == PLAYER_PLAYING)
-    {
-        gfx_fill(B, 120, cy - 9, 6, 19, C_BG);
-        gfx_fill(B, 131, cy - 9, 6, 19, C_BG);
-    }
-    else
-        gfx_triangle(B, 122, cy - 10, 122, cy + 10, 138, cy, C_BG);
+    gfx_disc(B, 128, cy, 24, lit(BTN_PPLAY) ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
+    play_pause(cy, 120, 125, 131, 136, 9, 122, 138, 10, pp_shape(), C_BG);
+    lit_box(178, cy, 36, 32, BTN_PNEXT);
     big_next(178, cy, C_TEXT, false);
     int rep = queue_repeat();
+    lit_box(228, cy + 1, 32, 30, BTN_REPEAT);
     icon(B, 220, cy - 8, rep == REPEAT_ONE ? 0x1F502 : 0x1F501, rep ? C_ACC : C_DIM);
 
+    lit_box(20, 148, 28, 24, BTN_INFO);
     icon(B, 12, 140, 0x24D8, C_TEXT);
+    lit_box(236, 148, 28, 24, BTN_QUEUE);
     icon(B, 228, 140, 0x2630, C_TEXT);
-    pill(128, 140, 0x2B9D);
+    pill(128, 140, 0x2B9D, lit(BTN_UP));
     return anim;
 }
 
@@ -1326,25 +1522,29 @@ static bool draw_settings(void)
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
     text(B, 8, 2, "Settings", C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
-    static const char *const labels[6] = { "Scroll all long rows", "Case-sensitive names",
+    static const char *const labels[7] = { "Scroll all long rows", "Case-sensitive names",
                                            "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
-                                           "Time on the right" };
+                                           "Time on the right", "Cover background" };
     static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
     const uint8_t on[4] = { app.set.scroll_all, app.set.case_sensitive, app.set.pause_on_lid, app.set.lr_skip_lid };
     bool anim = false;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
     {
-        int y = 24 + i * 28;
+        int y = 24 + i * 24;
         if (i == app.menu_sel)
-            gfx_fill(B, 0, y, SCREEN_W, 27, C_SEL);
+            gfx_fill(B, 0, y, SCREEN_W, 23, C_SEL);
+        bool is_toggle = i < 4 || i == 6;
         const char *value = i == 4 ? rg[app.set.rg_mode] : (app.set.show_remaining ? "Left" : "Length");
-        int w = i < 4 ? 196 : 232 - 8 - font_text_width(value) - 8;
-        anim |= marquee1(B, 8, y + 6, w, labels[i], C_TEXT, app.frame, false);
+        int w = is_toggle ? 196 : 232 - 8 - font_text_width(value) - 8;
+        anim |= marquee1(B, 8, y + 4, w, labels[i], C_TEXT, app.frame, false);
         if (i < 4)
-            toggle(216, y + 7, on[i]);
+            toggle(216, y + 5, on[i]);
+        else if (i == 6)
+            toggle(216, y + 5, !app.set.plain_bg);
         else
-            text_r(B, 244, y + 6, value, C_ACC);
-        gfx_fill(B, 8, y + 27, 240, 1, C_ZEBRA);
+            text_r(B, 244, y + 4, value, C_ACC);
+        if (i < 6)
+            gfx_fill(B, 8, y + 23, 240, 1, C_ZEBRA);
     }
     return anim;
 }
@@ -1362,7 +1562,8 @@ bool ui_draw_bottom(void)
         return draw_settings();
 
     int oy = app_panel_offset();
-    bool anim = app.slide > 0 && app.slide < SLIDE_TICKS;
+    bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS) || app.press_down || app.frame < app.press_until
+                || (app.pp_t > 0 && app.pp_t < PP_TICKS) || (app.knob_t > 0 && app.knob_t < KNOB_TICKS);
     if (oy > 0)
     {
         bool panel = app.ov_vis == OV_INFO || app.ov_vis == OV_QUEUE;

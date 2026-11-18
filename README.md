@@ -58,7 +58,12 @@ or folder, a player screen with a turning record, a queue you can edit.
 | L / R | previous / next song (L restarts the song after 3 s) | same |
 
 Menus (settings, sort, the row menu, song info, queue) slide up when they
-open and down when they close. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
+open and down when they close. Buttons light up when tapped, play and pause morph
+into each other, the row highlight glides, the progress bars move smoothly
+and the seek knob grows while you drag it. In player mode the top screen's
+background is the cover, blurred and darkened (settings: Cover background).
+Closing the lid fades both screens to black before the light goes off;
+opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
 "drops: N" appears at the top. Tell me if you see it on real hardware.
 
 ## The SD card

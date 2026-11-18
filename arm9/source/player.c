@@ -330,6 +330,20 @@ bool player_peek(int16_t *out, int n)
     return true;
 }
 
+uint32_t player_position_smooth_ms(void)
+{
+    uint32_t ms = player_position_ms();
+    if (state != PLAYER_PLAYING)
+        return ms;
+    // the ARM7 reports whole 125 ms blocks; in between, count the frames
+    uint32_t in_block = tick_frames * 1000 / 60;
+    uint32_t block_ms = (uint32_t)((uint64_t)BLOCK_FRAMES * 1000 * hdr.timer_divider / hdr.sound_clock_hz);
+    if (in_block > block_ms)
+        in_block = block_ms;
+    uint32_t dur = player_duration_ms();
+    return ms + in_block > dur ? dur : ms + in_block;
+}
+
 const DsaHeader *player_header(void)
 {
     return state == PLAYER_IDLE ? NULL : &hdr;

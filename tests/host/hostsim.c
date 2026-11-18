@@ -81,6 +81,7 @@ void sim_set_keys(uint32_t down, uint32_t held) { keys_down = down; keys_held = 
 void sim_set_touch(int x, int y) { touch_x = x; touch_y = y; }
 void touchRead(touchPosition *t) { t->px = touch_x; t->py = touch_y; }
 int sim_backlight = -1;
+int sim_brightness;
 u32 systemSetBacklightLevel(u32 level) { sim_backlight = level; return level; }
 void scanKeys(void) {}
 u32 keysDown(void) { return keys_down; }

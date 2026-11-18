@@ -38,6 +38,10 @@
 #define SLIDE_TICKS 24              // browser <-> player, 0.4 s
 #define TAB_TICKS   15              // sideways list slide, 0.25 s
 #define OV_TICKS    15              // menus slide up / down, 0.25 s
+#define PP_TICKS    10              // play <-> pause morph
+#define KNOB_TICKS  8               // seek knob grows while dragged
+#define LID_OUT     6               // lid closing: fade to black first
+#define LID_IN      18              // lid opening: fade in from black
 
 // Song change on the top screen (player layout). Forward: the cover leaves to
 // the left over its record, the next cover grows from the Next spot, its
@@ -58,6 +62,10 @@ typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP, SA_PUT, SA_LIFT } SongAnim
 #define SA_FLY_TICKS 18             // the new cover grows into the middle
 #define SA_B_TICKS  18              // then its record rolls out
 #define SA_TICKS    (SA_FLY_START + SA_FLY_TICKS + SA_B_TICKS)
+
+// Buttons that light up when tapped.
+enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BTN_SETTINGS,
+       BTN_SHUFFLE, BTN_PREV, BTN_PPLAY, BTN_PNEXT, BTN_REPEAT, BTN_INFO, BTN_UP, BTN_QUEUE };
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
@@ -108,6 +116,12 @@ typedef struct {
     uint16_t *sa_cover;         // 128x128: the cover that was showing before the change
     uint16_t sa_thumb[32 * 32]; // the Next picture before the change
     bool sa_has_thumb;
+    int pp_t;                   // play/pause shape: 0 = play .. PP_TICKS = pause
+    int knob_t;                 // seek knob size while dragging
+    int press_id;               // button lit up by the stylus (BTN_*)
+    uint32_t press_until;       // stays lit until this frame after release
+    bool press_down;            // the stylus is still on it
+    int sel_vis;                // y of the row highlight in the list (glides to the selection)
     int vinyl_rot;              // degrees x 3
     int vinyl_speed;            // 0..256 of 33 1/3 rpm (spins up and down)
 

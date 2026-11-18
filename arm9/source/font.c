@@ -184,6 +184,13 @@ int font_text_width(const char *s)
     return width_jp(s, font_has_kana(s));
 }
 
+static int text_alpha = 256;
+
+void font_set_alpha(int a)
+{
+    text_alpha = a < 0 ? 0 : (a > 256 ? 256 : a);
+}
+
 static HOT void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, const Glyph *g,
                            uint16_t color, int scale)
 {
@@ -212,7 +219,7 @@ static HOT void draw_glyph(Canvas *cv, int x, int y, int clip_x0, int clip_x1, c
                 {
                     int xx = x + col * scale + sx;
                     if (xx >= clip_x0 && xx < clip_x1)
-                        line[xx] = color;
+                        line[xx] = text_alpha >= 256 ? color : gfx_mix(color, line[xx], text_alpha);
                 }
             }
         }
