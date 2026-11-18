@@ -70,7 +70,7 @@ or folder, a player screen with a turning record, a queue you can edit.
 | Up / Down | move (faster when held) | |
 | Left / Right | tab to the left / right | −10 s / +10 s |
 | A | open / play | play / pause |
-| B | back one tab or folder | back to browsing |
+| B | the player | back to browsing |
 | X | add-to-queue mode | song info |
 | Y | row menu | queue |
 | SELECT | player | back to browsing |

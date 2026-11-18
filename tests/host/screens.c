@@ -535,7 +535,9 @@ int main(int argc, char **argv)
     check(sim_backlight == 2, "brightness cycles to the lowest level");
 
     // ---- rating and plays in the song info
-    slide_to(true);
+    check(!app.player_mode, "browsing");
+    press(KEY_B);
+    check(app.player_mode, "B in the browser: to the player");
     run(30);
     if (player_state() != PLAYER_PLAYING)
         press(KEY_START);
@@ -579,7 +581,9 @@ int main(int argc, char **argv)
         rename(stats_new, stats_file);
     }
     press(KEY_B);
-    slide_to(false);
+    check(app.overlay == OV_NONE && app.player_mode, "B closes the song info");
+    press(KEY_B);
+    check(!app.player_mode, "B in the player: back to browsing");
     run(30);
 
     // ---- state survives a restart; launch loads the song paused at the same spot

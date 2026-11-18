@@ -556,16 +556,6 @@ static void activate(int i)
     }
 }
 
-static void go_back(void)
-{
-    if (app.tab == TAB_TITLE && app.album != LIB_NONE)
-        show_tab(TAB_ALBUM);
-    else if (app.tab == TAB_ALBUM && app.artist >= 0)
-        show_tab(TAB_ARTIST);
-    else if (app.tab == TAB_FOLDER && app.folder[0])
-        activate(0);   // the ⮝ row
-}
-
 static void row_menu_choose(int option)
 {
     int i = app.menu_item;
@@ -1147,10 +1137,10 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     if ((down & KEY_LEFT) && app.tab > TAB_ARTIST) show_tab(app.tab - 1);
     if ((down & KEY_RIGHT) && app.tab < TAB_SEARCH) show_tab(app.tab + 1);
     if (down & KEY_A) activate(app.sel);
-    if (down & KEY_B) go_back();
     if (down & KEY_Y) open_row_menu(app.sel);
     if (down & KEY_X) toggle_add_mode();
-    if (down & KEY_SELECT) slide_to(true);
+    // B and SELECT: to the player and back (Left / Right do the tabs)
+    if (down & (KEY_B | KEY_SELECT)) slide_to(true);
 }
 
 static void handle_lid(uint32_t held, uint32_t down)
