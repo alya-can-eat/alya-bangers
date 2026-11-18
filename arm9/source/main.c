@@ -980,13 +980,22 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     case OV_QUEUE:
     {
         int n = queue_count();
-        if (app.q_sel < 0) app.q_sel = queue_pos() < 0 ? 0 : queue_pos();
-        if (rep & KEY_UP) app.q_sel -= step;
-        if (rep & KEY_DOWN) app.q_sel += step;
-        if (app.q_sel >= n) app.q_sel = n - 1;
-        if (app.q_sel < 0) app.q_sel = 0;
-        if (app.q_sel < app.q_scroll) app.q_scroll = app.q_sel;
-        if (app.q_sel >= app.q_scroll + ROWS) app.q_scroll = app.q_sel - ROWS + 1;
+        if (app.q_sel >= n) app.q_sel = n - 1;      // songs were removed
+        // only keys move the selection and the view: the scroll bar's
+        // position stays when it's let go
+        if ((rep & (KEY_UP | KEY_DOWN)) || (down & (KEY_A | KEY_X)))
+        {
+            if (app.q_sel < 0) app.q_sel = queue_pos() < 0 ? 0 : queue_pos();
+            if (rep & KEY_UP) app.q_sel -= step;
+            if (rep & KEY_DOWN) app.q_sel += step;
+            if (app.q_sel >= n) app.q_sel = n - 1;
+            if (app.q_sel < 0) app.q_sel = 0;
+            if (rep & (KEY_UP | KEY_DOWN))
+            {
+                if (app.q_sel < app.q_scroll) app.q_scroll = app.q_sel;
+                if (app.q_sel >= app.q_scroll + ROWS) app.q_scroll = app.q_sel - ROWS + 1;
+            }
+        }
         if ((down & KEY_A) && n) open_pos(app.q_sel, 0, true, SA_JUMP);
         if ((down & KEY_X) && n && app.q_sel != queue_pos()) { queue_remove(app.q_sel); touch_state(); }
         if (down & (KEY_B | KEY_Y)) app.overlay = OV_NONE;

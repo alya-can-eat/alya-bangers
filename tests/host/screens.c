@@ -344,6 +344,14 @@ int main(int argc, char **argv)
     char t[200];
     snprintf(t, sizeof(t), "%s", lib_value(lib_track(queue_track(4))->title));
     check(strcmp(t, "Dawnline") == 0, "drag moved Dawnline to 5");
+    // the scroll bar: the queue stays where it's let go
+    hold(250, 24, 2);
+    drag_to(250, 20 + ROWS * ROW_H - 2, 4);
+    release();
+    run(10);
+    check(app.q_scroll == queue_count() - ROWS, "queue scroll bar: stays where it's let go");
+    press(KEY_DOWN);
+    check(app.q_sel >= app.q_scroll && app.q_sel < app.q_scroll + ROWS, "then Down shows the selection again");
     tap(240, 8);
 
     // seek by dragging the bar
