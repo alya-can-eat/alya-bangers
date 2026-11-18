@@ -80,6 +80,22 @@ static void rate_current(int stars)
     touch_stats();
 }
 
+// Shuffle by rating: each star doubles the weight. Unrated songs count as
+// 3 stars, so they don't get buried: 5 stars come up 4x as often, 1 star 1/4.
+static uint32_t rating_weight(uint32_t t)
+{
+    static const uint8_t w[6] = { 1, 2, 4, 8, 16, 32 };
+    int r = stats_rating(lib_path(t));
+    if (r == STATS_UNRATED)
+        r = lib_tag(t, "~#rating") ? app_song_rating(t) : 3;
+    return w[r < 0 ? 0 : (r > 5 ? 5 : r)];
+}
+
+static void apply_weighting(void)
+{
+    queue_set_weight_fn(app.set.shuffle_weighted ? rating_weight : NULL);
+}
+
 // A song counts as played once it has been listened to for half its length
 // or 4 minutes, whichever comes first, like Last.fm. Listening time, not the
 // position: seeking ahead doesn't count. Once per listen.
@@ -642,7 +658,13 @@ static void settings_toggle(int row)
         break;
     case 5: app.set.show_remaining ^= 1; break;
     case 6: app.set.plain_bg ^= 1; break;
-    case 7: app.about = true; redraw = true; return;
+    case 7:
+        app.set.shuffle_weighted ^= 1;
+        apply_weighting();
+        queue_reshuffle_rest();     // the songs still to come, in the new way
+        app.thumb_track = LIB_NONE;
+        break;
+    case 8: app.about = true; redraw = true; return;
     default: return;
     }
     touch_state();
@@ -1242,6 +1264,7 @@ static void app_init(void)
     stats_load();
     ui_init();
     restore();
+    apply_weighting();
     systemSetBacklightLevel(app.set.brightness);
     show_tab(TAB_ARTIST);
     last_save = ticks;

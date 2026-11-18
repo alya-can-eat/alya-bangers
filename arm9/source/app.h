@@ -34,9 +34,9 @@
 #define BAR_Y       164
 #define SCROLL_X    244             // scroll bar column, 12 px wide
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
-#define SET_Y       24              // settings: first row
-#define SET_H       21              // row pitch
-#define SET_ROWS    8               // the last one opens About
+#define SET_Y       21              // settings: first row
+#define SET_H       19              // row pitch
+#define SET_ROWS    9               // the last one opens About
 #define INFO_Y      24              // song info: first row
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here

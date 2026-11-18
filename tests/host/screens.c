@@ -462,7 +462,7 @@ int main(int argc, char **argv)
     tap(100, SET_Y + 1 * SET_H + 10);     // case-sensitive
     check(app.set.case_sensitive, "case-sensitive on");
     // About slides in from the right, ‹ goes back
-    tap(100, SET_Y + 7 * SET_H + 10);
+    tap(100, SET_Y + 8 * SET_H + 10);
     check(app.about && app.about_t > 0 && app.about_t < TAB_TICKS, "About sliding in");
     shot("13a_about_sliding");
     run(20);
@@ -476,7 +476,7 @@ int main(int argc, char **argv)
     run(20);
     tap(240, 8);
     tap(240, BAR_Y + 14);
-    tap(100, SET_Y + 7 * SET_H + 10);
+    tap(100, SET_Y + 8 * SET_H + 10);
     run(20);
     tap(20, 8);
     run(20);
@@ -571,6 +571,49 @@ int main(int argc, char **argv)
     Resume r2;
     queue_clear();
     check(state_load(&s2, &r2) && queue_count() == 15 && r2.path[0], "state saved and restored");
+
+    // ---- shuffle by rating: a 5-star song comes next far more often among 1-star ones
+    {
+        const LibAlbum *al = NULL;
+        for (uint32_t i = 0; i < lib_album_count(); i++)
+            if (strcmp(lib_value(lib_album(i)->name), "Paper Archive vol.1") == 0)
+                al = lib_album(i);
+        uint32_t tr[13];
+        int n = al->count < 13 ? al->count : 13;
+        for (int i = 0; i < n; i++)
+        {
+            tr[i] = lib_album_track(al, i);
+            stats_set_rating(lib_path(tr[i]), 1);
+        }
+        stats_set_rating(lib_path(tr[5]), 5);
+        bool was = queue_shuffle();
+        queue_set_shuffle(true);
+        int hits[2] = { 0, 0 };
+        bool whole = true;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            app.set.shuffle_weighted = (uint8_t)pass;
+            apply_weighting();
+            for (int k = 0; k < 300; k++)
+            {
+                queue_set(tr, n, 0);
+                hits[pass] += queue_track(1) == tr[5];
+                for (int i = 0; i < n; i++)
+                {
+                    int seen = 0;
+                    for (int j = 0; j < queue_count(); j++)
+                        seen += queue_track(j) == tr[i];
+                    whole &= seen == 1 && queue_count() == n;
+                }
+            }
+        }
+        printf("      (5-star song next: %d / 300 plain, %d / 300 by rating)\n", hits[0], hits[1]);
+        check(hits[0] < 60 && hits[1] > 120, "shuffle by rating: 5 stars come next far more often");
+        check(whole, "weighted shuffle keeps every song exactly once");
+        app.set.shuffle_weighted = 0;
+        apply_weighting();
+        queue_set_shuffle(was);
+    }
 
     if (film_on)
     {

@@ -31,6 +31,11 @@ void queue_jump(int pos);
 
 bool queue_shuffle(void);
 void queue_set_shuffle(bool on);
+// Shuffle weighted: a song with twice the weight is twice as likely to come
+// next (weights 1..255; NULL = all the same).
+void queue_set_weight_fn(uint32_t (*weight)(uint32_t track));
+// Shuffle the songs after the current one again (shuffle on only).
+void queue_reshuffle_rest(void);
 int queue_repeat(void);
 void queue_set_repeat(int mode);
 

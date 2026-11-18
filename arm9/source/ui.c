@@ -1644,7 +1644,8 @@ static bool settings_page(void)
     text(B, 236, 2, "×", C_TEXT);
     static const char *const labels[SET_ROWS] = { "Scroll all long rows", "Case-sensitive names",
                                                   "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
-                                                  "Time on the right", "Cover background", "About" };
+                                                  "Time on the right", "Cover background", "Shuffle by rating",
+                                                  "About" };
     static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
     const uint8_t on[4] = { app.set.scroll_all, app.set.case_sensitive, app.set.pause_on_lid, app.set.lr_skip_lid };
     bool anim = false;
@@ -1652,21 +1653,24 @@ static bool settings_page(void)
         gfx_fill(B, 8, SET_Y + i * SET_H + SET_H - 1, 240, 1, C_ZEBRA);
     if (app.menu_sel >= 0)
         highlight(0, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + SET_ROWS * SET_H, C_SEL);
+    const int ty = (SET_H - 1 - 16) / 2, gy = (SET_H - 1 - 14) / 2;     // text, toggle in the row
     for (int i = 0; i < SET_ROWS; i++)
     {
         int y = SET_Y + i * SET_H;
         bool has_value = i == 4 || i == 5;
         const char *value = i == 4 ? rg[app.set.rg_mode] : (app.set.show_remaining ? "Left" : "Length");
         int w = has_value ? 232 - 8 - font_text_width(value) - 8 : 196;
-        anim |= marquee1(B, 8, y + 2, w, labels[i], C_TEXT, app.frame, false);
+        anim |= marquee1(B, 8, y + ty, w, labels[i], C_TEXT, app.frame, false);
         if (i < 4)
-            toggle(216, y + 3, on[i]);
+            toggle(216, y + gy, on[i]);
         else if (i == 6)
-            toggle(216, y + 3, !app.set.plain_bg);
+            toggle(216, y + gy, !app.set.plain_bg);
         else if (i == 7)
-            text_r(B, 244, y + 2, "›", C_DIM);
+            toggle(216, y + gy, app.set.shuffle_weighted);
+        else if (i == 8)
+            text_r(B, 244, y + ty, "›", C_DIM);
         else
-            text_r(B, 244, y + 2, value, C_ACC);
+            text_r(B, 244, y + ty, value, C_ACC);
     }
     return anim;
 }

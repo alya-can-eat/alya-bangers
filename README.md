@@ -50,6 +50,11 @@ or folder, a player screen with a turning record, a queue you can edit.
   Shown: your rating from the DS, else the one from the file's tags; plays
   from the tags plus the ones on the DS. They're kept in
   `/_nds/alya-bangers/stats.bin` (dsconv's library index is only read).
+- **Shuffle by rating** (settings): shuffled, a song's chance to come next
+  doubles with every star. Unrated songs count as 3 stars, so 5 stars come
+  up 4× as often as them and 1 star a quarter as often. Over a long
+  shuffle (a whole tab) your favourites play much more; a short queue still
+  plays every song once per round, just the good ones earlier.
 - Songs without a cover show a built-in picture (a moonlit beach).
 - Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
   Cyrillic, Vietnamese and emoji show correctly.

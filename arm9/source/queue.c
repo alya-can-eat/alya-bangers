@@ -13,6 +13,7 @@ static int pos = -1;
 static bool shuffle_on;
 static int repeat_mode;
 static uint32_t rng = 0x2545F491u;
+static uint32_t (*weight_fn)(uint32_t track);
 
 static uint32_t rand32(void)
 {
@@ -46,8 +47,70 @@ static void renumber(void)
         q[i].seq = (uint32_t)i * SEQ_STEP;
 }
 
+// Weighted order, drawn like names from a hat where each song has as many
+// tickets as its weight (and leaves the hat when drawn). A Fenwick tree of
+// the weights finds the drawn ticket's song in log n steps.
+static bool shuffle_weighted(int from)
+{
+    int m = count - from;
+    uint32_t *tree = malloc((m + 1) * sizeof(uint32_t));
+    uint8_t *w = malloc(m);
+    QueueEntry *out = malloc(m * sizeof(QueueEntry));
+    if (!tree || !w || !out)
+    {
+        free(tree);
+        free(w);
+        free(out);
+        return false;
+    }
+    uint32_t total = 0;
+    tree[0] = 0;
+    for (int i = 0; i < m; i++)
+    {
+        uint32_t x = weight_fn(q[from + i].track);
+        w[i] = (uint8_t)(x < 1 ? 1 : (x > 255 ? 255 : x));
+        tree[i + 1] = w[i];
+        total += w[i];
+    }
+    for (int i = 1; i <= m; i++)
+    {
+        int p = i + (i & -i);
+        if (p <= m)
+            tree[p] += tree[i];
+    }
+    int top = 1;
+    while (top * 2 <= m)
+        top *= 2;
+    for (int k = 0; k < m; k++)
+    {
+        uint32_t r = rand32() % total;
+        int idx = 0;
+        for (int step = top; step; step >>= 1)
+        {
+            if (idx + step <= m && tree[idx + step] <= r)
+            {
+                idx += step;
+                r -= tree[idx];
+            }
+        }
+        out[k] = q[from + idx];
+        for (int i = idx + 1; i <= m; i += i & -i)
+            tree[i] -= w[idx];
+        total -= w[idx];
+    }
+    memcpy(q + from, out, m * sizeof(QueueEntry));
+    free(tree);
+    free(w);
+    free(out);
+    return true;
+}
+
 static void shuffle_rest(int from)
 {
+    if (count - from < 2)
+        return;
+    if (weight_fn && shuffle_weighted(from))
+        return;
     for (int i = count - 1; i > from; i--)
     {
         int j = from + (int)(rand32() % (uint32_t)(i - from + 1));
@@ -55,6 +118,17 @@ static void shuffle_rest(int from)
         q[i] = q[j];
         q[j] = t;
     }
+}
+
+void queue_set_weight_fn(uint32_t (*weight)(uint32_t track))
+{
+    weight_fn = weight;
+}
+
+void queue_reshuffle_rest(void)
+{
+    if (shuffle_on)
+        shuffle_rest(pos + 1);
 }
 
 void queue_clear(void)
