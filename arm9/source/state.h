@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Settings and where playback stopped, kept in one small file on the card
-// (/_nds/dsplayer/state.bin).
+// (/_nds/alya-bangers/state.bin).
 
 #ifndef DSPLAYER_STATE_H__
 #define DSPLAYER_STATE_H__

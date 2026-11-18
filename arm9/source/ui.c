@@ -14,6 +14,7 @@
 #include "font.h"
 #include "player.h"
 #include "queue.h"
+#include "stats.h"
 #include "util.h"
 #include "viz.h"
 
@@ -186,6 +187,23 @@ uint32_t app_current_track(void)
     if (p == NULL || !lib_loaded() || queue_pos() < 0)
         return LIB_NONE;
     return queue_track(queue_pos());
+}
+
+int app_song_rating(uint32_t t)
+{
+    int r = stats_rating(lib_path(t));
+    if (r != STATS_UNRATED)
+        return r;
+    const char *tag = lib_tag(t, "~#rating");      // 0..1
+    r = tag ? (int)(atof(tag) * 5 + 0.5) : 0;
+    return r < 0 ? 0 : (r > 5 ? 5 : r);
+}
+
+uint32_t app_song_plays(uint32_t t)
+{
+    const char *tag = lib_tag(t, "~#playcount");
+    long n = tag ? atol(tag) : 0;
+    return (n > 0 ? (uint32_t)n : 0) + stats_plays(lib_path(t));
 }
 
 // ------------------------------------------------------------ text for things
@@ -1506,22 +1524,15 @@ static bool draw_info(void)
     const LibTrack *tr = lib_track(t);
     SongText st;
     song_text(t, &st);
-    char track[24] = "–", year[8] = "–", rating[32] = "–", format[64];
+    char track[24] = "–", year[8] = "–", plays[16], format[64];
     if (tr->track && tr->album != LIB_NONE)
         snprintf(track, sizeof(track), "%d / %d", tr->track, lib_album(tr->album)->count);
     else if (tr->track)
         snprintf(track, sizeof(track), "%d", tr->track);
     if (tr->year)
         snprintf(year, sizeof(year), "%d", tr->year);
-    const char *r = lib_tag(t, "~#rating");
-    if (r)
-    {
-        int stars = (int)(atof(r) * 5 + 0.5);
-        int n = 0;
-        for (int i = 0; i < 5; i++)
-            n += utf8_put(rating + n, i < stars ? 0x2605 : 0x2606);
-    }
-    const char *genre = lib_tag(t, "genre"), *plays = lib_tag(t, "~#playcount");
+    snprintf(plays, sizeof(plays), "%lu", (unsigned long)app_song_plays(t));
+    const char *genre = lib_tag(t, "genre");
     const char *codec = lib_tag(t, "~codec");
     const DsaHeader *h = player_header();
     unsigned rate = h ? h->sound_clock_hz / h->timer_divider : 32728;
@@ -1529,14 +1540,20 @@ static bool draw_info(void)
              rate / 1000, (rate % 1000) / 100);
     const char *labels[9] = { "Title", "Artist", "Album", "Track", "Year", "Genre", "Rating", "Plays", "Format" };
     const char *vals[9] = { st.title, st.artist[0] ? st.artist : "–", st.album[0] ? st.album : "–",
-                            track, year, genre ? genre : "–", rating, plays ? plays : "–", format };
+                            track, year, genre ? genre : "–", "", plays, format };
     bool anim = false;
     for (int i = 0; i < 9; i++)
     {
-        int y = 24 + i * 16;
+        int y = INFO_Y + i * 16;
         text(B, 8, y, labels[i], C_DIM);
-        anim |= marquee1(B, 72, y, 176, vals[i], C_TEXT, app.frame, false);
+        if (i != INFO_RATING_ROW)
+            anim |= marquee1(B, INFO_STARS_X, y, 176, vals[i], C_TEXT, app.frame, false);
     }
+    // the stars can be tapped (Left / Right change them too)
+    int stars = app_song_rating(t);
+    for (int i = 0; i < 5; i++)
+        icon(B, INFO_STARS_X + i * INFO_STAR_W, INFO_Y + INFO_RATING_ROW * 16, i < stars ? 0x2605 : 0x2606,
+             i < stars ? C_ACC : C_DIM);
     return anim;
 }
 

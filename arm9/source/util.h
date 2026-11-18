@@ -34,4 +34,7 @@ bool path_parent(char *path);
 
 uint32_t crc32(const void *data, size_t len);
 
+// Make the folders on the way to a file (errors just mean they exist).
+void make_dirs_for(const char *file_path);
+
 #endif

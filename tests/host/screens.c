@@ -189,6 +189,12 @@ int main(int argc, char **argv)
     snprintf(state, sizeof(state), "%s/state.bin", out_dir);
     remove(state);
     state_set_file(state);
+    char stats_file[600], stats_new[600];
+    snprintf(stats_file, sizeof(stats_file), "%s/stats.bin", out_dir);
+    snprintf(stats_new, sizeof(stats_new), "%s/stats.new", out_dir);
+    remove(stats_file);
+    remove(stats_new);
+    stats_set_file(stats_file);
 
     gfx_init();
     player_init();
@@ -501,6 +507,54 @@ int main(int argc, char **argv)
     // ---- brightness cycles 5 -> 2
     tap(208, BAR_Y + 14);
     check(sim_backlight == 2, "brightness cycles to the lowest level");
+
+    // ---- rating and plays in the song info
+    slide_to(true);
+    run(30);
+    if (player_state() != PLAYER_PLAYING)
+        press(KEY_START);
+    press(KEY_X);
+    run(20);
+    check(app.overlay == OV_INFO, "X opens the song info");
+    {
+        uint32_t rated = app_current_track();
+        int sx = INFO_STARS_X, sy = INFO_Y + INFO_RATING_ROW * 16;
+        tap(sx + 3 * INFO_STAR_W + 8, sy + 8);
+        check(app_song_rating(rated) == 4 && stats_rating(lib_path(rated)) == 4, "the 4th star: 4 stars");
+        shot("06b_info_rated");
+        tap(sx + 3 * INFO_STAR_W + 8, sy + 8);
+        check(app_song_rating(rated) == 0 && stats_rating(lib_path(rated)) == 0, "the same star again: none");
+        press(KEY_RIGHT);
+        press(KEY_RIGHT);
+        check(app_song_rating(rated) == 2, "Right: a star more");
+        press(KEY_LEFT);
+        check(app_song_rating(rated) == 1, "Left: a star less");
+
+        // a play counts once, after half the song (or 4 minutes) of listening
+        for (int i = 0; i < 10 && player_position_ms() <= 3500; i++)
+            run(30);
+        press(KEY_L);                       // back to the start: a new listen
+        check(app_current_track() == rated && player_position_ms() < 1000, "L restarts the song");
+        uint32_t dur = player_duration_ms(), need = dur / 2 < 240000 ? dur / 2 : 240000;
+        uint32_t plays0 = app_song_plays(rated);
+        run((int)(need * 60 / 1000) - 40);
+        check(app_song_plays(rated) == plays0, "not counted before half the song");
+        run(80);
+        check(app_song_plays(rated) == plays0 + 1, "counted after half the song");
+        run(120);
+        check(app_song_plays(rated) == plays0 + 1, "only once per listen");
+        check(!stats_dirty(), "saved a second later");
+
+        stats_load();
+        check(stats_rating(lib_path(rated)) == 1 && app_song_plays(rated) == plays0 + 1, "stats survive a restart");
+        rename(stats_file, stats_new);      // as if the power went off between the two steps of a save
+        stats_load();
+        check(stats_rating(lib_path(rated)) == 1, "a save cut short: read from stats.new");
+        rename(stats_new, stats_file);
+    }
+    press(KEY_B);
+    slide_to(false);
+    run(30);
 
     // ---- state survives a restart; launch loads the song paused at the same spot
     uint32_t saved_pos = player_position_ms();

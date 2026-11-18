@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "util.h"
 
@@ -202,4 +203,19 @@ uint32_t crc32(const void *data, size_t len)
     for (size_t i = 0; i < len; i++)
         c = table[(c ^ p[i]) & 0xFF] ^ (c >> 8);
     return c ^ 0xFFFFFFFFu;
+}
+
+void make_dirs_for(const char *file_path)
+{
+    char dir[256];
+    snprintf(dir, sizeof(dir), "%s", file_path);
+    for (char *p = dir + 1; *p; p++)
+    {
+        if (*p == '/')
+        {
+            *p = 0;
+            mkdir(dir, 0777);
+            *p = '/';
+        }
+    }
 }

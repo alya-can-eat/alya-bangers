@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include <fat.h>
 #include <nds.h>
@@ -18,6 +19,7 @@
 #include "font.h"
 #include "player.h"
 #include "queue.h"
+#include "stats.h"
 #include "util.h"
 
 #define TAP_SLOP        6       // pixels a tap may move
@@ -37,6 +39,8 @@ static uint32_t ticks;              // vblanks (60 per second) at the start of t
 static uint32_t last_vblank;
 static bool redraw = true;
 static uint32_t save_at, last_save;
+static uint32_t stats_save_at;
+static uint32_t song_starts;        // songs opened or restarted: each is a new listen
 static bool lid_closed, paused_by_lid;
 static int lid_fade, lid_fade_in = LID_IN;
 
@@ -57,6 +61,49 @@ static void toast(const char *fmt, ...)
 static void touch_state(void)
 {
     save_at = ticks + SAVE_DELAY;
+}
+
+// Ratings and plays: saved a second after the last change.
+static void touch_stats(void)
+{
+    stats_save_at = ticks + 60;
+    redraw = true;
+}
+
+// Give the playing song 0..5 stars.
+static void rate_current(int stars)
+{
+    uint32_t t = app_current_track();
+    if (t == LIB_NONE)
+        return;
+    stats_set_rating(lib_path(t), stars < 0 ? 0 : (stars > 5 ? 5 : stars));
+    touch_stats();
+}
+
+// A song counts as played once it has been listened to for half its length
+// or 4 minutes, whichever comes first, like Last.fm. Listening time, not the
+// position: seeking ahead doesn't count. Once per listen.
+static void count_plays(uint32_t elapsed)
+{
+    static uint32_t session = 0xFFFFFFFFu, heard;
+    static bool counted;
+    if (session != song_starts)
+    {
+        session = song_starts;
+        heard = 0;
+        counted = false;
+    }
+    if (counted || player_state() != PLAYER_PLAYING)
+        return;
+    heard += elapsed;
+    uint32_t dur = player_duration_ms(), need = dur / 2 < 240000 ? dur / 2 : 240000;
+    uint32_t t = app_current_track();
+    if (need && (uint64_t)heard * 1000 / 60 >= need && t != LIB_NONE)
+    {
+        counted = true;
+        stats_count_play(lib_path(t), (uint32_t)time(NULL));
+        touch_stats();
+    }
 }
 
 static void full_path(char *out, int size, uint32_t track)
@@ -298,6 +345,7 @@ static bool open_pos(int pos, uint32_t start_ms, bool play, SongAnim anim)
                 player_toggle_pause();
             sa_start(anim);
             touch_state();
+            song_starts++;
             redraw = true;
             return true;
         }
@@ -341,6 +389,7 @@ static void previous_song(void)
     if (player_position_ms() > 3000 || queue_count() == 0)
     {
         player_restart();
+        song_starts++;
         redraw = true;
         return;
     }
@@ -711,8 +760,17 @@ static void tap_player(int x, int y)
     }
     if (app.overlay == OV_INFO)
     {
+        int sy = INFO_Y + INFO_RATING_ROW * 16, sx = INFO_STARS_X - 1;
         if (y < 20 && x >= 224)
             app.overlay = OV_NONE;
+        else if (y >= sy - 4 && y < sy + 20 && x >= sx && x < sx + 5 * INFO_STAR_W)
+        {
+            // a star: that many; the last lit one again: none
+            int stars = (x - sx) / INFO_STAR_W + 1;
+            uint32_t t = app_current_track();
+            if (t != LIB_NONE)
+                rate_current(app_song_rating(t) == stars ? 0 : stars);
+        }
         redraw = true;
         return;
     }
@@ -975,8 +1033,13 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         menu_keys(rep, down, 3, row_menu_choose);
         return;
     case OV_INFO:
+    {
+        uint32_t t = app_current_track();
+        if (t != LIB_NONE && (rep & (KEY_LEFT | KEY_RIGHT)))
+            rate_current(app_song_rating(t) + ((rep & KEY_RIGHT) ? 1 : -1));
         if (down & (KEY_B | KEY_X)) app.overlay = OV_NONE;
         return;
+    }
     case OV_QUEUE:
     {
         int n = queue_count();
@@ -1126,7 +1189,7 @@ static void fatal_screen(const char *line1, const char *line2)
 {
     Canvas *c = gfx_canvas(SCREEN_TOP);
     gfx_fill(c, 0, 0, SCREEN_W, SCREEN_H, C_BG);
-    font_draw(c, 8, 8, 240, "dsplayer", C_ACC);
+    font_draw(c, 8, 8, 240, APP_NAME, C_ACC);
     font_draw(c, 8, 40, 240, line1, C_TEXT);
     font_draw(c, 8, 56, 240, line2, C_DIM);
     font_draw(c, 8, 160, 240, "Press START to exit", C_DIM);
@@ -1176,6 +1239,7 @@ static void app_init(void)
     app.menu_item = -1;
     app.sa_cover = malloc(128 * 128 * 2);
 
+    stats_load();
     ui_init();
     restore();
     systemSetBacklightLevel(app.set.brightness);
@@ -1234,6 +1298,12 @@ static void app_tick(void)
     if (player_state() == PLAYER_ENDED)
         next_song(true);
 
+    count_plays(elapsed);
+    if (stats_save_at && ticks >= stats_save_at)
+    {
+        stats_save();
+        stats_save_at = 0;
+    }
     if (save_at && ticks >= save_at)
         save_now();
     else if (player_state() == PLAYER_PLAYING && ticks - last_save > SAVE_EVERY)

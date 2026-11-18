@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include "library.h"
 #include "queue.h"
@@ -104,18 +103,7 @@ bool state_load(Settings *s, Resume *r)
 
 bool state_save(const Settings *s, const Resume *r)
 {
-    // make the folders on the way (errors just mean they exist)
-    char dir[256];
-    snprintf(dir, sizeof(dir), "%s", file_path);
-    for (char *p = dir + 1; *p; p++)
-    {
-        if (*p == '/')
-        {
-            *p = 0;
-            mkdir(dir, 0777);
-            *p = '/';
-        }
-    }
+    make_dirs_for(file_path);
 
     StateHeader h;
     memset(&h, 0, sizeof(h));

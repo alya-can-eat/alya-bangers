@@ -37,6 +37,10 @@
 #define SET_Y       24              // settings: first row
 #define SET_H       21              // row pitch
 #define SET_ROWS    8               // the last one opens About
+#define INFO_Y      24              // song info: first row
+#define INFO_RATING_ROW 6           // the stars
+#define INFO_STARS_X 72             // values (and the stars) start here
+#define INFO_STAR_W 18              // a star and the gap after it
 
 #define APP_NAME    "alya-bangers"
 #define APP_VERSION "0.2"
@@ -173,6 +177,8 @@ int ui_rowmenu_y(int row_y);
 
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
+int app_song_rating(uint32_t t);        // stars shown: given on the DS, else from the tags, else 0
+uint32_t app_song_plays(uint32_t t);    // plays from the tags + plays on the DS
 int app_panel_offset(void);     // y of the browser panel (0 .. PANEL_DOWN)
 int app_slide_p256(void);       // slide progress 0..256, eased
 

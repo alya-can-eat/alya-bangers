@@ -16,7 +16,7 @@ test_player: test_player.c $(CORE) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ test_player.c $(CORE)
 
 APP     := $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
-           $(SRC)/state.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
+           $(SRC)/state.c $(SRC)/stats.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
 
 screens: screens.c $(CORE) $(APP) $(SRC)/main.c $(HDRS)
 	$(CC) $(CFLAGS) -o $@ screens.c $(CORE) $(APP) -lm

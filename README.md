@@ -43,6 +43,13 @@ or folder, a player screen with a turning record, a queue you can edit.
   queue and sort orders are kept in `/_nds/alya-bangers/state.bin` (one saved
   under the old name, `/_nds/dsplayer/state.bin`, is read once).
 - **Settings → About:** name, version, licence, where the code lives.
+- **Rating and plays (ⓘ song info):** tap a star to give the song that many
+  (the last lit one again: none), or use Left / Right. A song counts as
+  played once you've listened to half of it or 4 minutes, whichever comes
+  first (listening time: seeking ahead doesn't count), once per listen.
+  Shown: your rating from the DS, else the one from the file's tags; plays
+  from the tags plus the ones on the DS. They're kept in
+  `/_nds/alya-bangers/stats.bin` (dsconv's library index is only read).
 - Songs without a cover show a built-in picture (a moonlit beach).
 - Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
   Cyrillic, Vietnamese and emoji show correctly.
@@ -79,6 +86,7 @@ opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the ca
 /music/.dsmusic/font.bin
 /music/.dsmusic/library.idx
 /_nds/alya-bangers/state.bin <- written by the player
+/_nds/alya-bangers/stats.bin <- ratings and plays from the DS
 /alya-bangers.nds            <- anywhere, start it from Pico Launcher
 ```
 
@@ -109,6 +117,13 @@ melonDS is in nixpkgs (`nix-shell -p melonDS`).
 
 An emulator is not the real DS: timing and SD speed differ, so the final test
 is always the DS Lite.
+
+`stats.bin`: a 16-byte header (`ABST`, version 1, header size, record
+count, record size), then 24-byte records sorted by key (FNV-1a 64 of the
+song's path below `/music`, plays, Unix time of the last play, rating:
+0 = none, 1–5 stars, 6 = rated with no stars), then a check value:
+CRC-32 of the header XOR CRC-32 of the records. It's written to `stats.new` and renamed, so a save cut
+short never loses the old one.
 
 ## How playback works
 
