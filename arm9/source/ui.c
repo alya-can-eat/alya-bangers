@@ -1638,43 +1638,71 @@ static void toggle(int x, int y, bool on)
     gfx_disc(B, on ? x + 20 : x + 7, y + 7, 5, on ? C_TEXT : C_DIM);
 }
 
-static bool settings_page(void)
+static const SetItem items_top[] = {
+    { "Playback", SI_PAGE, PAGE_PLAYBACK },
+    { "Browsing", SI_PAGE, PAGE_BROWSING },
+    { "Player", SI_PAGE, PAGE_PLAYER },
+    { "About", SI_PAGE, PAGE_ABOUT },
+};
+static const SetItem items_playback[] = {
+    { "ReplayGain", SI_VALUE, SET_RG },
+    { "Pause when lid closes", SI_TOGGLE, SET_PAUSE_LID },
+    { "L/R skip, lid closed", SI_TOGGLE, SET_LR_LID },
+};
+static const SetItem items_browsing[] = {
+    { "Case-sensitive names", SI_TOGGLE, SET_CASE },
+    { "Scroll all long rows", SI_TOGGLE, SET_SCROLL_ALL },
+};
+static const SetItem items_player[] = {
+    { "Time on the right", SI_VALUE, SET_TIME_RIGHT },
+    { "Cover background", SI_TOGGLE, SET_COVER_BG },
+    { "Shuffle by rating", SI_TOGGLE, SET_SHUFFLE_W },
+};
+#define N_ITEMS(a) ((int)(sizeof(a) / sizeof((a)[0])))
+static const struct {
+    const char *title;
+    const SetItem *items;
+    int n;
+} pages[PAGE_COUNT] = {
+    [PAGE_TOP] = { "Settings", items_top, N_ITEMS(items_top) },
+    [PAGE_PLAYBACK] = { "Playback", items_playback, N_ITEMS(items_playback) },
+    [PAGE_BROWSING] = { "Browsing", items_browsing, N_ITEMS(items_browsing) },
+    [PAGE_PLAYER] = { "Player", items_player, N_ITEMS(items_player) },
+    [PAGE_ABOUT] = { "About", NULL, 0 },
+};
+
+int ui_set_count(int page)
 {
-    gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
-    gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
-    text(B, 8, 2, "Settings", C_TEXT);
-    text(B, 236, 2, "×", C_TEXT);
-    static const char *const labels[SET_ROWS] = { "Scroll all long rows", "Case-sensitive names",
-                                                  "Pause when lid closes", "L/R skip, lid closed", "ReplayGain",
-                                                  "Time on the right", "Cover background", "Shuffle by rating",
-                                                  "About" };
-    static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
-    const uint8_t on[4] = { app.set.scroll_all, app.set.case_sensitive, app.set.pause_on_lid, app.set.lr_skip_lid };
-    bool anim = false;
-    for (int i = 0; i < SET_ROWS - 1; i++)
-        gfx_fill(B, 8, SET_Y + i * SET_H + SET_H - 1, 240, 1, C_ZEBRA);
-    if (app.menu_sel >= 0)
-        highlight(0, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + SET_ROWS * SET_H, C_SEL);
-    const int ty = (SET_H - 1 - 16) / 2, gy = (SET_H - 1 - 14) / 2;     // text, toggle in the row
-    for (int i = 0; i < SET_ROWS; i++)
+    return page >= 0 && page < PAGE_COUNT ? pages[page].n : 0;
+}
+
+const SetItem *ui_set_item(int page, int i)
+{
+    return &pages[page].items[i];
+}
+
+static bool set_on(int id)
+{
+    switch (id)
     {
-        int y = SET_Y + i * SET_H;
-        bool has_value = i == 4 || i == 5;
-        const char *value = i == 4 ? rg[app.set.rg_mode] : (app.set.show_remaining ? "Left" : "Length");
-        int w = has_value ? 232 - 8 - font_text_width(value) - 8 : 196;
-        anim |= marquee1(B, 8, y + ty, w, labels[i], C_TEXT, app.frame, false);
-        if (i < 4)
-            toggle(216, y + gy, on[i]);
-        else if (i == 6)
-            toggle(216, y + gy, !app.set.plain_bg);
-        else if (i == 7)
-            toggle(216, y + gy, app.set.shuffle_weighted);
-        else if (i == 8)
-            text_r(B, 244, y + ty, "›", C_DIM);
-        else
-            text_r(B, 244, y + ty, value, C_ACC);
+    case SET_SCROLL_ALL: return app.set.scroll_all;
+    case SET_CASE: return app.set.case_sensitive;
+    case SET_PAUSE_LID: return app.set.pause_on_lid;
+    case SET_LR_LID: return app.set.lr_skip_lid;
+    case SET_COVER_BG: return !app.set.plain_bg;
+    case SET_SHUFFLE_W: return app.set.shuffle_weighted;
+    default: return false;
     }
-    return anim;
+}
+
+static const char *set_value(int id)
+{
+    static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
+    if (id == SET_RG)
+        return rg[app.set.rg_mode];
+    if (id == SET_TIME_RIGHT)
+        return app.set.show_remaining ? "Left" : "Length";
+    return "";
 }
 
 static void centered_at(int cx, int y, const char *s, uint16_t color, int scale)
@@ -1682,15 +1710,8 @@ static void centered_at(int cx, int y, const char *s, uint16_t color, int scale)
     font_draw_ex(B, cx - font_text_width(s) * scale / 2, y, 0, SCREEN_W, s, color, -1, scale);
 }
 
-// About, drawn with its left edge at x = dx (it slides in over the settings).
-static void about_page(int dx)
+static void about_body(int dx)
 {
-    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
-    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
-    gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
-    text(B, dx + 6, 2, "‹", C_TEXT);
-    text(B, dx + 18, 2, "About", C_TEXT);
-    text(B, dx + 236, 2, "×", C_TEXT);
     int cx = dx + SCREEN_W / 2;
     centered_at(cx, 26, APP_NAME, C_ACC, 2);
     centered_at(cx, 60, "Version " APP_VERSION, C_DIM, 1);
@@ -1700,25 +1721,69 @@ static void about_page(int dx)
     centered_at(cx, 138, "Free software, no warranty", C_DIM, 1);
     centered_at(cx, 158, APP_URL, C_ACC, 1);
     centered_at(cx, 174, "Glyphs: GNU Unifont", C_DIM, 1);
+}
+
+// A settings page with its left edge at dx (pages slide in from the right).
+// lit: the D-pad highlight is on this page.
+static bool settings_page(int page, int dx, bool lit)
+{
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
+    gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
+    if (page == PAGE_TOP)
+        text(B, dx + 8, 2, pages[page].title, C_TEXT);
+    else
+    {
+        text(B, dx + 6, 2, "‹", C_TEXT);
+        text(B, dx + 18, 2, pages[page].title, C_TEXT);
+    }
+    text(B, dx + 236, 2, "×", C_TEXT);
+    bool anim = false;
+    if (page == PAGE_ABOUT)
+        about_body(dx);
+    else
+    {
+        int n = pages[page].n;
+        for (int i = 0; i < n - 1; i++)
+            gfx_fill(B, dx + 8, SET_Y + i * SET_H + SET_H - 1, 240, 1, C_ZEBRA);
+        if (lit && app.menu_sel >= 0)
+            highlight(dx, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + n * SET_H, C_SEL);
+        const int ty = (SET_H - 1 - 16) / 2, gy = (SET_H - 1 - 14) / 2;     // text, switch in the row
+        for (int i = 0; i < n; i++)
+        {
+            const SetItem *it = &pages[page].items[i];
+            int y = SET_Y + i * SET_H;
+            const char *value = it->kind == SI_VALUE ? set_value(it->id) : NULL;
+            int w = value ? 232 - 8 - font_text_width(value) - 8 : 196;
+            anim |= marquee1(B, dx + 8, y + ty, w, it->label, C_TEXT, app.frame, false);
+            if (it->kind == SI_TOGGLE)
+                toggle(dx + 216, y + gy, set_on(it->id));
+            else if (value)
+                text_r(B, dx + 244, y + ty, value, C_ACC);
+            else
+                text_r(B, dx + 244, y + ty, "›", C_DIM);
+        }
+    }
     gfx_unclip(B);
+    return anim;
 }
 
 static bool draw_settings(void)
 {
-    // About pushes the settings out to the left
-    int q = ease_out(clamp256(app.about_t * 256 / TAB_TICKS));
+    // a page pushes the top page out to the left (and back)
+    int q = ease_out(clamp256(app.page_t * 256 / TAB_TICKS));
     int dx = SCREEN_W - SCREEN_W * q / 256;
     bool anim = false;
     if (dx > 0)
     {
-        anim = settings_page();
+        anim = settings_page(PAGE_TOP, 0, app.set_page == PAGE_TOP);
         if (dx < SCREEN_W)
             for (int y = 0; y < SCREEN_H; y++)
                 memmove(B->px + y * SCREEN_W, B->px + y * SCREEN_W + (SCREEN_W - dx), dx * 2);
     }
     if (dx < SCREEN_W)
-        about_page(dx);
-    return anim || (app.about_t > 0 && app.about_t < TAB_TICKS);
+        anim |= settings_page(app.set_shown, dx, app.set_page != PAGE_TOP);
+    return anim || (app.page_t > 0 && app.page_t < TAB_TICKS);
 }
 
 static bool w_settings(int arg) { (void)arg; return draw_settings(); }

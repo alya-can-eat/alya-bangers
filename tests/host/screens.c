@@ -444,44 +444,55 @@ int main(int argc, char **argv)
     shot("12_addmode");
     tap(80, BAR_Y + 14);
 
-    // ---- settings
+    // ---- settings: a top page leading to pages
     tap(240, BAR_Y + 14);
     check(app.overlay == OV_SETTINGS && app.ov_vis == OV_SETTINGS && app.ov_t < OV_TICKS,
           "settings open, sliding up");
     run(20);
-    check(app.ov_t == OV_TICKS, "settings in place");
+    check(app.ov_t == OV_TICKS && app.set_page == PAGE_TOP, "settings in place, on the top page");
     check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
-    tap(100, SET_Y + 5 * SET_H + 10);
-    check(app.set.show_remaining, "time left can be chosen");
-    tap(100, SET_Y + 5 * SET_H + 10);
-    check(!app.set.plain_bg, "cover background on by default");
-    tap(100, SET_Y + 6 * SET_H + 10);
-    check(app.set.plain_bg, "cover background can be turned off");
-    tap(100, SET_Y + 6 * SET_H + 10);
-    tap(100, SET_Y + 1 * SET_H + 10);     // case-sensitive
-    check(app.set.case_sensitive, "case-sensitive on");
-    // About slides in from the right, ‹ goes back
-    tap(100, SET_Y + 8 * SET_H + 10);
-    check(app.about && app.about_t > 0 && app.about_t < TAB_TICKS, "About sliding in");
-    shot("13a_about_sliding");
-    run(20);
-    check(app.about_t == TAB_TICKS, "About in place");
-    shot("13b_about");
-    uint8_t lid_before = app.set.pause_on_lid;
+    // Player page: slides in from the right
     tap(100, SET_Y + 2 * SET_H + 10);
-    check(app.set.pause_on_lid == lid_before, "rows can't be tapped through About");
+    check(app.set_page == PAGE_PLAYER && app.page_t > 0 && app.page_t < TAB_TICKS, "Player page sliding in");
+    shot("13a_page_sliding");
+    run(20);
+    check(app.page_t == TAB_TICKS, "Player page in place");
+    shot("13b_player_page");
+    tap(100, SET_Y + 0 * SET_H + 10);
+    check(app.set.show_remaining, "time left can be chosen");
+    tap(100, SET_Y + 0 * SET_H + 10);
+    check(!app.set.plain_bg, "cover background on by default");
+    tap(100, SET_Y + 1 * SET_H + 10);
+    check(app.set.plain_bg, "cover background can be turned off");
+    tap(100, SET_Y + 1 * SET_H + 10);
+    check(!app.set.shuffle_weighted, "shuffle by rating off by default");
+    tap(100, SET_Y + 2 * SET_H + 10);
+    check(app.set.shuffle_weighted, "shuffle by rating is on the Player page");
+    tap(100, SET_Y + 2 * SET_H + 10);
+    tap(20, 8);                             // ‹
+    check(app.set_page == PAGE_TOP, "‹ goes back");
+    run(20);
+    check(app.page_t == 0, "the top page is back in place");
+    // Browsing page: case-sensitive names
+    tap(100, SET_Y + 1 * SET_H + 10);
+    run(20);
+    tap(100, SET_Y + 0 * SET_H + 10);
+    check(app.set.case_sensitive, "case-sensitive on (Browsing page)");
     press(KEY_B);
-    check(!app.about && app.overlay == OV_SETTINGS, "B leaves About, settings stay open");
+    check(app.set_page == PAGE_TOP && app.overlay == OV_SETTINGS, "B goes back, settings stay open");
     run(20);
-    tap(240, 8);
-    tap(240, BAR_Y + 14);
-    tap(100, SET_Y + 8 * SET_H + 10);
+    // About
+    tap(100, SET_Y + 3 * SET_H + 10);
     run(20);
-    tap(20, 8);
+    check(app.set_shown == PAGE_ABOUT && app.page_t == TAB_TICKS, "About in place");
+    shot("13c_about");
+    uint8_t lid_before = app.set.pause_on_lid;
+    tap(100, SET_Y + 0 * SET_H + 10);
+    check(app.set.pause_on_lid == lid_before, "About has no rows to tap");
+    press(KEY_B);
     run(20);
-    check(!app.about && app.about_t == 0, "‹ goes back");
-    // the highlight glides between rows
+    // D-pad: the highlight glides, A or Right opens a page, Left comes back to the same row
     press(KEY_DOWN);
     run(10);
     check(app.menu_sel == 0 && app.menu_vis == 0, "first D-pad press: highlight in place");
@@ -489,12 +500,27 @@ int main(int argc, char **argv)
     check(app.menu_vis > 0 && app.menu_vis < SET_H, "highlight gliding");
     run(10);
     check(app.menu_vis == SET_H, "highlight arrived");
-    shot("13c_settings_sel");
-    tap(240, 8);
+    shot("13d_settings_sel");
+    press(KEY_RIGHT);
+    check(app.set_page == PAGE_BROWSING && app.menu_sel == 0, "Right opens Browsing, highlight on its first row");
+    run(20);
+    press(KEY_LEFT);
+    check(app.set_page == PAGE_TOP && app.menu_sel == 1, "Left comes back to the Browsing row");
+    run(20);
+    press(KEY_A);
+    run(20);
+    shot("13e_browsing_page");
+    press(KEY_B);
+    run(20);
+    press(KEY_B);
+    check(app.overlay == OV_NONE, "B on the top page closes the settings");
+    run(20);
     tap(36, 10);
     check(find_row("KIVARA") >= 0, "KIVARA separate when case-sensitive");
     tap(240, BAR_Y + 14);
-    tap(100, SET_Y + 1 * SET_H + 10);
+    tap(100, SET_Y + 1 * SET_H + 10);       // Browsing
+    run(20);
+    tap(100, SET_Y + 0 * SET_H + 10);       // case-sensitive off again
     tap(240, 8);
 
     // ---- scroll bar drag with the letter bubble

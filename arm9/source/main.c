@@ -638,37 +638,67 @@ static void cycle_brightness(void)
     touch_state();
 }
 
-static void settings_toggle(int row)
+// Settings: change one.
+static void set_change(int id)
 {
-    switch (row)
+    switch (id)
     {
-    case 0: app.set.scroll_all ^= 1; break;
-    case 1:
+    case SET_SCROLL_ALL: app.set.scroll_all ^= 1; break;
+    case SET_CASE:
         app.set.case_sensitive ^= 1;
         lib_group_artists(app.set.case_sensitive);
         app.artist = -1;    // group numbers changed
         rebuild_list();
         select_index(0);
         break;
-    case 2: app.set.pause_on_lid ^= 1; break;
-    case 3: app.set.lr_skip_lid ^= 1; break;
-    case 4:
+    case SET_PAUSE_LID: app.set.pause_on_lid ^= 1; break;
+    case SET_LR_LID: app.set.lr_skip_lid ^= 1; break;
+    case SET_RG:
         app.set.rg_mode = (app.set.rg_mode + 1) % RG_MODES;
         player_set_volume(replaygain_volume());
         break;
-    case 5: app.set.show_remaining ^= 1; break;
-    case 6: app.set.plain_bg ^= 1; break;
-    case 7:
+    case SET_TIME_RIGHT: app.set.show_remaining ^= 1; break;
+    case SET_COVER_BG: app.set.plain_bg ^= 1; break;
+    case SET_SHUFFLE_W:
         app.set.shuffle_weighted ^= 1;
         apply_weighting();
         queue_reshuffle_rest();     // the songs still to come, in the new way
         app.thumb_track = LIB_NONE;
         break;
-    case 8: app.about = true; redraw = true; return;
     default: return;
     }
     touch_state();
     redraw = true;
+}
+
+static void set_open_page(int page)
+{
+    app.set_back_sel = app.menu_sel;
+    // came by D-pad: the highlight starts on the first row (About has none)
+    app.menu_sel = app.menu_sel >= 0 && ui_set_count(page) > 0 ? 0 : -1;
+    app.set_page = app.set_shown = page;
+    redraw = true;
+}
+
+static void set_back(void)
+{
+    if (app.set_page == PAGE_TOP)
+        return;
+    app.set_page = PAGE_TOP;
+    app.menu_sel = app.set_back_sel;
+    redraw = true;
+}
+
+// A row of the settings page that's showing: open its page or change it.
+static void set_activate(int i)
+{
+    if (i < 0 || i >= ui_set_count(app.set_page))
+        return;
+    const SetItem *it = ui_set_item(app.set_page, i);
+    if (it->kind == SI_PAGE)
+        set_open_page(it->id);
+    else
+        set_change(it->id);
 }
 
 // ------------------------------------------------------------------ touch
@@ -766,7 +796,13 @@ static void tap_browser(int x, int y)
         else if (x >= 104 && x < 152) slide_to(true);
         else if (x >= 160 && x < 192) open_sort_menu();
         else if (x >= 192 && x < 224) cycle_brightness();
-        else if (x >= 224) { app.overlay = OV_SETTINGS; app.menu_sel = -1; app.about = false; app.about_t = 0; }
+        else if (x >= 224)
+        {
+            app.overlay = OV_SETTINGS;
+            app.menu_sel = app.set_back_sel = -1;
+            app.set_page = app.set_shown = PAGE_TOP;
+            app.page_t = 0;
+        }
     }
     redraw = true;
 }
@@ -846,11 +882,11 @@ static void tap_settings(int x, int y)
     {
         if (x >= 224)
             app.overlay = OV_NONE;
-        else if (app.about && x < 112)
-            app.about = false;          // ‹ back to the settings
+        else if (x < 112)
+            set_back();                 // ‹
     }
-    else if (!app.about && y >= SET_Y && y < SET_Y + SET_ROWS * SET_H)
-        settings_toggle((y - SET_Y) / SET_H);
+    else if (y >= SET_Y && y < SET_Y + ui_set_count(app.set_page) * SET_H)
+        set_activate((y - SET_Y) / SET_H);
     redraw = true;
 }
 
@@ -1041,12 +1077,16 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        if (app.about)
+        if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
+            set_back();
+        else if (ui_set_count(app.set_page) > 0)
         {
-            if (down & KEY_B) app.about = false;
+            if ((down & KEY_RIGHT) && app.menu_sel >= 0
+                && ui_set_item(app.set_page, app.menu_sel)->kind == SI_PAGE)
+                set_activate(app.menu_sel);
+            else
+                menu_keys(rep, down, ui_set_count(app.set_page), set_activate);
         }
-        else
-            menu_keys(rep, down, SET_ROWS, settings_toggle);
         return;
     case OV_SORT:
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);
@@ -1394,14 +1434,14 @@ static void app_tick(void)
     }
     if (app.ov_t == 0 && app.overlay == OV_NONE)
         app.ov_vis = OV_NONE;
-    // About slides in over the settings and back out
-    int about_target = app.about ? TAB_TICKS : 0;
-    if (app.about_t != about_target)
+    // settings pages slide in over the top page and back out
+    int page_target = app.set_page != PAGE_TOP ? TAB_TICKS : 0;
+    if (app.page_t != page_target)
     {
-        if (app.about_t < about_target)
-            app.about_t = app.about_t + (int)elapsed > about_target ? about_target : app.about_t + (int)elapsed;
+        if (app.page_t < page_target)
+            app.page_t = app.page_t + (int)elapsed > page_target ? page_target : app.page_t + (int)elapsed;
         else
-            app.about_t = app.about_t - (int)elapsed < 0 ? 0 : app.about_t - (int)elapsed;
+            app.page_t = app.page_t - (int)elapsed < 0 ? 0 : app.page_t - (int)elapsed;
         redraw = true;
     }
 
@@ -1424,9 +1464,11 @@ static void app_tick(void)
     }
     // the highlights in the list, the menus and the queue glide to the selection
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, ROWS * ROW_H);
-    static int menu_was = -1, q_was = -1;
+    static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
     int menu_target = app.menu_sel * (app.ov_vis == OV_SETTINGS ? SET_H : 16);
-    if (menu_opened || app.menu_sel < 0 || menu_was < 0)
+    bool page_changed = app.set_page != page_was;
+    page_was = app.set_page;
+    if (menu_opened || page_changed || app.menu_sel < 0 || menu_was < 0)
         app.menu_vis = menu_target;         // nothing to glide from
     else
         redraw |= glide(&app.menu_vis, menu_target, elapsed, 1000);

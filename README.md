@@ -42,7 +42,13 @@ or folder, a player screen with a turning record, a queue you can edit.
 - **Switching on** loads the last song at the same position, paused. Settings,
   queue and sort orders are kept in `/_nds/alya-bangers/state.bin` (one saved
   under the old name, `/_nds/dsplayer/state.bin`, is read once).
-- **Settings → About:** name, version, licence, where the code lives.
+- **Settings (⋮):** pages that slide in from the right (‹, B or Left go
+  back; A or Right open one):
+  - *Playback:* ReplayGain, pause when the lid closes, L/R skip with the lid closed
+  - *Browsing:* case-sensitive names, scroll all long rows
+  - *Player:* time on the right (length or time left), cover background,
+    shuffle by rating
+  - *About:* name, version, licence, where the code lives
 - **Rating and plays (ⓘ song info):** tap a star to give the song that many
   (the last lit one again: none), or use Left / Right. A song counts as
   played once you've listened to half of it or 4 minutes, whichever comes
@@ -50,7 +56,7 @@ or folder, a player screen with a turning record, a queue you can edit.
   Shown: your rating from the DS, else the one from the file's tags; plays
   from the tags plus the ones on the DS. They're kept in
   `/_nds/alya-bangers/stats.bin` (dsconv's library index is only read).
-- **Shuffle by rating** (settings): shuffled, a song's chance to come next
+- **Shuffle by rating** (Settings → Player): shuffled, a song's chance to come next
   doubles with every star. Unrated songs count as 3 stars, so 5 stars come
   up 4× as often as them and 1 star a quarter as often. Over a long
   shuffle (a whole tab) your favourites play much more; a short queue still
@@ -75,9 +81,9 @@ Menus (settings, sort, the row menu, song info, queue) slide up when they
 open and down when they close. Buttons light up when tapped, play and pause morph
 into each other, the highlight glides from row to row (lists, menus, queue,
 settings), the progress bars move smoothly and the seek knob grows while you
-drag it. About slides in over the settings from the right. The record has a
+drag it. Settings pages slide in from the right. The record has a
 soft purple glare at the top left. In player mode the top screen's
-background is the cover, blurred and darkened (settings: Cover background).
+background is the cover, blurred and darkened (Settings → Player → Cover background).
 A new song's background is made a slice per frame while the covers move and
 faded in once they have settled.
 Closing the lid fades both screens to black before the light goes off;
@@ -171,7 +177,8 @@ icon of the `.nds` file.
 ## Not yet
 
 Search, playlists, genre and other tags as tabs, colours from the cover,
-gapless playback.
+gapless playback, the settings pages Theme (colours) and Regional
+(language, date and time format).
 
 ## Licence
 

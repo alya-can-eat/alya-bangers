@@ -34,9 +34,8 @@
 #define BAR_Y       164
 #define SCROLL_X    244             // scroll bar column, 12 px wide
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
-#define SET_Y       21              // settings: first row
-#define SET_H       19              // row pitch
-#define SET_ROWS    9               // the last one opens About
+#define SET_Y       24              // settings: first row
+#define SET_H       24              // row pitch
 #define INFO_Y      24              // song info: first row
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here
@@ -81,6 +80,17 @@ enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BT
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
+
+// Settings: a top page leading to pages of settings.
+enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_ABOUT, PAGE_COUNT };
+enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
+       SET_SHUFFLE_W };
+enum { SI_TOGGLE, SI_VALUE, SI_PAGE };      // switch, value (tap: the next one), › another page
+typedef struct {
+    const char *label;
+    uint8_t kind;
+    uint8_t id;             // SET_... or, for SI_PAGE, PAGE_...
+} SetItem;
 
 extern const int tab_x[TAB_COUNT + 1];
 
@@ -138,8 +148,10 @@ typedef struct {
     int q_vis;                  // and in the queue
     int vinyl_rot;              // degrees x 3
     int vinyl_speed;            // 0..256 of 33 1/3 rpm (spins up and down)
-    bool about;                 // settings show the About page
-    int about_t;                // 0 = settings .. TAB_TICKS = About (slides in from the right)
+    int set_page;               // settings page wanted: PAGE_TOP or one of its pages
+    int set_shown;              // the page sliding in or out (kept while it slides back)
+    int page_t;                 // 0 = the top page .. TAB_TICKS = set_shown (slides in from the right)
+    int set_back_sel;           // the top page's highlighted row, for coming back
 
     Settings set;
     bool album_queue;           // the queue is one album
@@ -177,6 +189,8 @@ int ui_rowmenu_y(int row_y);
 
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
+int ui_set_count(int page);
+const SetItem *ui_set_item(int page, int i);
 int app_song_rating(uint32_t t);        // stars shown: given on the DS, else from the tags, else 0
 uint32_t app_song_plays(uint32_t t);    // plays from the tags + plays on the DS
 int app_panel_offset(void);     // y of the browser panel (0 .. PANEL_DOWN)
