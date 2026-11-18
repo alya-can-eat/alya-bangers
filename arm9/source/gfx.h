@@ -45,6 +45,8 @@ void gfx_round_fill(Canvas *c, int x, int y, int w, int h, int r, uint16_t color
 void gfx_disc(Canvas *c, int cx, int cy, int r, uint16_t color);
 void gfx_triangle(Canvas *c, int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color);
 void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src);
+// A 128x128 picture drawn size x size (nearest pixel).
+void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128);
 
 // Mix two colors: t = 0..256 parts of a.
 uint16_t gfx_mix(uint16_t a, uint16_t b, int t);

@@ -14,6 +14,7 @@
 #include <nds.h>
 
 #include "app.h"
+#include "default_cover.h"
 #include "font.h"
 #include "player.h"
 #include "queue.h"
@@ -211,9 +212,63 @@ static uint8_t replaygain_volume(void)
     return v >= 127.0f ? 127 : (v <= 0 ? 0 : (uint8_t)(v + 0.5f));
 }
 
-// Open the song at queue position pos. Skips songs that can't be opened.
-static bool open_pos(int pos, uint32_t start_ms, bool play)
+// ---- song change animation: remember what the top screen shows before the
+// queue or the song changes, then start the animation once the new song is open
+
+static bool sa_captured;
+static uint32_t sa_old_track, sa_old_next;
+
+static void sa_capture(void)
 {
+    sa_captured = false;
+    if (!app.player_mode || app.slide != SLIDE_TICKS || !lib_loaded() || !app.sa_cover
+        || lid_closed || app_current_track() == LIB_NONE)
+        return;
+    sa_old_track = app_current_track();
+    int np = queue_next_pos(true);
+    sa_old_next = np >= 0 ? queue_track(np) : LIB_NONE;
+    memcpy(app.sa_cover, player_cover() ? player_cover() : default_cover, 128 * 128 * 2);
+    app.sa_has_thumb = sa_old_next != LIB_NONE && app.has_thumb && app.thumb_track == sa_old_next;
+    if (app.sa_has_thumb)
+        memcpy(app.sa_thumb, app.thumb, sizeof(app.sa_thumb));
+    sa_captured = true;
+}
+
+static void sa_start(SongAnim kind)
+{
+    if (!sa_captured || kind == SA_NONE)
+    {
+        sa_captured = false;
+        return;
+    }
+    sa_captured = false;
+    uint32_t cur = app_current_track();
+    int np = queue_next_pos(true);
+    uint32_t next = np >= 0 ? queue_track(np) : LIB_NONE;
+    if (kind == SA_JUMP && cur == sa_old_next)
+        kind = SA_FORWARD;      // it was already the one shown under Next
+    if (kind == SA_BACK)
+    {
+        app.sa_a = cur;
+        app.sa_b = sa_old_track;
+        app.sa_c = sa_old_next;
+    }
+    else
+    {
+        app.sa_a = sa_old_track;
+        app.sa_b = cur;
+        app.sa_c = next;
+        app.sa_n = sa_old_next;
+    }
+    app.sa_kind = kind;
+    app.sa_t = 0;
+}
+
+// Open the song at queue position pos. Skips songs that can't be opened.
+static bool open_pos(int pos, uint32_t start_ms, bool play, SongAnim anim)
+{
+    if (anim != SA_NONE && !sa_captured)
+        sa_capture();
     for (int tries = 0; tries < queue_count() && pos >= 0; tries++)
     {
         queue_jump(pos);
@@ -224,6 +279,7 @@ static bool open_pos(int pos, uint32_t start_ms, bool play)
             player_set_volume(replaygain_volume());
             if (play)
                 player_toggle_pause();
+            sa_start(anim);
             touch_state();
             redraw = true;
             return true;
@@ -232,16 +288,20 @@ static bool open_pos(int pos, uint32_t start_ms, bool play)
         start_ms = 0;
         pos = queue_next_pos(false);
     }
+    sa_captured = false;
     player_stop();
     return false;
 }
 
 static void play_tracks(const uint32_t *t, int n, int start, bool album_queue)
 {
-    if (n <= 0 || !queue_set(t, n, start))
+    if (n <= 0)
+        return;
+    sa_capture();       // before the queue changes: what Next showed
+    if (!queue_set(t, n, start))
         return;
     app.album_queue = album_queue;
-    open_pos(queue_pos(), 0, true);
+    open_pos(queue_pos(), 0, true, SA_JUMP);
 }
 
 static void next_song(bool automatic)
@@ -251,10 +311,10 @@ static void next_song(bool automatic)
     {
         // end of the queue: stay on the last song, paused at its start
         if (queue_pos() >= 0)
-            open_pos(queue_pos(), 0, false);
+            open_pos(queue_pos(), 0, false, SA_NONE);
         return;
     }
-    open_pos(p, 0, true);
+    open_pos(p, 0, true, SA_FORWARD);
 }
 
 static void previous_song(void)
@@ -266,13 +326,13 @@ static void previous_song(void)
         redraw = true;
         return;
     }
-    open_pos(queue_prev_pos(), 0, player_state() == PLAYER_PLAYING);
+    open_pos(queue_prev_pos(), 0, player_state() == PLAYER_PLAYING, SA_BACK);
 }
 
 static void toggle_pause(void)
 {
     if (player_state() == PLAYER_IDLE && queue_count() > 0)
-        open_pos(queue_pos() < 0 ? 0 : queue_pos(), 0, true);
+        open_pos(queue_pos() < 0 ? 0 : queue_pos(), 0, true, SA_NONE);
     else
         player_toggle_pause();
     touch_state();
@@ -327,7 +387,7 @@ static void add_to_queue(const Item *it, bool next)
     else
         toast("%d %s", n, next ? "songs play next" : "added to the queue");
     if (was_empty)
-        open_pos(0, 0, false);
+        open_pos(0, 0, false, SA_NONE);
     touch_state();
 }
 
@@ -647,7 +707,7 @@ static void tap_player(int x, int y)
                     touch_state();
                 }
                 else
-                    open_pos(i, 0, true);
+                    open_pos(i, 0, true, SA_JUMP);
             }
         }
         redraw = true;
@@ -835,7 +895,7 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         if (app.q_sel < 0) app.q_sel = 0;
         if (app.q_sel < app.q_scroll) app.q_scroll = app.q_sel;
         if (app.q_sel >= app.q_scroll + ROWS) app.q_scroll = app.q_sel - ROWS + 1;
-        if ((down & KEY_A) && n) open_pos(app.q_sel, 0, true);
+        if ((down & KEY_A) && n) open_pos(app.q_sel, 0, true, SA_JUMP);
         if ((down & KEY_X) && n && app.q_sel != queue_pos()) { queue_remove(app.q_sel); touch_state(); }
         if (down & (KEY_B | KEY_Y)) app.overlay = OV_NONE;
         return;
@@ -931,11 +991,11 @@ static void restore(void)
     // on launch: the last song at the same position, paused
     if (queue_pos() >= 0 && queue_track(queue_pos()) == t)
     {
-        open_pos(queue_pos(), r.pos_ms, false);
+        open_pos(queue_pos(), r.pos_ms, false, SA_NONE);
         return;
     }
     queue_set(&t, 1, 0);
-    open_pos(0, r.pos_ms, false);
+    open_pos(0, r.pos_ms, false, SA_NONE);
 }
 
 // ------------------------------------------------------------------ setup
@@ -992,6 +1052,7 @@ static void app_init(void)
     app.q_drag_from = app.q_drag_to = -1;
     app.thumb_track = LIB_NONE;
     app.menu_item = -1;
+    app.sa_cover = malloc(128 * 128 * 2);
 
     ui_init();
     restore();
@@ -1055,6 +1116,25 @@ static void app_tick(void)
         app.tab_anim = app.tab_anim > (int)elapsed ? app.tab_anim - (int)elapsed : 0;
         redraw = true;
     }
+    // song change on the top screen
+    if (app.sa_kind != SA_NONE)
+    {
+        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_A_TICKS + SA_B_TICKS;
+        app.sa_t += (int)elapsed;
+        if (app.sa_t >= total || !app.player_mode)
+        {
+            app.sa_kind = SA_NONE;
+            redraw = true;
+        }
+    }
+    // the record: spins up to 33 1/3 rpm while playing, spins down when paused,
+    // and stands still while a new one rolls out
+    if (player_state() == PLAYER_PLAYING && app.sa_kind == SA_NONE)
+        app.vinyl_speed = app.vinyl_speed + 9 * (int)elapsed > 256 ? 256 : app.vinyl_speed + 9 * (int)elapsed;
+    else
+        app.vinyl_speed = app.vinyl_speed > 15 * (int)elapsed ? app.vinyl_speed - 15 * (int)elapsed : 0;
+    app.vinyl_rot = (app.vinyl_rot + 10 * (int)elapsed * app.vinyl_speed / 256) % 1080;
+
     uint32_t prev_frame = app.frame;
     app.frame = now / 2;
     // progress bars and times twice a second while playing, the clock always

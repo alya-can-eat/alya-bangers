@@ -22,7 +22,11 @@ or folder, a player screen with a turning record, a queue you can edit.
   Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all,
   one), ⓘ song info, ☰ queue, ⮝ back to browsing (tapping a tab does too).
 - **Top screen:** time and date, cover, title, artist, album, progress (the
-  song's length on the right, or the time left: see settings). In
+  song's length on the right, or the time left: see settings). When the song
+  changes in player mode, the cover slides off to the left over its record,
+  the next cover grows out of the Next spot and its record rolls out. Going
+  back plays it backwards; a song picked from a list or the queue first
+  slides over the Next spot. Paused, the record spins down. In
   player mode: the record turning at 33⅓ rpm, a visualizer, the next song.
 - **Add to queue:** hold a row for *Play now / Play next / Add to queue*, or
   turn on the add-to-queue button: then tapping rows adds them instead of

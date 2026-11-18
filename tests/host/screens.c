@@ -16,6 +16,7 @@ static const char *out_dir;
 static int16_t blk_l[4096], blk_r[4096];
 static uint32_t play_clock;     // vblanks since the last simulated block
 static int failures;
+static bool film_on;        // ./screens card out frames: also write every frame of the song changes
 
 // One vblank. The simulated ARM7 finishes a 4096-frame block every 7.5 vblanks.
 static void tick(uint32_t held)
@@ -103,6 +104,31 @@ static void shot(const char *name)
     fclose(f);
 }
 
+// Run n vblanks; with filming on, save the top screen of every one.
+static void film(const char *prefix, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        tick(0);
+        if (!film_on)
+            continue;
+        ui_draw_top();
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s_%03d.ppm", out_dir, prefix, i);
+        FILE *f = fopen(path, "wb");
+        fprintf(f, "P6\n256 192\n255\n");
+        const uint16_t *s = gfx_canvas(SCREEN_TOP)->px;
+        for (int k = 0; k < 256 * 192; k++)
+        {
+            int r = s[k] & 31, g = (s[k] >> 5) & 31, b = (s[k] >> 10) & 31;
+            fputc((r << 3) | (r >> 2), f);
+            fputc((g << 3) | (g >> 2), f);
+            fputc((b << 3) | (b >> 2), f);
+        }
+        fclose(f);
+    }
+}
+
 static void check(bool ok, const char *what)
 {
     if (!ok)
@@ -150,6 +176,7 @@ int main(int argc, char **argv)
         return 2;
     }
     out_dir = argv[2];
+    film_on = argc > 3 && strcmp(argv[3], "frames") == 0;
     char state[600];
     snprintf(state, sizeof(state), "%s/state.bin", out_dir);
     remove(state);
@@ -241,6 +268,32 @@ int main(int argc, char **argv)
     release();
     check(player_position_ms() > 3500, "seek bar drag seeks");
 
+    // ---- song changes on the top screen
+    run(40);
+    uint32_t before = app_current_track();
+    tap(178, 100);      // next
+    check(app.sa_kind == SA_FORWARD && app.sa_a == before && app.sa_b == app_current_track(),
+          "next song: the cover leaves left, the next one grows in");
+    film("anim_next", 70);
+    check(app.sa_kind == SA_NONE, "the animation ends");
+    check(app.vinyl_speed > 0, "the new record spins up after rolling out");
+    uint32_t second = app_current_track();
+    tap(78, 100);       // previous (the song just began, so it goes back)
+    check(app.sa_kind == SA_BACK && app_current_track() == before && app.sa_b == second,
+          "previous song: the same animation backwards");
+    film("anim_prev", 70);
+    tap(236, 146);      // queue
+    tap(100, 20 + 5 * ROW_H + 8);
+    check(app.sa_kind == SA_JUMP, "a song picked in the queue slides over Next first");
+    tap(240, 8);
+    film("anim_jump", 80);
+    check(app.sa_kind == SA_NONE, "the jump animation ends");
+    press(KEY_START);   // pause
+    run(40);
+    check(app.vinyl_speed == 0, "paused: the record spins down and stops");
+    press(KEY_START);
+
+
     // ---- back up with a tab, then the folder tab
     tap(210, PANEL_DOWN + 10);
     run(40);
@@ -325,6 +378,37 @@ int main(int argc, char **argv)
     Resume r2;
     queue_clear();
     check(state_load(&s2, &r2) && queue_count() == 15 && r2.path[0], "state saved and restored");
+
+    if (film_on)
+    {
+        // a queue with different covers, filmed for a look at the animations
+        uint32_t mix[4];
+        int k = 0;
+        for (uint32_t i = 0; i < lib_album_count() && k < 4; i++)
+        {
+            const LibAlbum *al = lib_album(i);
+            if (strcmp(lib_value(al->name), "Paper Archive vol.1") == 0 || strcmp(lib_value(al->name), "Echoes Of Quiet Worlds") == 0)
+            {
+                mix[k++] = lib_album_track(al, 0);
+                mix[k++] = lib_album_track(al, 1);
+            }
+        }
+        uint32_t order[4] = { mix[0], mix[2], mix[1], mix[3] };
+        slide_to(true);
+        run(40);
+        play_tracks(order, 4, 0, false);
+        run(80);
+        tap(178, 100);
+        film("demo_next", 60);
+        run(40);
+        tap(78, 100);
+        film("demo_prev", 60);
+        run(40);
+        tap(236, 146);
+        tap(100, 20 + 3 * ROW_H + 8);
+        tap(240, 8);
+        film("demo_jump", 75);
+    }
 
     printf("%s\n", failures ? "SOME CHECKS FAILED" : "all checks passed");
     return failures != 0;

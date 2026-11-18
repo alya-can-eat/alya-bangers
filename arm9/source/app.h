@@ -38,6 +38,15 @@
 #define SLIDE_TICKS 24              // browser <-> player, 0.4 s
 #define TAB_TICKS   15              // sideways list slide, 0.25 s
 
+// Song change on the top screen (player layout). Forward: the cover leaves to
+// the left over its record, the next cover grows from the Next spot, its
+// record rolls out. Back: the same, played backwards. Jump: the chosen song
+// first slides over the Next spot, then forward.
+typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP } SongAnim;
+#define SA_PRE_TICKS 15             // jump: the chosen song slides over "Next"
+#define SA_A_TICKS  21              // covers move
+#define SA_B_TICKS  21              // the record rolls out
+
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
 
@@ -77,6 +86,16 @@ typedef struct {
     bool scroll_drag;           // dragging the list scroll bar
     bool seek_drag;
     uint32_t seek_preview_ms;
+
+    // song change animation (roles in app.h's SongAnim comment)
+    int sa_kind;
+    int sa_t;                   // vblanks since it started
+    uint32_t sa_a, sa_b, sa_c, sa_n;    // leaves left / grows from Next / then in Next / old Next
+    uint16_t *sa_cover;         // 128x128: the cover that was showing before the change
+    uint16_t sa_thumb[32 * 32]; // the Next picture before the change
+    bool sa_has_thumb;
+    int vinyl_rot;              // degrees x 3
+    int vinyl_speed;            // 0..256 of 33 1/3 rpm (spins up and down)
 
     Settings set;
     bool album_queue;           // the queue is one album

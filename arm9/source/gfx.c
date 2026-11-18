@@ -197,6 +197,37 @@ void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src)
     c->dirty = true;
 }
 
+static HOT void scaled_rows(uint16_t *px, int x, int y, int size, const uint16_t *src,
+                            int cx0, int cy0, int cx1, int cy1)
+{
+    int step = (128 << 16) / size;
+    int x0 = x < cx0 ? cx0 : x, x1 = x + size > cx1 ? cx1 : x + size;
+    for (int j = 0; j < size; j++)
+    {
+        int yy = y + j;
+        if (yy < cy0 || yy >= cy1)
+            continue;
+        const uint16_t *s = src + ((j * step) >> 16) * 128;
+        uint16_t *d = px + yy * SCREEN_W;
+        int sx = (x0 - x) * step;
+        for (int xx = x0; xx < x1; xx++, sx += step)
+            d[xx] = s[sx >> 16];
+    }
+}
+
+void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128)
+{
+    if (size <= 0)
+        return;
+    if (size == 128)
+    {
+        gfx_blit(c, x, y, 128, 128, src128);
+        return;
+    }
+    scaled_rows(c->px, x, y, size, src128, c->cx0, c->cy0, c->cx1, c->cy1);
+    c->dirty = true;
+}
+
 uint16_t gfx_mix(uint16_t a, uint16_t b, int t)
 {
     int r = ((a & 31) * t + (b & 31) * (256 - t) + 128) >> 8;

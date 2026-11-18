@@ -480,6 +480,106 @@ static bool top_next_column(int x, uint32_t t)
     return anim;
 }
 
+// ---- song change
+
+static int clamp256(int v) { return v < 0 ? 0 : (v > 256 ? 256 : v); }
+static int ease_in(int q) { return q * q / 256; }
+static int ease_out(int q) { return 256 - (256 - q) * (256 - q) / 256; }
+
+static const uint16_t *live_cover(void)
+{
+    const uint16_t *c = player_cover();
+    return c ? c : default_cover;
+}
+
+// Cover of the song that leaves (b = false) or arrives (b = true). Backwards
+// the roles swap: the song that was playing is the one going to "Next".
+static const uint16_t *role_cover(bool b)
+{
+    bool saved = app.sa_kind == SA_BACK ? b : !b;
+    return saved ? app.sa_cover : live_cover();
+}
+
+static const uint16_t *thumb_of(uint32_t track, bool saved)
+{
+    if (saved)
+        return app.sa_has_thumb ? app.sa_thumb : default_thumb;
+    return app.has_thumb && app.thumb_track == track ? app.thumb : default_thumb;
+}
+
+static void next_texts(int x, uint32_t track, uint32_t t)
+{
+    if (track == LIB_NONE)
+    {
+        font_draw_ex(T, x + 20, 80, x, SCREEN_W, "\u2013", C_DIM, 0, 1);
+        return;
+    }
+    char title[200];
+    track_title(track, title, sizeof(title));
+    const LibTrack *tr = lib_track(track);
+    marquee1(T, x, 80, 48, title, C_TEXT, t, true);
+    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
+}
+
+static void draw_song_change(uint32_t t)
+{
+    int pre = app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0;
+    // position on the forward timeline (backwards runs it from the end)
+    int u = app.sa_kind == SA_BACK ? SA_A_TICKS + SA_B_TICKS - app.sa_t : app.sa_t - pre;
+    int a = clamp256(u * 256 / SA_A_TICKS);
+    int b = clamp256((u - SA_A_TICKS) * 256 / SA_B_TICKS);
+    int rot = app.vinyl_rot / 3;
+    bool back = app.sa_kind == SA_BACK;
+
+    font_draw_ex(T, 200 + (48 - font_text_width("Next")) / 2, 24, 200, SCREEN_W, "Next", C_DIM, 0, 1);
+
+    // the song leaving: its cover slides off to the left, over its record
+    if (a < 256)
+    {
+        int ax = 64 - 200 * ease_in(a) / 256;
+        draw_vinyl(88, 88, ax < 64 ? ax : 64, rot);
+        gfx_blit(T, ax, 24, 128, 128, role_cover(false));
+    }
+    // the arriving song's record rolls out from behind its cover
+    if (a >= 256 && b > 0)
+    {
+        int travel = 40 * (256 - ease_out(b)) / 256;
+        draw_vinyl(88 + travel, 88, 64, rot + travel * 955 / 1000);
+    }
+
+    const uint16_t *bc = role_cover(true);
+    if (u < 0)
+    {
+        // jump: the chosen song slides in over the old Next first
+        int q = ease_out(clamp256(app.sa_t * 256 / SA_PRE_TICKS));
+        int bx = 256 + (208 - 256) * q / 256;
+        gfx_blit(T, 208, 44, 32, 32, thumb_of(app.sa_n, true));
+        gfx_clip(T, 200, 0, bx - 8, SCREEN_H);
+        next_texts(200, app.sa_n, t);
+        gfx_unclip(T);
+        gfx_blit_scaled(T, bx, 44, 32, bc);
+        gfx_clip(T, bx - 8 > 200 ? bx - 8 : 200, 0, SCREEN_W, SCREEN_H);
+        next_texts(bx - 8, app.sa_b, t);
+        gfx_unclip(T);
+        return;
+    }
+    // ... then grows from the Next spot into the middle
+    int f = ease_out(a);
+    gfx_blit_scaled(T, 208 + (64 - 208) * f / 256, 44 + (24 - 44) * f / 256, 32 + 96 * f / 256, bc);
+
+    // its name leaves the Next column to the right
+    if (a < 256)
+        next_texts(200 + 64 * ease_in(clamp256(u * 512 / SA_A_TICKS)) / 256, app.sa_b, t);
+    // and the song after it comes in
+    if (b > 0)
+    {
+        int off = 64 * (256 - ease_out(b)) / 256;
+        if (app.sa_c != LIB_NONE)
+            gfx_blit(T, 208 + off, 44, 32, 32, thumb_of(app.sa_c, back));
+        next_texts(200 + off, app.sa_c, t);
+    }
+}
+
 bool ui_draw_top(void)
 {
     T = gfx_canvas(SCREEN_TOP);
@@ -500,15 +600,24 @@ bool ui_draw_top(void)
     const uint16_t *cover = player_cover();
     int cover_x = 8 + 56 * p1 / 256;
 
+    if (app.sa_kind != SA_NONE && p2 >= 256)
+    {
+        if (playing)
+            viz_update();
+        draw_viz(256);
+        draw_song_change(t);
+        return true;
+    }
     if (p2 > 0)
     {
         if (playing)
             viz_update();
         draw_viz(p2);
-        int rot = (int)((app.frame * 20 / 3) % 360);    // 33 1/3 rpm (frame = 1/30 s)
-        if (playing)
+        if (playing || app.vinyl_speed > 0)
             anim = true;
-        draw_vinyl(cover_x + 24 + 40 * (256 - p2) / 256, 88, cover_x, rot);
+        // rolls out (turning with the distance) when the player slides in
+        int travel = 40 * (256 - p2) / 256;
+        draw_vinyl(cover_x + 24 + travel, 88, cover_x, app.vinyl_rot / 3 + travel * 955 / 1000);
     }
     gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
 
