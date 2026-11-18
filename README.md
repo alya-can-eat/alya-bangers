@@ -26,7 +26,10 @@ or folder, a player screen with a turning record, a queue you can edit.
   changes in player mode, the cover slides off to the left over its record,
   the next cover grows out of the Next spot and its record rolls out. Going
   back plays it backwards; a song picked from a list or the queue first
-  slides over the Next spot. Paused, the record spins down. In
+  slides over the Next spot. Paused, the record spins down. In browse mode
+  the covers behave like a stack in list order: a song further up is put on
+  from the left, for a song further down the old cover is lifted off to the
+  left (next and previous do the same). A song from another list is put on. In
   player mode: the record turning at 33⅓ rpm, a visualizer, the next song.
 - **Add to queue:** hold a row for *Play now / Play next / Add to queue*, or
   turn on the add-to-queue button: then tapping rows adds them instead of

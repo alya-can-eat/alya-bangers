@@ -42,7 +42,13 @@
 // the left over its record, the next cover grows from the Next spot, its
 // record rolls out. Back: the same, played backwards. Jump: the chosen song
 // first slides over the Next spot, then forward.
-typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP } SongAnim;
+// In browse mode the covers are a stack in list order: a song further up
+// is put on top (slides in from the left), for one further down the old
+// cover is lifted off to the left. From an unrelated list: put on.
+typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP, SA_PUT, SA_LIFT } SongAnim;
+#define SA_PLAYER(k) ((k) >= SA_FORWARD && (k) <= SA_JUMP)
+#define SA_STACK(k)  ((k) == SA_PUT || (k) == SA_LIFT)
+#define SA_STACK_TICKS 18           // a cover put on or lifted off, 0.3 s
 #define SA_PRE_TICKS 15             // jump: the chosen song slides over "Next"
 #define SA_OUT_TICKS 16             // the old cover leaves to the left
 // The new cover only starts once the old one has cleared the middle (at 80 %

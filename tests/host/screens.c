@@ -227,6 +227,26 @@ int main(int argc, char **argv)
     tap(100, LIST_Y + 8);   // track 1
     check(player_state() == PLAYER_PLAYING, "tap song plays it");
     check(queue_count() == 13 && queue_pos() == 0, "queue = the album");
+    check(app.sa_kind == SA_PUT, "nothing was playing: the cover is put on from the left");
+    run(30);
+    check(app.sa_kind == SA_NONE, "the cover is in place");
+
+    // covers as a stack in list order
+    tap(100, LIST_Y + 3 * ROW_H + 8);
+    check(app.sa_kind == SA_LIFT, "a song further down: the old cover is lifted off");
+    run(30);
+    tap(100, LIST_Y + 1 * ROW_H + 8);
+    check(app.sa_kind == SA_PUT, "a song further up: the new cover is put on");
+    run(30);
+    press(KEY_R);
+    check(app.sa_kind == SA_LIFT, "next song in browse mode lifts the cover off");
+    run(30);
+    press(KEY_L);
+    check(app.sa_kind == SA_PUT, "previous song in browse mode puts it back on");
+    run(30);
+    tap(100, LIST_Y + 8);   // back to track 1 for the rest
+    run(30);
+    check(queue_pos() == 0, "track 1 again");
     run(90);
     shot("03_title_playing");
 
@@ -396,7 +416,7 @@ int main(int argc, char **argv)
         uint32_t order[4] = { mix[0], mix[2], mix[1], mix[3] };
         slide_to(true);
         run(40);
-        play_tracks(order, 4, 0, false);
+        play_tracks(order, 4, 0, false, SA_PUT);
         run(80);
         tap(178, 100);
         film("demo_next", 60);
@@ -408,6 +428,21 @@ int main(int argc, char **argv)
         tap(100, 20 + 3 * ROW_H + 8);
         tap(240, 8);
         film("demo_jump", 75);
+
+        // browse mode: the cover stack, in Kivara's songs
+        slide_to(false);
+        run(40);
+        app.artist = lib_track_group(lib_find_path(lib_path(order[0])));
+        app.album = LIB_NONE;
+        show_tab(TAB_TITLE);
+        run(20);
+        tap_row("Persist");
+        run(30);
+        tap_row("Eternal");     // further up: put on
+        film("stack_put", 24);
+        run(20);
+        tap_row("Gone");        // further down: lifted off
+        film("stack_lift", 24);
     }
 
     printf("%s\n", failures ? "SOME CHECKS FAILED" : "all checks passed");

@@ -228,6 +228,19 @@ void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128)
     c->dirty = true;
 }
 
+void gfx_darken(Canvas *c, int x, int y, int w, int h)
+{
+    int x0 = x < c->cx0 ? c->cx0 : x, x1 = x + w > c->cx1 ? c->cx1 : x + w;
+    int y0 = y < c->cy0 ? c->cy0 : y, y1 = y + h > c->cy1 ? c->cy1 : y + h;
+    for (int yy = y0; yy < y1; yy++)
+    {
+        uint16_t *p = c->px + yy * SCREEN_W;
+        for (int xx = x0; xx < x1; xx++)
+            p[xx] = ((p[xx] >> 1) & 0x3DEF) | 0x8000;
+    }
+    c->dirty = true;
+}
+
 uint16_t gfx_mix(uint16_t a, uint16_t b, int t)
 {
     int r = ((a & 31) * t + (b & 31) * (256 - t) + 128) >> 8;

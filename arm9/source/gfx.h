@@ -48,6 +48,9 @@ void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src);
 // A 128x128 picture drawn size x size (nearest pixel).
 void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128);
 
+// Halve the brightness of a rectangle (a shadow).
+void gfx_darken(Canvas *c, int x, int y, int w, int h);
+
 // Mix two colors: t = 0..256 parts of a.
 uint16_t gfx_mix(uint16_t a, uint16_t b, int t);
 

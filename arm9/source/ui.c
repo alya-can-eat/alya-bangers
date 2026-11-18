@@ -603,7 +603,7 @@ bool ui_draw_top(void)
     const uint16_t *cover = player_cover();
     int cover_x = 8 + 56 * p1 / 256;
 
-    if (app.sa_kind != SA_NONE && p2 >= 256)
+    if (SA_PLAYER(app.sa_kind) && p2 >= 256)
     {
         if (playing)
             viz_update();
@@ -622,7 +622,27 @@ bool ui_draw_top(void)
         int travel = 40 * (256 - p2) / 256;
         draw_vinyl(cover_x + 24 + travel, 88, cover_x, app.vinyl_rot / 3 + travel * 955 / 1000);
     }
-    gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
+    if (SA_STACK(app.sa_kind) && p == 0)
+    {
+        // browse mode: covers on a stack, one put on or lifted off to the left
+        int q = clamp256(app.sa_t * 256 / SA_STACK_TICKS);
+        bool put = app.sa_kind == SA_PUT;
+        const uint16_t *under = put ? app.sa_cover : live_cover();
+        const uint16_t *moving = put ? live_cover() : app.sa_cover;
+        int mx = put ? -128 + 136 * ease_out(q) / 256 : 8 - 136 * ease_in(q) / 256;
+        gfx_blit(T, 8, 24, 128, 128, under);
+        gfx_blit(T, mx, 24, 128, 128, moving);
+        // a little shadow on the cover underneath
+        gfx_clip(T, 8, 24, 136, 152);
+        gfx_darken(T, mx + 128, 24, 4, 128);
+        gfx_unclip(T);
+        // the text changes halfway, when the new cover is mostly showing
+        if (q < 128 && app.sa_a != LIB_NONE)
+            song_text(app.sa_a, &st);
+        anim = true;
+    }
+    else
+        gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
 
     anim |= top_text_column(144 + 112 * p1 / 256, &st, t);
     if (p2 > 0)

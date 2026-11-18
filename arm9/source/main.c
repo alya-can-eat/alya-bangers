@@ -218,11 +218,21 @@ static uint8_t replaygain_volume(void)
 static bool sa_captured;
 static uint32_t sa_old_track, sa_old_next;
 
+static bool player_layout(void) { return app.player_mode && app.slide == SLIDE_TICKS; }
+static bool browse_layout(void) { return !app.player_mode && app.slide == 0; }
+
+// The animation for the layout the top screen shows right now.
+static SongAnim by_layout(SongAnim player, SongAnim browse)
+{
+    return player_layout() ? player : (browse_layout() ? browse : SA_NONE);
+}
+
 static void sa_capture(void)
 {
     sa_captured = false;
-    if (!app.player_mode || app.slide != SLIDE_TICKS || !lib_loaded() || !app.sa_cover
-        || lid_closed || app_current_track() == LIB_NONE)
+    if (!lib_loaded() || !app.sa_cover || lid_closed)
+        return;
+    if (!(player_layout() && app_current_track() != LIB_NONE) && !browse_layout())
         return;
     sa_old_track = app_current_track();
     int np = queue_next_pos(true);
@@ -247,6 +257,8 @@ static void sa_start(SongAnim kind)
     uint32_t next = np >= 0 ? queue_track(np) : LIB_NONE;
     if (kind == SA_JUMP && cur == sa_old_next)
         kind = SA_FORWARD;      // it was already the one shown under Next
+    if (SA_STACK(kind) && cur == sa_old_track)
+        kind = SA_NONE;         // the same song again
     if (kind == SA_BACK)
     {
         app.sa_a = cur;
@@ -293,7 +305,8 @@ static bool open_pos(int pos, uint32_t start_ms, bool play, SongAnim anim)
     return false;
 }
 
-static void play_tracks(const uint32_t *t, int n, int start, bool album_queue)
+// browse_anim: how the cover changes if the browser is showing.
+static void play_tracks(const uint32_t *t, int n, int start, bool album_queue, SongAnim browse_anim)
 {
     if (n <= 0)
         return;
@@ -301,7 +314,7 @@ static void play_tracks(const uint32_t *t, int n, int start, bool album_queue)
     if (!queue_set(t, n, start))
         return;
     app.album_queue = album_queue;
-    open_pos(queue_pos(), 0, true, SA_JUMP);
+    open_pos(queue_pos(), 0, true, by_layout(SA_JUMP, browse_anim));
 }
 
 static void next_song(bool automatic)
@@ -314,7 +327,7 @@ static void next_song(bool automatic)
             open_pos(queue_pos(), 0, false, SA_NONE);
         return;
     }
-    open_pos(p, 0, true, SA_FORWARD);
+    open_pos(p, 0, true, by_layout(SA_FORWARD, SA_LIFT));
 }
 
 static void previous_song(void)
@@ -326,7 +339,7 @@ static void previous_song(void)
         redraw = true;
         return;
     }
-    open_pos(queue_prev_pos(), 0, player_state() == PLAYER_PLAYING, SA_BACK);
+    open_pos(queue_prev_pos(), 0, player_state() == PLAYER_PLAYING, by_layout(SA_BACK, SA_PUT));
 }
 
 static void toggle_pause(void)
@@ -403,7 +416,14 @@ static void play_from_list(int index)
             start = n;
         tracks_buf[n++] = app.items[i].id;
     }
-    play_tracks(tracks_buf, n, start, app.tab == TAB_TITLE && app.album != LIB_NONE);
+    // covers as a stack in list order: further up is put on, further down
+    // lifts the old one off; a song from another list is put on
+    SongAnim anim = SA_PUT;
+    uint32_t cur = app_current_track();
+    for (int i = 0; i < app.n_items && cur != LIB_NONE; i++)
+        if (app.items[i].kind == ITEM_TRACK && app.items[i].id == cur)
+            anim = index < i ? SA_PUT : SA_LIFT;
+    play_tracks(tracks_buf, n, start, app.tab == TAB_TITLE && app.album != LIB_NONE, anim);
 }
 
 static void activate(int i)
@@ -490,7 +510,7 @@ static void row_menu_choose(int option)
         else
         {
             int n = item_tracks(it);
-            play_tracks(tracks_buf, n, 0, it->kind == ITEM_ALBUM);
+            play_tracks(tracks_buf, n, 0, it->kind == ITEM_ALBUM, SA_PUT);
         }
     }
     else
@@ -1119,9 +1139,11 @@ static void app_tick(void)
     // song change on the top screen
     if (app.sa_kind != SA_NONE)
     {
-        int total = (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_TICKS;
+        int total = SA_STACK(app.sa_kind) ? SA_STACK_TICKS
+                    : (app.sa_kind == SA_JUMP ? SA_PRE_TICKS : 0) + SA_TICKS;
         app.sa_t += (int)elapsed;
-        if (app.sa_t >= total || !app.player_mode)
+        bool layout_left = SA_STACK(app.sa_kind) ? !browse_layout() : !app.player_mode;
+        if (app.sa_t >= total || layout_left)
         {
             app.sa_kind = SA_NONE;
             redraw = true;
@@ -1129,7 +1151,7 @@ static void app_tick(void)
     }
     // the record: spins up to 33 1/3 rpm while playing, spins down when paused,
     // and stands still while a new one rolls out
-    if (player_state() == PLAYER_PLAYING && app.sa_kind == SA_NONE)
+    if (player_state() == PLAYER_PLAYING && !SA_PLAYER(app.sa_kind))
         app.vinyl_speed = app.vinyl_speed + 9 * (int)elapsed > 256 ? 256 : app.vinyl_speed + 9 * (int)elapsed;
     else
         app.vinyl_speed = app.vinyl_speed > 15 * (int)elapsed ? app.vinyl_speed - 15 * (int)elapsed : 0;
