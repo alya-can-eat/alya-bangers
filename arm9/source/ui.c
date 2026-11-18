@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include "app.h"
+#include "default_cover.h"
 #include "font.h"
 #include "player.h"
 #include "queue.h"
@@ -253,19 +254,6 @@ void ui_init(void)
     viz_init();
 }
 
-static const uint16_t *placeholder_cover(void)
-{
-    static uint16_t px[128 * 128];
-    static bool made;
-    if (!made)
-    {
-        for (int i = 0; i < 128 * 128; i++)
-            px[i] = C_PANEL;
-        made = true;
-    }
-    return px;
-}
-
 static void header(void)
 {
     gfx_fill(T, 0, 0, SCREEN_W, 16, C_PANEL);
@@ -459,10 +447,8 @@ static bool top_next_column(int x, uint32_t t)
         return false;
     }
     uint32_t nt = queue_track(np);
-    if (app.has_thumb && app.thumb_track == nt)
-        gfx_blit(T, x + 8, 44, 32, 32, app.thumb);
-    else
-        gfx_fill(T, x + 8, 44, 32, 32, C_PANEL);
+    bool own = app.has_thumb && app.thumb_track == nt;
+    gfx_blit(T, x + 8, 44, 32, 32, own ? app.thumb : default_thumb);
     char title[200];
     track_title(nt, title, sizeof(title));
     const LibTrack *tr = lib_track(nt);
@@ -498,9 +484,7 @@ bool ui_draw_top(void)
         int rot = (int)((app.frame * 20 / 3) % 360);    // 33 1/3 rpm at 30 fps
         draw_vinyl(cover_x + 24 + 40 * (256 - p2) / 256, 88, cover_x, rot);
     }
-    gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : placeholder_cover());
-    if (!cover)
-        icon(T, cover_x + 56, 80, 0x266A, C_FAINT);
+    gfx_blit(T, cover_x, 24, 128, 128, cover ? cover : default_cover);
 
     anim |= top_text_column(144 + 112 * p1 / 256, &st, t);
     if (p2 > 0)
