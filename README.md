@@ -48,6 +48,8 @@ or folder, a player screen with a turning record, a queue you can edit.
   - *Browsing:* case-sensitive names, scroll all long rows
   - *Player:* time on the right (length or time left), cover background,
     shuffle by rating
+  - *Theme* (colours) and *Regional* (language, date and time format):
+    marked "later", they say what they'll hold
   - *About:* name, version, licence, where the code lives
 - **Rating and plays (ⓘ song info):** tap a star to give the song that many
   (the last lit one again: none), or use Left / Right. A song counts as
@@ -177,8 +179,8 @@ icon of the `.nds` file.
 ## Not yet
 
 Search, playlists, genre and other tags as tabs, colours from the cover,
-gapless playback, the settings pages Theme (colours) and Regional
-(language, date and time format).
+gapless playback, the contents of the Theme (colours) and Regional
+(language, date and time format) settings pages.
 
 ## Licence
 

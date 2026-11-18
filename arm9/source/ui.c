@@ -1642,6 +1642,8 @@ static const SetItem items_top[] = {
     { "Playback", SI_PAGE, PAGE_PLAYBACK },
     { "Browsing", SI_PAGE, PAGE_BROWSING },
     { "Player", SI_PAGE, PAGE_PLAYER },
+    { "Theme", SI_PAGE, PAGE_THEME },
+    { "Regional", SI_PAGE, PAGE_REGIONAL },
     { "About", SI_PAGE, PAGE_ABOUT },
 };
 static const SetItem items_playback[] = {
@@ -1663,12 +1665,15 @@ static const struct {
     const char *title;
     const SetItem *items;
     int n;
+    const char *later;      // not there yet: what it will hold
 } pages[PAGE_COUNT] = {
-    [PAGE_TOP] = { "Settings", items_top, N_ITEMS(items_top) },
-    [PAGE_PLAYBACK] = { "Playback", items_playback, N_ITEMS(items_playback) },
-    [PAGE_BROWSING] = { "Browsing", items_browsing, N_ITEMS(items_browsing) },
-    [PAGE_PLAYER] = { "Player", items_player, N_ITEMS(items_player) },
-    [PAGE_ABOUT] = { "About", NULL, 0 },
+    [PAGE_TOP] = { "Settings", items_top, N_ITEMS(items_top), NULL },
+    [PAGE_PLAYBACK] = { "Playback", items_playback, N_ITEMS(items_playback), NULL },
+    [PAGE_BROWSING] = { "Browsing", items_browsing, N_ITEMS(items_browsing), NULL },
+    [PAGE_PLAYER] = { "Player", items_player, N_ITEMS(items_player), NULL },
+    [PAGE_THEME] = { "Theme", NULL, 0, "The app's colours" },
+    [PAGE_REGIONAL] = { "Regional", NULL, 0, "Language, date and time format" },
+    [PAGE_ABOUT] = { "About", NULL, 0, NULL },
 };
 
 int ui_set_count(int page)
@@ -1741,6 +1746,11 @@ static bool settings_page(int page, int dx, bool lit)
     bool anim = false;
     if (page == PAGE_ABOUT)
         about_body(dx);
+    else if (pages[page].later)
+    {
+        centered_at(dx + SCREEN_W / 2, 76, pages[page].later, C_TEXT, 1);
+        centered_at(dx + SCREEN_W / 2, 96, "Coming in a later version", C_DIM, 1);
+    }
     else
     {
         int n = pages[page].n;
@@ -1761,7 +1771,11 @@ static bool settings_page(int page, int dx, bool lit)
             else if (value)
                 text_r(B, dx + 244, y + ty, value, C_ACC);
             else
+            {
                 text_r(B, dx + 244, y + ty, "›", C_DIM);
+                if (it->kind == SI_PAGE && pages[it->id].later)
+                    text_r(B, dx + 232, y + ty, "later", C_FAINT);
+            }
         }
     }
     gfx_unclip(B);

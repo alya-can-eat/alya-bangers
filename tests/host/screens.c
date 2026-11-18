@@ -482,8 +482,20 @@ int main(int argc, char **argv)
     press(KEY_B);
     check(app.set_page == PAGE_TOP && app.overlay == OV_SETTINGS, "B goes back, settings stay open");
     run(20);
-    // About
+    // Theme and Regional: there, marked for later
     tap(100, SET_Y + 3 * SET_H + 10);
+    run(20);
+    check(app.set_shown == PAGE_THEME && ui_set_count(PAGE_THEME) == 0, "Theme: a page saying it comes later");
+    shot("13f_theme_later");
+    press(KEY_B);
+    run(20);
+    tap(100, SET_Y + 4 * SET_H + 10);
+    run(20);
+    check(app.set_shown == PAGE_REGIONAL, "Regional: the same");
+    press(KEY_B);
+    run(20);
+    // About
+    tap(100, SET_Y + 5 * SET_H + 10);
     run(20);
     check(app.set_shown == PAGE_ABOUT && app.page_t == TAB_TICKS, "About in place");
     shot("13c_about");
