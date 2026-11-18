@@ -23,7 +23,8 @@
           doCheck = false;
           pythonImportsCheck = [ "dsconv" ];
           meta = {
-            description = "Convert a music library for the Nintendo DS player";
+            description = "Convert a music library for alya-bangers, the Nintendo DS player";
+            license = with pkgs.lib.licenses; [ gpl3Plus gpl2Plus ];
             mainProgram = "dsconv";
           };
         };

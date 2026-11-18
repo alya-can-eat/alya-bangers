@@ -1,8 +1,8 @@
 # dsconv
 
 Converts a music folder (FLAC, Opus, MP3, AAC/M4A, Vorbis, WAV, AIFF, WavPack)
-into `.dsa` files that a Nintendo DS player can stream straight into its sound
-hardware, keeping the folder structure. It also writes a library index (for
+into `.dsa` files that alya-bangers, the Nintendo DS player, can stream
+straight into its sound hardware, keeping the folder structure. It also writes a library index (for
 browsing by artist, album, genre or any other tag) and a font with exactly the
 characters your library needs.
 
@@ -111,5 +111,7 @@ frequencies, block layout, index and font.
 
 ## Licence
 
-Code: MIT. Bundled font data: GNU Unifont, GPL-2.0-or-later with the font
-embedding exception (see `LICENSES/`).
+Code: GNU GPL v3 or later (`LICENSE`). Bundled font data: GNU Unifont,
+GPL-2.0-or-later with the font embedding exception (see `LICENSES/`).
+
+Code: <https://github.com/alya-can-eat>
