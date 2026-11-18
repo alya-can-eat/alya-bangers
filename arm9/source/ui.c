@@ -985,7 +985,9 @@ static void draw_bar(int oy)
     if (sort_open)
         gfx_fill(B, 160, y + 1, 32, 27, C_BG);
     icon(B, 168, y + 6, 0x21C5, sort_open ? C_ACC : C_TEXT);
-    icon(B, 200, y + 6, 0x1F506, C_TEXT);
+    // the sun shows the level: circle, sun, half full, full (DS Lite levels 2..5)
+    int level = app.set.brightness < 2 ? 2 : (app.set.brightness > 5 ? 5 : app.set.brightness);
+    icon(B, 200, y + 6, 0xE001 + (level - 2), C_TEXT);
     icon(B, 232, y + 6, 0x22EE, C_TEXT);
 }
 
