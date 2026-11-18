@@ -12,7 +12,8 @@ or folder, a player screen with a turning record, a queue you can edit.
 - **Bottom screen, browsing:** tabs Artist · Album · Title · Folder · Search.
   Picking an artist opens their albums, picking an album its songs; the tabs
   then show your choice (tap the name to go back to that list, tap the small
-  × to clear it). Tapping a song plays the list it is in. Artists that differ
+  × to clear it). Lists slide sideways when you switch tabs
+  or open an artist, album or folder. Tapping a song plays the list it is in. Artists that differ
   only in case ("KIVARA", "Kivara") are one artist unless you change that in
   the settings.
 - **Bottom bar:** play/pause, next, add to queue, ⮟ (the player), sort,
@@ -32,6 +33,7 @@ or folder, a player screen with a turning record, a queue you can edit.
   songs (both can be changed in the settings).
 - **Switching on** loads the last song at the same position, paused. Settings,
   queue and sort orders are kept in `/_nds/dsplayer/state.bin`.
+- Songs without a cover show a built-in picture (a moonlit beach).
 - Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
   Cyrillic, Vietnamese and emoji show correctly.
 
