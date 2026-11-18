@@ -111,7 +111,7 @@ frequencies, block layout, index and font.
 
 ## Licence
 
-Code: GNU GPL v3 or later (`LICENSE`). Bundled font data: GNU Unifont,
+© 2026 Alya (alya-can-eat). Code: GNU GPL v3 or later (`LICENSE`). Bundled font data: GNU Unifont,
 GPL-2.0-or-later with the font embedding exception (see `LICENSES/`).
 
 Code: <https://github.com/alya-can-eat>
