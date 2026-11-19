@@ -661,8 +661,75 @@ static void set_change(int id)
     redraw = true;
 }
 
+// ---- theme page
+static uint16_t *theme_slot(int i)
+{
+    return i == 0 ? &app.theme.acc : (i == 1 ? &app.theme.bg : &app.theme.text);
+}
+
+static void theme_select(int i)
+{
+    app.theme_sel = (i + 3) % 3;
+    app.theme_hsv = cp_rgb_to_hsv(*theme_slot(app.theme_sel), app.theme_hsv.h);
+    redraw = true;
+}
+
+// The picker's colour into the theme: the whole app changes at once.
+static void theme_apply(void)
+{
+    *theme_slot(app.theme_sel) = cp_hsv_to_rgb(app.theme_hsv);
+    palette_make(&app.theme);
+    touch_state();
+    redraw = true;
+}
+
+static void theme_reset(void)
+{
+    app.theme = theme_default;
+    palette_make(&app.theme);
+    theme_select(app.theme_sel);
+    touch_state();
+}
+
+// The stylus on the theme page (below the header). down: it just touched.
+static bool theme_touch(int x, int y, bool down)
+{
+    if (down)
+    {
+        app.theme_drag = CP_NONE;
+        if (x >= THEME_CHIP_X && x < THEME_CHIP_X + THEME_CHIP_W)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                int cy = THEME_CHIP_Y + i * THEME_CHIP_PITCH;
+                if (y >= cy - 3 && y < cy + THEME_CHIP_H + 3)
+                {
+                    theme_select(i);
+                    return true;
+                }
+            }
+            if (y >= THEME_RESET_Y && y < THEME_RESET_Y + THEME_CHIP_H)
+            {
+                theme_reset();
+                return true;
+            }
+        }
+        app.theme_drag = cp_part_at(x, y);
+    }
+    if (app.theme_drag == CP_RING)
+        app.theme_hsv.h = cp_hue_at(x, y);
+    else if (app.theme_drag == CP_TRIANGLE)
+        cp_sv_at(app.theme_hsv.h, x, y, &app.theme_hsv.s, &app.theme_hsv.v);
+    else
+        return false;
+    theme_apply();
+    return true;
+}
+
 static void set_open_page(int page)
 {
+    if (page == PAGE_THEME)
+        theme_select(app.theme_sel);
     app.set_back_sel = app.menu_sel;
     // came by D-pad: the highlight starts on the first row (About has none)
     app.menu_sel = app.menu_sel >= 0 && ui_set_count(page) > 0 ? 0 : -1;
@@ -948,6 +1015,9 @@ static void touch_down(int x, int y)
         app.q_scroll = (y - 20) * (max + 1) / (ROWS * ROW_H);
         tp.held = true;     // not a tap
     }
+    else if (app.overlay == OV_SETTINGS && app.set_page == PAGE_THEME && app.page_t == TAB_TICKS && y >= 20
+             && theme_touch(x, y, true))
+        tp.held = true;
     redraw = true;
 }
 
@@ -965,6 +1035,8 @@ static void touch_move(int x, int y)
         scroll_to_y(y);
     else if (app.seek_drag)
         app.seek_preview_ms = seek_ms_at(x);
+    else if (app.theme_drag != CP_NONE)
+        theme_touch(x, y, false);
     else if (app.q_drag_from >= 0)
     {
         int to = queue_row_at(y < 20 ? 20 : y);
@@ -999,6 +1071,7 @@ static void touch_move(int x, int y)
 static void touch_up(void)
 {
     tp.down = false;
+    app.theme_drag = CP_NONE;
     if (app.press_down)
     {
         app.press_down = false;
@@ -1067,7 +1140,20 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
+        if (app.set_page == PAGE_THEME)
+        {
+            // Up / Down: which colour, Left / Right: its hue (the triangle is for the stylus)
+            if (down & KEY_B)
+                set_back();
+            else if (rep & (KEY_UP | KEY_DOWN))
+                theme_select(app.theme_sel + ((rep & KEY_DOWN) ? 1 : -1));
+            else if (rep & (KEY_LEFT | KEY_RIGHT))
+            {
+                app.theme_hsv.h = (app.theme_hsv.h + ((rep & KEY_RIGHT) ? 16 : -16) + CP_HUES) % CP_HUES;
+                theme_apply();
+            }
+        }
+        else if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
             set_back();
         else if (ui_set_count(app.set_page) > 0)
         {

@@ -726,6 +726,88 @@ static int16_t bg_grid[13][17][3];
 #define BG_SLICE 32                     // rows made per drawn frame (~2 ms)
 #define BG_FADE  12                     // frames of the cross-fade, 0.4 s
 
+// On the DS screen everything darker than BG_FLOOR (of 255) looks black, so
+// brightness counts from there. A cover and its background keep BG_APART of it
+// between them.
+#define BG_FLOOR 24
+#define BG_APART 12
+
+static int luma8(int r, int g, int b)
+{
+    return (2 * r + 5 * g + b) / 8;
+}
+
+// How bright the cover's outer 4 px are (where it meets the background), 0..255.
+static int cover_edge_luma(const uint16_t *cover)
+{
+    int sum = 0, n = 0;
+    for (int y = 0; y < 128; y++)
+    {
+        bool rim = y < 4 || y >= 124;
+        for (int x = 0; x < 128; x += rim ? 1 : 124)
+        {
+            uint16_t p = cover[y * 128 + x];
+            sum += luma8((p & 31) * 8, ((p >> 5) & 31) * 8, ((p >> 10) & 31) * 8);
+            n++;
+            if (!rim && x == 0)
+            {
+                // the 4 px on each side
+                for (int k = 1; k < 4; k++)
+                {
+                    uint16_t q = cover[y * 128 + k], e = cover[y * 128 + 127 - k];
+                    sum += luma8((q & 31) * 8, ((q >> 5) & 31) * 8, ((q >> 10) & 31) * 8);
+                    sum += luma8((e & 31) * 8, ((e >> 5) & 31) * 8, ((e >> 10) & 31) * 8);
+                    n += 2;
+                }
+            }
+        }
+    }
+    return sum / n;
+}
+
+static int grid_luma(void)
+{
+    int sum = 0;
+    for (int gy = 0; gy < 13; gy++)
+        for (int gx = 0; gx < 17; gx++)
+            sum += luma8(bg_grid[gy][gx][0], bg_grid[gy][gx][1], bg_grid[gy][gx][2]);
+    return sum / (13 * 17);
+}
+
+static int above_floor(int luma)
+{
+    return luma > BG_FLOOR ? luma - BG_FLOOR : 0;
+}
+
+// A very dark cover on its dark background would melt into it (both look
+// black): then the background gets lighter. Covers that stand out stay as they are.
+static void bg_keep_apart(const uint16_t *cover)
+{
+    int edge = above_floor(cover_edge_luma(cover)), avg = grid_luma();
+    int d = above_floor(avg) - edge;
+    if (d >= BG_APART || d <= -BG_APART)
+        return;
+    int lift = BG_FLOOR + edge + BG_APART - avg;
+    for (int gy = 0; gy < 13; gy++)
+        for (int gx = 0; gx < 17; gx++)
+            for (int k = 0; k < 3; k++)
+            {
+                int v = bg_grid[gy][gx][k] + lift;
+                bg_grid[gy][gx][k] = (int16_t)(v > 240 ? 240 : v);
+            }
+}
+
+static void bg_grid_from(const uint16_t *cover);
+
+// For the tests: how far apart a cover's edge and its background end up
+// (counted above the floor).
+int ui_cover_bg_contrast(const uint16_t *cover)
+{
+    bg_grid_from(cover);
+    int d = above_floor(grid_luma()) - above_floor(cover_edge_luma(cover));
+    return d < 0 ? -d : d;
+}
+
 // 17 x 13 colors (one every 16 px) from 8x8 blocks of the cover, made dark.
 static void bg_grid_from(const uint16_t *cover)
 {
@@ -761,6 +843,7 @@ static void bg_grid_from(const uint16_t *cover)
                 bg_grid[gy][gx][k] = (int16_t)(v[k] * 3 / 10 + bgc[k] / 2);
         }
     }
+    bg_keep_apart(cover);
 }
 
 // Rows y0..y1 of the grid stretched smoothly over the screen, with a little
@@ -1691,7 +1774,7 @@ static const struct {
     [PAGE_PLAYBACK] = { "Playback", items_playback, N_ITEMS(items_playback), NULL },
     [PAGE_BROWSING] = { "Browsing", items_browsing, N_ITEMS(items_browsing), NULL },
     [PAGE_PLAYER] = { "Player", items_player, N_ITEMS(items_player), NULL },
-    [PAGE_THEME] = { "Theme", NULL, 0, "The app's colours" },
+    [PAGE_THEME] = { "Theme", NULL, 0, NULL },
     [PAGE_REGIONAL] = { "Regional", NULL, 0, "Language, date and time format" },
     [PAGE_ABOUT] = { "About", NULL, 0, NULL },
 };
@@ -1748,6 +1831,41 @@ static void about_body(int dx)
     centered_at(cx, 174, "Glyphs: GNU Unifont", C_DIM, 1);
 }
 
+// Black or white, whichever reads on c.
+static uint16_t ink_on(uint16_t c)
+{
+    int y = (c & 31) * 3 + ((c >> 5) & 31) * 6 + ((c >> 10) & 31);     // brightness x 10
+    return y > 160 ? COLOR(1, 1, 2) : COLOR(31, 31, 31);
+}
+
+// The colours to choose, Reset, and the colour triangle.
+static void theme_body(int dx)
+{
+    static const char *const names[3] = { "Accent", "Background", "Text" };
+    const uint16_t cols[3] = { app.theme.acc, app.theme.bg, app.theme.text };
+    for (int i = 0; i < 3; i++)
+    {
+        int x = dx + THEME_CHIP_X, y = THEME_CHIP_Y + i * THEME_CHIP_PITCH;
+        uint16_t c = cols[i] | 0x8000;
+        if (i == app.theme_sel)
+        {
+            // a frame that shows on any colour
+            gfx_rect(B, x - 2, y - 2, THEME_CHIP_W + 4, THEME_CHIP_H + 4, COLOR(31, 31, 31));
+            gfx_rect(B, x - 1, y - 1, THEME_CHIP_W + 2, THEME_CHIP_H + 2, COLOR(0, 0, 0));
+        }
+        else
+            gfx_rect(B, x - 1, y - 1, THEME_CHIP_W + 2, THEME_CHIP_H + 2, COLOR(14, 14, 16));   // even on its own colour
+        gfx_fill(B, x, y, THEME_CHIP_W, THEME_CHIP_H, c);
+        const char *s = names[i];
+        text(B, x + (THEME_CHIP_W - font_text_width(s)) / 2, y + 3, s, ink_on(c));
+    }
+    // Reset in fixed colours: findable whatever the theme
+    int x = dx + THEME_CHIP_X;
+    gfx_round_fill(B, x, THEME_RESET_Y, THEME_CHIP_W, THEME_CHIP_H, 4, COLOR(9, 9, 10));
+    text(B, x + (THEME_CHIP_W - font_text_width("Reset")) / 2, THEME_RESET_Y + 3, "Reset", COLOR(31, 31, 31));
+    cp_draw(B, dx, app.theme_hsv);
+}
+
 // A settings page with its left edge at dx (pages slide in from the right).
 // lit: the D-pad highlight is on this page.
 static bool settings_page(int page, int dx, bool lit)
@@ -1766,6 +1884,8 @@ static bool settings_page(int page, int dx, bool lit)
     bool anim = false;
     if (page == PAGE_ABOUT)
         about_body(dx);
+    else if (page == PAGE_THEME)
+        theme_body(dx);
     else if (pages[page].later)
     {
         centered_at(dx + SCREEN_W / 2, 76, pages[page].later, C_TEXT, 1);

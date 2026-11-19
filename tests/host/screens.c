@@ -5,6 +5,7 @@
 //
 //   ./screens /path/to/card/music out_dir
 
+#include <math.h>
 #include <stdio.h>
 
 #define DSPLAYER_NO_MAIN
@@ -482,16 +483,48 @@ int main(int argc, char **argv)
     press(KEY_B);
     check(app.set_page == PAGE_TOP && app.overlay == OV_SETTINGS, "B goes back, settings stay open");
     run(20);
-    // Theme and Regional: there, marked for later
+    // Theme: three colours and the colour triangle
     tap(100, SET_Y + 3 * SET_H + 10);
     run(20);
-    check(app.set_shown == PAGE_THEME && ui_set_count(PAGE_THEME) == 0, "Theme: a page saying it comes later");
-    shot("13f_theme_later");
+    check(app.set_shown == PAGE_THEME && app.theme_sel == 0, "Theme page, the accent chosen");
+    shot("13f_theme");
+    tap(THEME_CHIP_X + 20, THEME_CHIP_Y + THEME_CHIP_PITCH + 10);
+    check(app.theme_sel == 1, "the Background chip");
+    uint16_t bg0 = app.theme.bg;
+    tap(CP_CX + (CP_R_IN + CP_R_OUT) / 2, CP_CY);           // the ring, at the right: red
+    check(app.theme_hsv.h < 16 || app.theme_hsv.h > CP_HUES - 16, "the ring's right side is red");
+    check(app.theme.bg != bg0 && C_BG == (app.theme.bg | 0x8000) && (app.theme.bg & 31) > ((app.theme.bg >> 10) & 31),
+          "the background turns reddish, and the app with it");
+    tap(THEME_CHIP_X + 20, THEME_CHIP_Y + 10);
+    check(app.theme_sel == 0, "the Accent chip");
+    {
+        // drag from the middle of the triangle to its white corner (120° on from the hue)
+        float a = (app.theme_hsv.h + 512) * 6.2831853f / CP_HUES;
+        int wx = CP_CX + (int)(CP_R_TRI * cosf(a)), wy = CP_CY - (int)(CP_R_TRI * sinf(a));
+        hold(CP_CX, CP_CY, 2);
+        uint16_t mid = app.theme.acc;
+        drag_to(wx, wy, 6);
+        release();
+        uint16_t w = app.theme.acc;
+        check(mid != w && (w & 31) >= 29 && ((w >> 5) & 31) >= 29 && ((w >> 10) & 31) >= 29,
+              "dragging to the white corner: a white accent");
+    }
+    shot("13g_theme_changed");
+    tap(THEME_CHIP_X + 20, THEME_RESET_Y + 10);
+    check(app.theme.bg == theme_default.bg && app.theme.acc == theme_default.acc && C_ACC == theme_default.acc,
+          "Reset: the default theme");
+    press(KEY_DOWN);
+    check(app.theme_sel == 1, "Down: the next colour");
+    int h0 = app.theme_hsv.h;
+    press(KEY_RIGHT);
+    check(app.theme_hsv.h == (h0 + 16) % CP_HUES && app.set_page == PAGE_THEME, "Right turns the hue (and stays)");
+    tap(THEME_CHIP_X + 20, THEME_RESET_Y + 10);
     press(KEY_B);
     run(20);
+    check(app.set_page == PAGE_TOP, "B leaves the Theme page");
     tap(100, SET_Y + 4 * SET_H + 10);
     run(20);
-    check(app.set_shown == PAGE_REGIONAL, "Regional: the same");
+    check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 0, "Regional: a page saying it comes later");
     press(KEY_B);
     run(20);
     // About
@@ -689,6 +722,58 @@ int main(int argc, char **argv)
         app.set.shuffle_weighted = 0;
         apply_weighting();
         queue_set_shuffle(was);
+    }
+
+    // ---- a cover and its background stay apart in brightness, even a black cover
+    {
+        static uint16_t cov[128 * 128];
+        const int greys[] = { 0, 3, 6, 9, 31 };
+        int worst = 255;
+        for (unsigned g = 0; g < sizeof(greys) / sizeof(greys[0]); g++)
+        {
+            for (int i = 0; i < 128 * 128; i++)
+                cov[i] = COLOR(greys[g], greys[g], greys[g]);
+            int d = ui_cover_bg_contrast(cov);
+            printf("      (grey %2d cover: %d apart)\n", greys[g], d);
+            worst = d < worst ? d : worst;
+        }
+        check(worst >= 11, "dark covers keep their distance from the background (above what looks black)");
+    }
+    {
+        // how it looks: the playing song's cover turned black (test only)
+        uint16_t *c = (uint16_t *)player_cover();
+        static uint16_t saved[128 * 128];
+        if (c)
+        {
+            memcpy(saved, c, sizeof(saved));
+            for (int i = 0; i < 128 * 128; i++)
+                c[i] = COLOR(0, 0, 0);
+            palette_make(&app.theme);       // the background is made again
+            slide_to(true);
+            run(40);
+            shot("17_black_cover");
+            memcpy(c, saved, sizeof(saved));
+            palette_make(&app.theme);
+            slide_to(false);
+            run(30);
+        }
+    }
+
+    // ---- another theme, all over the app
+    {
+        Theme kept = app.theme;
+        app.theme = (Theme){ COLOR(1, 4, 4), COLOR(27, 31, 30), COLOR(6, 27, 23) };
+        palette_make(&app.theme);
+        run(30);
+        shot("16_theme_teal_list");
+        slide_to(true);
+        run(40);
+        shot("16b_theme_teal_player");
+        slide_to(false);
+        run(30);
+        app.theme = kept;
+        palette_make(&app.theme);
+        run(10);
     }
 
     if (film_on)

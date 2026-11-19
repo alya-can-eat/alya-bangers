@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "colorpick.h"
 #include "gfx.h"
 #include "library.h"
 #include "palette.h"
@@ -38,6 +39,12 @@
 #define PANEL_DOWN  172             // panel offset in player mode: only the tabs show
 #define SET_Y       24              // settings: first row
 #define SET_H       24              // row pitch
+#define THEME_CHIP_X 4              // theme page: the colours to choose (accent, background, text)
+#define THEME_CHIP_W 84
+#define THEME_CHIP_Y 28
+#define THEME_CHIP_H 22
+#define THEME_CHIP_PITCH 28
+#define THEME_RESET_Y 162           // the Reset button under them
 #define INFO_Y      24              // song info: first row
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here
@@ -158,6 +165,9 @@ typedef struct {
 
     Settings set;
     Theme theme;
+    int theme_sel;              // theme page: 0 accent, 1 background, 2 text
+    Hsv theme_hsv;              // that colour, as the picker shows it
+    int theme_drag;             // CP_RING or CP_TRIANGLE while the stylus drags
     bool album_queue;           // the queue is one album
 
     uint32_t frame;             // time in 1/30 s (scrolling text, the record)
@@ -194,6 +204,7 @@ int ui_rowmenu_y(int row_y);
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
 int ui_set_count(int page);
+int ui_cover_bg_contrast(const uint16_t *cover);    // for the tests
 const SetItem *ui_set_item(int page, int i);
 int app_song_rating(uint32_t t);        // stars shown: given on the DS, else from the tags, else 0
 uint32_t app_song_plays(uint32_t t);    // plays from the tags + plays on the DS

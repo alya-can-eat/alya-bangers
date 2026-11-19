@@ -48,8 +48,13 @@ or folder, a player screen with a turning record, a queue you can edit.
   - *Browsing:* case-sensitive names, scroll all long rows
   - *Player:* time on the right (length or time left), cover background,
     shuffle by rating
-  - *Theme* (colours) and *Regional* (language, date and time format):
-    marked "later", they say what they'll hold
+  - *Theme:* the app's three colours (accent, background, text), picked on
+    a colour triangle: the ring chooses the hue, the triangle (pure hue,
+    white, black at its corners) how strong and bright. Every other colour
+    is mixed from these three, and the whole app changes as you drag.
+    Up / Down choose the colour, Left / Right turn its hue. *Reset* (always
+    in fixed colours, findable with any theme) brings back the default.
+  - *Regional* (language, date and time format): marked "later"
   - *About:* name, version, licence, where the code lives
 - **Rating and plays (ⓘ song info):** tap a star to give the song that many
   (the last lit one again: none), or use Left / Right. A song counts as
@@ -87,7 +92,10 @@ drag it. Settings pages slide in from the right. The record has a
 soft purple glare at the top left. In player mode the top screen's
 background is the cover, blurred and darkened (Settings → Player → Cover background).
 A new song's background is made a slice per frame while the covers move and
-faded in once they have settled.
+faded in once they have settled. A very dark cover would melt into its dark
+background (on the DS screen, everything below about 24 of 255 looks
+black), so then the background gets lighter; covers that stand out keep it
+as it is.
 Closing the lid fades both screens to black before the light goes off;
 opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
 "drops: N" appears at the top. Tell me if you see it on real hardware.
@@ -179,8 +187,8 @@ icon of the `.nds` file.
 ## Not yet
 
 Search, playlists, genre and other tags as tabs, colours from the cover,
-gapless playback, the contents of the Theme (colours) and Regional
-(language, date and time format) settings pages.
+gapless playback, the Regional settings page (language, date and time
+format).
 
 ## Licence
 
