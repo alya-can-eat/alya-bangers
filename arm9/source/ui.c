@@ -1565,6 +1565,47 @@ static void big_next(int cx, int cy, uint16_t c, bool flip)
     gfx_fill(B, s > 0 ? bx : bx - 2, cy - 9, 3, 19, c);
 }
 
+// Is (x, y) on the artist's name in the player's top line, where it is
+// drawn right now (the line scrolls)? Same layout as draw_player_area.
+bool ui_player_artist_at(int x, int y)
+{
+    if (y < 2 || y >= 28 || player_path() == NULL)
+        return false;
+    SongText st;
+    song_text(app_current_track(), &st);
+    if (!st.artist[0])
+        return false;
+    const char *segs[3] = { st.artist, " – ", st.title };
+    char all[600];
+    snprintf(all, sizeof(all), "%s%s%s", segs[0], segs[1], segs[2]);
+    int jp = font_has_kana(all), aw = 0, tw = 0;
+    for (int i = 0; i < 3; i++)
+    {
+        int w = font_draw_ex(B, SCREEN_W, -100, 0, 0, segs[i], 0, jp, 1);   // measure only
+        if (i == 0)
+            aw = w;
+        tw += w;
+    }
+    const int lx = 8, lw = 240;
+    int starts[2], n = 0;
+    if (tw <= lw)
+        starts[n++] = lx + (lw - tw) / 2;
+    else
+    {
+        int period = tw + GAP;
+        uint32_t tt = app.frame % (HOLD_FRAMES + period);
+        int off = tt < HOLD_FRAMES ? 0 : (int)(tt - HOLD_FRAMES);
+        starts[n++] = lx - off;
+        starts[n++] = lx - off + period;
+    }
+    if (x < lx || x >= lx + lw)
+        return false;
+    for (int i = 0; i < n; i++)
+        if (x >= starts[i] - 4 && x < starts[i] + aw + 4)
+            return true;
+    return false;
+}
+
 static bool draw_player_area(void)
 {
     gfx_fill(B, 0, 0, SCREEN_W, PANEL_DOWN, C_BG);

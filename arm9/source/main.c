@@ -864,6 +864,28 @@ static void tap_browser(int x, int y)
     redraw = true;
 }
 
+// The artist of a song in the browser: its albums, the song's one selected.
+static void browse_artist_of(uint32_t t)
+{
+    if (t == LIB_NONE)
+        return;
+    int g = lib_track_group(t);
+    if (g < 0)
+        return;
+    app.artist = g;
+    app.album = LIB_NONE;
+    show_tab(TAB_ALBUM);
+    uint32_t album = lib_track(t)->album;
+    for (int i = 0; i < app.n_items; i++)
+        if (app.items[i].kind == ITEM_ALBUM && app.items[i].id == album)
+        {
+            select_index(i);
+            break;
+        }
+    slide_to(false);
+    redraw = true;
+}
+
 static void tap_player(int x, int y)
 {
     if (y >= PANEL_DOWN)
@@ -912,6 +934,11 @@ static void tap_player(int x, int y)
             }
         }
         redraw = true;
+        return;
+    }
+    if (ui_player_artist_at(x, y))
+    {
+        browse_artist_of(app_current_track());
         return;
     }
     int cy = 100;

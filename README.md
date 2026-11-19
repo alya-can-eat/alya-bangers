@@ -56,6 +56,9 @@ or folder, a player screen with a turning record, a queue you can edit.
     in fixed colours, findable with any theme) brings back the default.
   - *Regional* (language, date and time format): marked "later"
   - *About:* name, version, licence, where the code lives
+- **The artist in the player** (start of the top line): tap it for the
+  artist's albums in the browser, with the playing song's album selected.
+  The line scrolls, so the tap goes by where the name is right then.
 - **Rating and plays (ⓘ song info):** tap a star to give the song that many
   (the last lit one again: none), or use Left / Right. A song counts as
   played once you've listened to half of it or 4 minutes, whichever comes

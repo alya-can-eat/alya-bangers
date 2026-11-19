@@ -627,6 +627,36 @@ int main(int argc, char **argv)
     }
     press(KEY_B);
     check(app.overlay == OV_NONE && app.player_mode, "B closes the song info");
+    // the artist's name in the player's top line: its albums in the browser
+    {
+        uint32_t cur = app_current_track();
+        int ax = -1, tx = -1;
+        for (int k = 0; k < 400 && ax < 0; k++)
+        {
+            for (int x = 8; x < 248 && ax < 0; x++)
+                if (ui_player_artist_at(x, 12) && ui_player_artist_at(x + 12, 12))
+                    ax = x;
+            if (ax < 0)
+                run(1);
+        }
+        for (int x = 247; x >= 8; x--)
+            if (!ui_player_artist_at(x, 12))
+            {
+                tx = x;
+                break;
+            }
+        check(ax >= 0 && tx >= 0, "the artist's name is found in the player's top line");
+        tap(tx, 12);
+        check(app.player_mode, "a tap next to it does nothing");
+        tap(ax + 6, 12);
+        check(!app.player_mode && app.tab == TAB_ALBUM && app.artist == lib_track_group(cur),
+              "tapping the artist: its albums in the browser");
+        check(app.sel >= 0 && app.items[app.sel].id == lib_track(cur)->album, "with the playing song's album selected");
+        run(30);
+        shot("05c_artist_from_player");
+        slide_to(true);
+        run(30);
+    }
     press(KEY_B);
     check(!app.player_mode, "B in the player: back to browsing");
     run(30);
