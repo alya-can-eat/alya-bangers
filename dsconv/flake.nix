@@ -7,7 +7,7 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
-      pyDeps = ps: with ps; [ av soxr numpy mutagen pillow ];
+      pyDeps = ps: with ps; [ av soxr numpy mutagen pillow pykakasi pypinyin ];
     in
     {
       packages = forAll (pkgs: rec {

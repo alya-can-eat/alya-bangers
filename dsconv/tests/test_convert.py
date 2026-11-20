@@ -201,6 +201,17 @@ def test_index(converted):
     assert V[t["title"]] == "春風レター" and t["tags"]["artist"] == ["Kumoyuki"]
 
 
+def test_readings_for_search(converted):
+    _, dst, _ = converted
+    idx = read_index((dst / ".dsmusic" / "library.idx").read_bytes())
+    r = idx["readings"]
+    assert r["春風レター"][0] == "はるかぜれたー"                  # kana: 春 is found by はる
+    assert r["星之河 (feat. 林星月)"][1] == "xīng zhī hé (feat. lín xīng yuè)"   # pinyin: found by "lin"
+    assert "またねまたねまたね" not in r and "Kumoyuki" not in r  # no kanji, no reading needed
+    font = read_font((dst / ".dsmusic" / "font.bin").read_bytes())
+    assert all((ord(ch), 0) in font for ch in "línxīngyuèは")  # readings can be drawn
+
+
 def test_font_covers_library_text(converted):
     _, dst, _ = converted
     font = read_font((dst / ".dsmusic" / "font.bin").read_bytes())

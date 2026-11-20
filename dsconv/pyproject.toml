@@ -18,6 +18,8 @@ dependencies = [
     "numpy>=1.24",
     "mutagen>=1.46",
     "pillow>=10",
+    "pykakasi>=2.2",    # kana readings of kanji names, for searching on the DS
+    "pypinyin>=0.50",   # pinyin readings of Chinese names
 ]
 
 [project.optional-dependencies]

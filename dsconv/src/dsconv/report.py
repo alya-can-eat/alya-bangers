@@ -107,7 +107,8 @@ class Report:
                         f"{-worst:.1f} dB (ReplayGain values adjusted to match).")
         if self.index_stats:
             s = self.index_stats
-            head.append(f"Index: {s['tracks']} tracks, {s['albums']} albums, {s['values']} distinct tag values; "
+            head.append(f"Index: {s['tracks']} tracks, {s['albums']} albums, {s['values']} distinct tag values, "
+                        f"{s.get('readings', 0)} names with readings for search; "
                         f"font: {s['glyphs']} glyphs ({s['missing']} characters without a glyph).")
         self.lines = list(head)
         screen += head

@@ -196,7 +196,7 @@ player can load it whole (roughly 100–200 bytes per song).
 | 48 | u32 | tagrefs_offset |
 | 52 | u32 | albums_offset |
 | 56 | u32 | album_tracks_offset |
-| 60 | u32 | reserved (0) |
+| 60 | u32 | readings_offset (0 = none, see 2.9) |
 
 All tables start on a 4-byte boundary.
 
@@ -276,6 +276,25 @@ album.**
 
 `u32` track indices, per album in disc number, then track number, then path
 order.
+
+### 2.9 Readings (for search)
+
+Names with kanji or hanzi (values of `title`, `artist`, `album`,
+`albumartist`) get two readings, so the DS can find them without knowing
+Chinese or Japanese: 林星月 by "lin", 春風レター by "はる".
+
+```
+u32 count
+count × { u32 value id, u32 kana, u32 pinyin }    sorted by value id
+```
+
+`kana` and `pinyin` are string offsets (or `NONE`). Kana is the hiragana
+reading from pykakasi (`はるかぜれたー`), pinyin the reading with tone marks
+from pypinyin, other characters kept (`xīng zhī hé (feat. lín xīng yuè)`).
+Every name gets both: whether a name is Chinese or Japanese isn't known, and
+a wrong reading only means a match nobody types. Players that don't know
+this table ignore the offset; without pykakasi and pypinyin installed the
+converter writes no table.
 
 ---
 

@@ -60,6 +60,51 @@ def _indexable(key: str) -> bool:
     return key not in INDEX_SKIP and not key.startswith(INDEX_SKIP_PREFIX)
 
 
+# Search on the DS: names with kanji / hanzi get a kana and a pinyin reading,
+# so 林星月 is found by "lin" and 春 by "はる". Only the names the search looks at.
+READING_KEYS = ("title", "artist", "album", "albumartist")
+
+
+def _reading_tools():
+    """pykakasi and pypinyin, or None when they aren't installed (no readings then)."""
+    try:
+        import pykakasi
+        from pypinyin import Style, pinyin
+    except ImportError:
+        return None
+    kks = pykakasi.kakasi()
+
+    def kana(s: str) -> str:
+        return "".join(x["hira"] for x in kks.convert(s))
+
+    def py(s: str) -> str:
+        # runs of hanzi become syllables, everything else stays as it is: 星之河 (feat. 林星月)
+        # -> xīng zhī hé (feat. lín xīng yuè)
+        out = []
+        for run in re.split(f"({HAN.pattern}+)", s):
+            if run and HAN.match(run):
+                out.append(" ".join(p[0] for p in pinyin(run, style=Style.TONE)))
+            else:
+                out.append(run)
+        return "".join(out)
+
+    return kana, py
+
+
+def readings(values) -> dict[str, tuple[str | None, str | None]]:
+    """value -> (kana reading, pinyin reading) for every value with Han characters."""
+    tools = _reading_tools()
+    if tools is None:
+        return {}
+    kana, py = tools
+    out = {}
+    for v in values:
+        if HAN.search(v):
+            k, p = kana(v), py(v)
+            out[v] = (unicodedata.normalize("NFC", k) or None, unicodedata.normalize("NFC", p) or None)
+    return out
+
+
 class Strings:
     def __init__(self):
         self.data = bytearray()
@@ -108,6 +153,7 @@ def build_index(dst_root: Path) -> tuple[bytes, dict, set[str]]:
     # Pass 1: collect values and keys.
     values: set[str] = set()
     keys: set[str] = set()
+    searched: set[str] = set()      # the values search looks at (READING_KEYS)
     per_track = []
     for rel, f in tracks:
         t = {k: v for k, v in f.tags.items()}
@@ -120,6 +166,8 @@ def build_index(dst_root: Path) -> tuple[bytes, dict, set[str]]:
                     refs.append((k, v))
                     keys.add(k)
                     values.add(v)
+                    if k in READING_KEYS:
+                        searched.add(v)
         per_track.append((rel, f, t, refs))
 
     # Albums
@@ -194,6 +242,12 @@ def build_index(dst_root: Path) -> tuple[bytes, dict, set[str]]:
             title, v_of("titlesort", title), artist, v_of("artistsort", artist),
             min(_year(t), 0xFFFF), 0, 0))
 
+    # Readings: (value id, kana, pinyin), sorted by value id
+    reading_recs = []
+    for v, (k, p) in sorted(readings(searched).items(), key=lambda x: vid[x[0]]):
+        reading_recs.append(struct.pack("<III", vid[v], strings.add(k) if k else NONE_ID,
+                                        strings.add(p) if p else NONE_ID))
+
     album_recs, album_tracks = [], []
     for a in album_info:
         album_recs.append(struct.pack(
@@ -225,18 +279,19 @@ def build_index(dst_root: Path) -> tuple[bytes, dict, set[str]]:
     tagrefs_off = place(b"".join(tagrefs))
     albums_off = place(b"".join(album_recs))
     albumtracks_off = place(b"".join(album_tracks))
+    readings_off = place(struct.pack("<I", len(reading_recs)) + b"".join(reading_recs)) if reading_recs else 0
 
     header = struct.pack(
         "<4sHHIIIIIIIIIIIIII",
         b"DSIX", INDEX_VERSION, HDR, len(track_recs), len(key_list), len(value_list),
         len(album_recs), len(tagrefs), strings_off, len(strings.data), keys_off, values_off,
-        tracks_off, tagrefs_off, albums_off, albumtracks_off, 0)
+        tracks_off, tagrefs_off, albums_off, albumtracks_off, readings_off)
     assert len(header) == HDR
     data = header + b"".join(body)
 
     text = set(strings.off)  # every string the DS may draw
     stats = {"tracks": len(track_recs), "albums": len(album_recs), "values": len(value_list),
-             "keys": len(key_list), "unreadable": bad, "index_bytes": len(data)}
+             "keys": len(key_list), "readings": len(reading_recs), "unreadable": bad, "index_bytes": len(data)}
     return data, stats, text
 
 
@@ -327,7 +382,7 @@ def build_library_files(dst_root: Path) -> dict:
 
 def read_index(data: bytes) -> dict:
     (magic, version, hsize, n_tracks, n_keys, n_values, n_albums, n_refs, s_off, s_size,
-     k_off, v_off, t_off, r_off, a_off, at_off, _r) = struct.unpack_from("<4sHHIIIIIIIIIIIIII", data, 0)
+     k_off, v_off, t_off, r_off, a_off, at_off, rd_off) = struct.unpack_from("<4sHHIIIIIIIIIIIIII", data, 0)
     if magic != b"DSIX" or version != INDEX_VERSION:
         raise ValueError("not a library.idx of this version")
 
@@ -356,7 +411,13 @@ def read_index(data: bytes) -> dict:
         members = list(struct.unpack_from(f"<{count}I", data, at_off + 4 * first))
         albums.append(dict(name=name, sort=sort, albumartist=aa, albumartist_sort=aa_sort,
                            tracks=members, year=year, cover=cover, flags=flags))
-    return dict(keys=keys, values=values, tracks=tracks, albums=albums)
+    reads = {}
+    if rd_off:
+        (n,) = struct.unpack_from("<I", data, rd_off)
+        for i in range(n):
+            v, k, p = struct.unpack_from("<III", data, rd_off + 4 + 12 * i)
+            reads[values[v]] = (s(k) if k != NONE_ID else None, s(p) if p != NONE_ID else None)
+    return dict(keys=keys, values=values, tracks=tracks, albums=albums, readings=reads)
 
 
 def read_font(data: bytes) -> dict[tuple[int, int], dict]:

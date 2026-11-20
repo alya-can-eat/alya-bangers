@@ -51,6 +51,10 @@ just run the same command again after changing your library.
   adjusted to match).
 - **Keeps all tags** (multi-value too) under Quod Libet's key names, and
   ReplayGain values for the player to apply.
+- **Readings for search:** names with kanji or hanzi get a kana reading
+  (pykakasi) and a pinyin reading (pypinyin), so the DS finds 林星月 by
+  "lin" and 春 by "はる". Run dsconv again after updating and the index gets
+  them; nothing is reconverted.
 - **Covers:** embedded front cover first, then `cover.*` / `folder.*` /
   `front.*` / `album.*` in the folder, then the folder's only image. Disc
   subfolders (`Disc 1`, `Day Disc`, `1`, …) use the album folder's cover, so one

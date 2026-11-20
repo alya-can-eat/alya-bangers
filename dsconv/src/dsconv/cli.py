@@ -99,7 +99,8 @@ def _index(argv: list[str]) -> int:
     a = p.parse_args(argv)
     from .index import build_library_files
     s = build_library_files(a.output.expanduser().resolve())
-    print(f"{s['tracks']} tracks, {s['albums']} albums, {s['values']} values, {s['glyphs']} glyphs")
+    print(f"{s['tracks']} tracks, {s['albums']} albums, {s['values']} values, "
+          f"{s.get('readings', 0)} readings, {s['glyphs']} glyphs")
     for rel, err in s["unreadable"]:
         print(f"  unreadable: {rel}: {err}")
     return 0
