@@ -13,6 +13,13 @@ Version 1.0 (in the making), the DS Edition.
 
 Your music gets converted on the PC first with [dsconv](dsconv/), which is in this repo too (`dsconv/`). Everything else is the DS program.
 
+---
+
+> [!WARNING]
+> I just wanted to listen to my music on my DS on a player I like (and looks really cool lol), so I vibecoded it... Expect a huge part of this repo to be AI generated/asssited. Like I said, I just want to enjoy my music. :-)
+
+---
+
 > [!NOTE]
 > All pictures here are the app itself, taken by its screen test with a made-up library. The artists and songs don't exist.
 
