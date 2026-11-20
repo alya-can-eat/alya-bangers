@@ -1208,17 +1208,46 @@ static void theme_apply(void)
     redraw = true;
 }
 
-static void theme_reset(void)
+static void presets_open(bool open)
 {
-    app.theme = theme_default;
-    palette_make(&app.theme);
-    theme_select(app.theme_sel);
-    touch_state();
+    app.presets_open = open;
+    app.menu_sel = -1;
+    // the one in use is highlighted
+    for (int i = 0; open && i < THEME_PRESETS; i++)
+    {
+        const Theme *t = &theme_presets[i].theme;
+        if (t->bg == app.theme.bg && t->text == app.theme.text && t->acc == app.theme.acc)
+            app.menu_sel = i;
+    }
+    redraw = true;
+}
+
+static void preset_choose(int i)
+{
+    if (i >= 0 && i < THEME_PRESETS)
+    {
+        app.theme = theme_presets[i].theme;
+        palette_make(&app.theme);
+        theme_select(app.theme_sel);
+        touch_state();
+    }
+    presets_open(false);
 }
 
 // The stylus on the theme page (below the header). down: it just touched.
 static bool theme_touch(int x, int y, bool down)
 {
+    if (down && app.presets_open)
+    {
+        // a preset, or anywhere else: closed again
+        app.theme_drag = CP_NONE;
+        int r = (y - PRESET_Y - 20) / 16;
+        if (x >= PRESET_X0 && x < PRESET_X1 && y >= PRESET_Y + 20 && r < THEME_PRESETS)
+            preset_choose(r);
+        else
+            presets_open(false);
+        return true;
+    }
     if (down)
     {
         app.theme_drag = CP_NONE;
@@ -1233,9 +1262,9 @@ static bool theme_touch(int x, int y, bool down)
                     return true;
                 }
             }
-            if (y >= THEME_RESET_Y && y < THEME_RESET_Y + THEME_CHIP_H)
+            if (y >= THEME_PRESETS_Y && y < THEME_PRESETS_Y + THEME_CHIP_H)
             {
-                theme_reset();
+                presets_open(true);
                 return true;
             }
         }
@@ -1750,8 +1779,18 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     case OV_SETTINGS:
         if (app.set_page == PAGE_THEME)
         {
-            // Up / Down: which colour, Left / Right: its hue (the triangle is for the stylus)
-            if (down & KEY_B)
+            // Up / Down: which colour, Left / Right: its hue (the triangle is for
+            // the stylus), A: the presets
+            if (app.presets_open)
+            {
+                if (down & KEY_B)
+                    presets_open(false);
+                else
+                    menu_keys(rep, down, THEME_PRESETS, preset_choose);
+            }
+            else if (down & KEY_A)
+                presets_open(true);
+            else if (down & KEY_B)
                 set_back();
             else if (rep & (KEY_UP | KEY_DOWN))
                 theme_select(app.theme_sel + ((rep & KEY_DOWN) ? 1 : -1));
@@ -2194,6 +2233,20 @@ static void app_tick(void)
         redraw = true;
     }
 
+    // the preset themes rise out of their button (and are closed with the page)
+    if (app.presets_open && (app.overlay != OV_SETTINGS || app.set_page != PAGE_THEME))
+        app.presets_open = false;
+    {
+        int target = app.presets_open ? OV_TICKS : 0;
+        if (app.presets_t != target)
+        {
+            app.presets_t += app.presets_t < target ? (int)elapsed : -(int)elapsed;
+            if (app.presets_t > OV_TICKS) app.presets_t = OV_TICKS;
+            if (app.presets_t < 0) app.presets_t = 0;
+            redraw = true;
+        }
+    }
+
     // search: the keyboard comes up once the search page is in place, the
     // results move with it; while typing they come up on the top screen
     {
@@ -2275,7 +2328,8 @@ static void app_tick(void)
     // the highlights in the list, the menus and the queue glide to the selection
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
-    int menu_target = app.ov_vis == OV_SETTINGS ? app.menu_sel * SET_H
+    bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && app.presets_open;
+    int menu_target = app.ov_vis == OV_SETTINGS && !presets ? app.menu_sel * SET_H
                       : (app.ov_vis == OV_FILTER && app.fpage >= 0 ? (app.menu_sel - app.fscroll) * 16 : app.menu_sel * 16);
     static int fpage_was = -1;
     bool page_changed = app.set_page != page_was || app.fpage != fpage_was;

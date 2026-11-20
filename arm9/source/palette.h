@@ -34,6 +34,14 @@ typedef struct {
 extern uint16_t pal[P_COUNT];
 extern const Theme theme_default;
 
+// Themes to choose from on the Theme page; name: a text id (S_..., i18n.h)
+typedef struct {
+    uint16_t name;
+    Theme theme;
+} ThemePreset;
+#define THEME_PRESETS 2
+extern const ThemePreset theme_presets[THEME_PRESETS];
+
 void palette_make(const Theme *t);
 // Goes up with every palette_make, so cached drawings know to redo themselves.
 uint32_t palette_version(void);

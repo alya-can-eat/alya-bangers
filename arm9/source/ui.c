@@ -2543,6 +2543,41 @@ static uint16_t ink_on(uint16_t c)
 }
 
 // The colours to choose, Reset, and the colour triangle.
+static bool theme_is(const Theme *a, const Theme *b)
+{
+    return ((a->bg ^ b->bg) & 0x7FFF) == 0 && ((a->text ^ b->text) & 0x7FFF) == 0 && ((a->acc ^ b->acc) & 0x7FFF) == 0;
+}
+
+// The preset themes, rising out of their button; fixed colours, each with
+// its three colours, the one in use marked.
+static void presets_list(int dx)
+{
+    int p = ease_out(clamp256(app.presets_t * 256 / OV_TICKS));
+    int x0 = dx + PRESET_X0, x1 = dx + PRESET_X1, h = THEME_PRESETS_Y - 4 - PRESET_Y;
+    int y0 = PRESET_Y + h * (256 - p) / 256;
+    gfx_clip(B, x0 < 0 ? 0 : x0, PRESET_Y, x1, THEME_PRESETS_Y - 4);
+    gfx_fill(B, x0, y0, x1 - x0, h, COLOR(5, 5, 6));
+    gfx_rect(B, x0, y0, x1 - x0, h, COLOR(20, 20, 22));
+    text(B, x0 + 8, y0 + 2, txt(S_PRESETS), COLOR(18, 18, 20));
+    if (app.menu_sel >= 0)
+        gfx_fill(B, x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, COLOR(11, 11, 13));
+    for (int i = 0; i < THEME_PRESETS; i++)
+    {
+        const Theme *t = &theme_presets[i].theme;
+        int y = y0 + 20 + i * 16;
+        const uint16_t sw[3] = { t->bg, t->text, t->acc };
+        for (int k = 0; k < 3; k++)
+        {
+            gfx_fill(B, x0 + 8 + k * 11, y + 3, 10, 10, COLOR(16, 16, 18));
+            gfx_fill(B, x0 + 9 + k * 11, y + 4, 8, 8, sw[k] | 0x8000);
+        }
+        text(B, x0 + 46, y, txt(theme_presets[i].name), COLOR(31, 31, 31));
+        if (theme_is(t, &app.theme))
+            text_r(B, x1 - 8, y, "•", COLOR(31, 31, 31));
+    }
+    gfx_clip(B, dx < 0 ? 0 : dx, 0, SCREEN_W, SCREEN_H);
+}
+
 static void theme_body(int dx)
 {
     static const uint8_t names[3] = { S_ACCENT, S_BACKGROUND, S_TEXT };
@@ -2563,12 +2598,17 @@ static void theme_body(int dx)
         const char *s = txt(names[i]);
         text(B, x + (THEME_CHIP_W - font_text_width(s)) / 2, y + 3, s, ink_on(c));
     }
-    // Reset in fixed colours: findable whatever the theme
+    // Presets in fixed colours: findable whatever the theme, the way back
+    // from one that went wrong
     int x = dx + THEME_CHIP_X;
-    gfx_round_fill(B, x, THEME_RESET_Y, THEME_CHIP_W, THEME_CHIP_H, 4, COLOR(9, 9, 10));
-    const char *reset = txt(S_RESET);
-    text(B, x + (THEME_CHIP_W - font_text_width(reset)) / 2, THEME_RESET_Y + 3, reset, COLOR(31, 31, 31));
+    bool open = app.presets_open;
+    gfx_round_fill(B, x, THEME_PRESETS_Y, THEME_CHIP_W, THEME_CHIP_H, 4, open ? COLOR(31, 31, 31) : COLOR(9, 9, 10));
+    const char *ps = txt(S_PRESETS);
+    text(B, x + (THEME_CHIP_W - font_text_width(ps)) / 2, THEME_PRESETS_Y + 3, ps,
+         open ? COLOR(4, 4, 5) : COLOR(31, 31, 31));
     cp_draw(B, dx, app.theme_hsv);
+    if (app.presets_t > 0)
+        presets_list(dx);
 }
 
 // A settings page with its left edge at dx (pages slide in from the right).

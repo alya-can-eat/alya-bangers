@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "gfx.h"
+#include "i18n.h"
 #include "palette.h"
 
-// Alya's theme: a very dark purple, a pinkish white, a violet pink
-// (tools/gen_icon.py draws the icon in the same colours)
-const Theme theme_default = { COLOR(4, 0, 5), COLOR(31, 29, 31), COLOR(30, 17, 31) };
+// Ultraviolet (Alya's): a very dark purple, a pinkish white, a violet pink.
+// The default; tools/gen_icon.py draws the icon in the same colours.
+#define ULTRAVIOLET { COLOR(4, 0, 5), COLOR(31, 29, 31), COLOR(30, 17, 31) }
+// Midnight Rose: the first theme, near black, white, rose pink
+#define MIDNIGHT_ROSE { COLOR(2, 2, 4), COLOR(29, 29, 30), COLOR(31, 17, 23) }
+
+const Theme theme_default = ULTRAVIOLET;
+const ThemePreset theme_presets[THEME_PRESETS] = {
+    { S_PRESET_ULTRAVIOLET, ULTRAVIOLET },
+    { S_PRESET_MIDNIGHT_ROSE, MIDNIGHT_ROSE },
+};
 
 uint16_t pal[P_COUNT];
 static uint32_t version;

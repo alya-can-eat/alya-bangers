@@ -79,8 +79,10 @@ edit, ratings and plays, themes, in English or German.
     a colour triangle: the ring chooses the hue, the triangle (pure hue,
     white, black at its corners) how strong and bright. Every other colour
     is mixed from these three, and the whole app changes as you drag.
-    Up / Down choose the colour, Left / Right turn its hue. *Reset* (always
-    in fixed colours, findable with any theme) brings back the default.
+    Up / Down choose the colour, Left / Right turn its hue. *Presets* (A;
+    always in fixed colours, findable with any theme): *Ultraviolet* (the
+    default: dark purple, pinkish white, violet pink) and *Midnight Rose*
+    (the first theme: near black, white, rose pink).
   - *Regional:* the language (English or German, German in Swiss spelling)
     and the search keyboard (QWERTY or QWERTZ).
     The language changes at once, everywhere.

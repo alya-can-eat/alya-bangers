@@ -576,15 +576,35 @@ int main(int argc, char **argv)
               "dragging to the white corner: a white accent");
     }
     shot("13g_theme_changed");
-    tap(THEME_CHIP_X + 20, THEME_RESET_Y + 10);
-    check(app.theme.bg == theme_default.bg && app.theme.acc == theme_default.acc && C_ACC == theme_default.acc,
-          "Reset: the default theme");
+    // Presets: the list rises out of its button; Midnight Rose, then Ultraviolet by D-pad
+    tap(THEME_CHIP_X + 20, THEME_PRESETS_Y + 10);
+    check(app.presets_open && app.menu_sel == -1, "Presets: the list, nothing marked (a theme of my own)");
+    run(OV_TICKS / 2);
+    shot("13h_presets_rising");
+    run(OV_TICKS);
+    shot("13i_presets");
+    tap(PRESET_X0 + 60, PRESET_Y + 20 + 1 * 16 + 8);
+    check(!app.presets_open && app.theme.bg == theme_presets[1].theme.bg && app.theme.acc == theme_presets[1].theme.acc
+          && C_ACC == theme_presets[1].theme.acc, "Midnight Rose: the first theme");
+    run(OV_TICKS + 2);
+    shot("13j_midnight_rose");
+    press(KEY_A);
+    check(app.presets_open && app.menu_sel == 1, "A: the presets, Midnight Rose highlighted");
+    run(OV_TICKS + 2);
+    press(KEY_UP);
+    press(KEY_A);
+    check(!app.presets_open && app.theme.bg == theme_default.bg && app.theme.acc == theme_default.acc
+          && C_ACC == theme_default.acc, "Up, A: Ultraviolet, the default theme");
+    run(OV_TICKS + 2);
     press(KEY_DOWN);
     check(app.theme_sel == 1, "Down: the next colour");
     int h0 = app.theme_hsv.h;
     press(KEY_RIGHT);
     check(app.theme_hsv.h == (h0 + 16) % CP_HUES && app.set_page == PAGE_THEME, "Right turns the hue (and stays)");
-    tap(THEME_CHIP_X + 20, THEME_RESET_Y + 10);
+    tap(THEME_CHIP_X + 20, THEME_PRESETS_Y + 10);
+    run(OV_TICKS + 2);
+    tap(PRESET_X0 + 60, PRESET_Y + 20 + 8);
+    check(app.theme.acc == theme_default.acc, "back to Ultraviolet");
     press(KEY_B);
     run(20);
     check(app.set_page == PAGE_TOP, "B leaves the Theme page");
@@ -1291,7 +1311,9 @@ int main(int argc, char **argv)
             for (int i = 0; i < 3; i++)
                 fit &= font_text_width(txt(S_TAB_ARTIST + i)) <= tab_x[i + 1] - tab_x[i] - 8;
             fit &= font_text_width(txt(S_ACCENT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_BACKGROUND)) <= THEME_CHIP_W - 4
-                   && font_text_width(txt(S_TEXT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_RESET)) <= THEME_CHIP_W - 4;
+                   && font_text_width(txt(S_TEXT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_PRESETS)) <= THEME_CHIP_W - 4
+                   && font_text_width(txt(S_PRESET_MIDNIGHT_ROSE)) <= PRESET_X1 - PRESET_X0 - 46 - 16
+                   && font_text_width(txt(S_PRESET_ULTRAVIOLET)) <= PRESET_X1 - PRESET_X0 - 46 - 16;
             for (int i = 0; i < 3; i++)
                 fit &= font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4;       // the row menu
             for (int i = S_SORT_ARTISTS; i <= S_SORT_FOLDERS; i++)

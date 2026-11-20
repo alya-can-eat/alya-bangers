@@ -46,7 +46,10 @@
 #define THEME_CHIP_Y 28
 #define THEME_CHIP_H 22
 #define THEME_CHIP_PITCH 28
-#define THEME_RESET_Y 162           // the Reset button under them
+#define THEME_PRESETS_Y 162         // the Presets button under them
+#define PRESET_X0   4               // the list of presets, over the button
+#define PRESET_X1   180
+#define PRESET_Y    (THEME_PRESETS_Y - 4 - (20 + 16 * THEME_PRESETS + 4))
 #define INFO_Y      24              // song info: first row
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here at least (ui_info_value_x)
@@ -192,6 +195,8 @@ typedef struct {
     int theme_sel;              // theme page: 0 accent, 1 background, 2 text
     Hsv theme_hsv;              // that colour, as the picker shows it
     int theme_drag;             // CP_RING or CP_TRIANGLE while the stylus drags
+    bool presets_open;          // the list of preset themes is open
+    int presets_t;              // it rises out of its button: 0 .. OV_TICKS
     bool album_queue;           // the queue is one album
 
     uint32_t frame;             // time in 1/30 s (scrolling text, the record)
