@@ -16,7 +16,7 @@ from dsconv.dsa import FLAG_COVER, open_dsa
 from dsconv.index import read_font, read_index
 from dsconv.manifest import Manifest
 
-YT = "YouTube Music"
+SINGLES = "Singles"
 
 
 @pytest.fixture(scope="session")
@@ -52,13 +52,13 @@ def test_tree_is_mirrored_with_fat32_names(converted):
         "Bandcamp/Kivara/Kivara - Paper Archive vol.1/Kivara - Paper Archive vol.1 - 01 またねまたねまたね.dsa",
         "CD/Mörli - Bergwind/Track 10.dsa",
         "CD/GrEaT NO.2 sOnGs/Disc 2/Track 1.dsa",
-        f"{YT}/VXLTRA - 00：00.dsa",
-        f"{YT}/Brassfox - Good F＊＊King Noise.dsa",
-        f"{YT}/Dear Wren....dsa",                      # dots before .dsa are fine
+        f"{SINGLES}/VXLTRA - 00：00.dsa",
+        f"{SINGLES}/Brassfox - Good F＊＊King Noise.dsa",
+        f"{SINGLES}/Dear Wren....dsa",                      # dots before .dsa are fine
         "Bandcamp/Demos\uFF0E\uFF0E\uFF0E/demo.dsa",          # folder: trailing dots -> ．
-        f"{YT}/CON_.dsa",
-        f"{YT}/Kid 🎵 Song.dsa",
-        f"{YT}/Lúa - 5 Phút Mơ.dsa",   # NFC, although the source name was NFD
+        f"{SINGLES}/CON_.dsa",
+        f"{SINGLES}/Kid 🎵 Song.dsa",
+        f"{SINGLES}/Lúa - 5 Phút Mơ.dsa",   # NFC, although the source name was NFD
         "KIVARA/a.dsa", "KIVARA/b.dsa",      # Kivara/ and KIVARA/ merged
     ]
     for rel in expect:
@@ -101,9 +101,9 @@ def test_audio_rate_length_and_channels(converted):
 
 def test_padding_after_last_frame_is_silent(converted):
     _, dst, _ = converted
-    f = dsa(dst, f"{YT}/Tide Drive.dsa")
+    f = dsa(dst, f"{SINGLES}/Tide Drive.dsa")
     h = f.header
-    with (dst / f"{YT}/Tide Drive.dsa").open("rb") as fh:
+    with (dst / f"{SINGLES}/Tide Drive.dsa").open("rb") as fh:
         fh.seek(h["audio_offset"] + (h["block_count"] - 1) * BLOCK_FRAMES * 2 * h["channels"])
         last = np.frombuffer(fh.read(BLOCK_FRAMES * 2 * h["channels"]), "<i2").reshape(h["channels"], BLOCK_FRAMES)
     used = h["frame_count"] - (h["block_count"] - 1) * BLOCK_FRAMES
@@ -113,13 +113,13 @@ def test_padding_after_last_frame_is_silent(converted):
 def test_mono_stays_mono_and_surround_becomes_stereo(converted):
     _, dst, _ = converted
     assert dsa(dst, "Soundcloud/Mono Voice.dsa").channels == 1
-    assert dsa(dst, f"{YT}/Surround Test.dsa").channels == 2
+    assert dsa(dst, f"{SINGLES}/Surround Test.dsa").channels == 2
 
 
 def test_lossy_lengths_respect_encoder_delay(converted):
     _, dst, _ = converted
-    for rel, seconds in [(f"{YT}/VXLTRA - 00：00.dsa", 0.5),
-                         (f"{YT}/Corin Vale - Skyward.dsa", 0.6),
+    for rel, seconds in [(f"{SINGLES}/VXLTRA - 00：00.dsa", 0.5),
+                         (f"{SINGLES}/Corin Vale - Skyward.dsa", 0.6),
                          ("Soundcloud/minto - 星之河 (feat. 林星月).dsa", 0.8)]:
         frames = dsa(dst, rel).header["frame_count"]
         assert abs(frames / SAMPLE_RATE - seconds) < 0.03, rel
@@ -131,21 +131,21 @@ def test_tags_are_read_from_every_container(converted):
     assert t["title"] == ["またねまたねまたね"] and t["genre"] == ["Breakcore", "Electronic"]
     t = dsa(dst, "Soundcloud/minto - 星之河 (feat. 林星月).dsa").tags
     assert t["title"] == ["星之河 (feat. 林星月)"] and t["artist"] == ["minto"] and t["~codec"] == ["MP3"]
-    t = dsa(dst, f"{YT}/Corin Vale - Skyward.dsa").tags
+    t = dsa(dst, f"{SINGLES}/Corin Vale - Skyward.dsa").tags
     assert t["title"] == ["Skyward"] and t["tracknumber"] == ["3/9"]
     t = dsa(dst, "CD/Cobalt Engine/01-Dream Made Of Glass-mastered v4 24bit.dsa").tags
     assert t["title"] == ["Dream Made Of Glass"] and t["album"] == ["PRISM"] and t["~source_bits"] == ["24"]
-    t = dsa(dst, f"{YT}/Lúa - 5 Phút Mơ.dsa").tags
+    t = dsa(dst, f"{SINGLES}/Lúa - 5 Phút Mơ.dsa").tags
     assert t["title"] == ["5 Phút Mơ"]    # NFC
-    t = dsa(dst, f"{YT}/VXLTRA - 00：00.dsa").tags
-    assert t["~source"] == [f"{YT}/VXLTRA - 00:00.opus"]
+    t = dsa(dst, f"{SINGLES}/VXLTRA - 00：00.dsa").tags
+    assert t["~source"] == [f"{SINGLES}/VXLTRA - 00:00.opus"]
 
 
 def test_replaygain(converted):
     _, dst, _ = converted
     h = dsa(dst, "Soundcloud/minto - 星之河 (feat. 林星月).dsa").header
     assert h["flags"] & 2 and h["rg_track_gain_mdb"] == -6500
-    h = dsa(dst, f"{YT}/VXLTRA - 00：00.dsa").header
+    h = dsa(dst, f"{SINGLES}/VXLTRA - 00：00.dsa").header
     assert h["flags"] & 2 and h["rg_track_gain_mdb"] == 3000   # R128 -512/256 = -2 dB, +5 dB
 
 
@@ -164,7 +164,7 @@ def test_cover_priority(converted):
     c, edge = _center_and_corner(dsa(dst, "Bandcamp/Kivara/Kivara - Paper Archive vol.1/Kivara - Paper Archive vol.1 - 01 またねまたねまたね.dsa"))
     assert edge[0] > 150 and edge[1] < 60
     # 16:9 thumbnail cropped to the centre: white square spans half the width
-    f = dsa(dst, f"{YT}/Brassfox - Good F＊＊King Noise.dsa")
+    f = dsa(dst, f"{SINGLES}/Brassfox - Good F＊＊King Noise.dsa")
     from dsconv.cover import bgr555_to_image
     img = bgr555_to_image(f.read_cover(), 128)
     row = [img.getpixel((x, 64)) for x in range(128)]
@@ -175,9 +175,9 @@ def test_cover_priority(converted):
 
 def test_collisions_prefer_better_format(converted):
     _, dst, _ = converted
-    assert dsa(dst, f"{YT}/Tide Drive.dsa").tags["~codec"] == ["FLAC"]
-    pebble = list((dst / YT).glob("[Pp][Ee][Bb][Bb][Ll][Ee].dsa"))
-    assert len(pebble) == 1 and dsa(dst, f"{YT}/{pebble[0].name}").tags["~codec"] == ["Opus"]
+    assert dsa(dst, f"{SINGLES}/Tide Drive.dsa").tags["~codec"] == ["FLAC"]
+    pebble = list((dst / SINGLES).glob("[Pp][Ee][Bb][Bb][Ll][Ee].dsa"))
+    assert len(pebble) == 1 and dsa(dst, f"{SINGLES}/{pebble[0].name}").tags["~codec"] == ["Opus"]
     m = Manifest(dst)
     assert len(m.choices) == 2
 
@@ -195,7 +195,7 @@ def test_index(converted):
     assert V[halcyon["albumartist"]] == "300 Lanterns" and halcyon["year"] == 2021
     best = albums["GrEaT NO.2 sOnGs"]           # Disc 1/ and Disc 2/ form one album
     assert [idx["tracks"][i]["disc"] for i in best["tracks"]] == [1, 2]
-    assert "YouTube Music" not in albums       # no album tag, no album
+    assert "Singles" not in albums       # no album tag, no album
     assert V == sorted(V, key=__import__("dsconv.collate", fromlist=["sort_key"]).sort_key)
     t = next(t for t in idx["tracks"] if t["path"].endswith("春風レター.dsa"))
     assert V[t["title"]] == "春風レター" and t["tags"]["artist"] == ["Kumoyuki"]
@@ -262,21 +262,21 @@ def test_dry_run_writes_nothing(library, tmp_path):
 
 def test_interactive_collision_choice_is_remembered(library, tmp_path, monkeypatch):
     src, _ = library
-    small = tmp_path / "src" / YT
+    small = tmp_path / "src" / SINGLES
     small.mkdir(parents=True)
     for n in ("Tide Drive.flac", "Tide Drive.opus"):
-        shutil.copy2(src / YT / n, small / n)
+        shutil.copy2(src / SINGLES / n, small / n)
     dst = tmp_path / "out"
     answers = iter(["9", "2"])  # an invalid answer first, then the Opus file
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
     assert run_convert(tmp_path / "src", dst, jobs=1, quiet=True) == 0
-    assert open_dsa(dst / YT / "Tide Drive.dsa").tags["~codec"] == ["Opus"]
+    assert open_dsa(dst / SINGLES / "Tide Drive.dsa").tags["~codec"] == ["Opus"]
     # second run: no question, same choice
     monkeypatch.setattr("builtins.input", lambda prompt="": pytest.fail("asked twice"))
     assert run_convert(tmp_path / "src", dst, jobs=1, quiet=True) == 0
-    assert open_dsa(dst / YT / "Tide Drive.dsa").tags["~codec"] == ["Opus"]
+    assert open_dsa(dst / SINGLES / "Tide Drive.dsa").tags["~codec"] == ["Opus"]
 
 
 def test_damaged_file_is_reported_not_fatal(tmp_path):

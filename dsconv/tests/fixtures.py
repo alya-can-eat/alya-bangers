@@ -184,34 +184,34 @@ def build_library(root: Path) -> dict:
     p = encode(sc / "Mono Voice.mp3", "libmp3lame", 22050, channels=1, seconds=0.5, bitrate=64000)
     tag_mp3(p, "Mono Voice", "Someone")
 
-    yt = root / "YouTube Music"
-    p = encode(yt / "VXLTRA - 00:00.opus", "libopus", 48000, seconds=0.5, bitrate=128000, fmt="ogg")
+    singles = root / "Singles"
+    p = encode(singles / "VXLTRA - 00:00.opus", "libopus", 48000, seconds=0.5, bitrate=128000, fmt="ogg")
     tag_opus(p, title="00:00", artist="VXLTRA", r128_track_gain="-512")
-    p = encode(yt / "Brassfox - Good F**King Noise.opus", "libopus", 48000, seconds=0.5, fmt="ogg")
+    p = encode(singles / "Brassfox - Good F**King Noise.opus", "libopus", 48000, seconds=0.5, fmt="ogg")
     tag_opus(p, picture=jpg_thumb, title="Good F**King Noise", artist="Brassfox")
-    p = encode(yt / "Kumoyuki - 春風レター.opus", "libopus", 48000, seconds=0.4, fmt="ogg")
+    p = encode(singles / "Kumoyuki - 春風レター.opus", "libopus", 48000, seconds=0.4, fmt="ogg")
     tag_opus(p, title="春風レター", artist="Kumoyuki")
-    p = encode(yt / "Corin Vale - Skyward.m4a", "aac", 44100, seconds=0.6, fmt="ipod", bitrate=128000)
+    p = encode(singles / "Corin Vale - Skyward.m4a", "aac", 44100, seconds=0.6, fmt="ipod", bitrate=128000)
     tag_m4a(p, picture=red, **{"\xa9nam": "Skyward", "\xa9ART": "Corin Vale", "trkn": [(3, 9)]})
-    p = encode(yt / "Kid 🎵 Song.opus", "libopus", 48000, seconds=0.3, fmt="ogg")
+    p = encode(singles / "Kid 🎵 Song.opus", "libopus", 48000, seconds=0.3, fmt="ogg")
     tag_opus(p, title="Kid 🎵 Song", artist="Kid")
     # Vietnamese, file name written in decomposed (NFD) form as macOS would
     nfd = unicodedata.normalize("NFD", "Lúa - 5 Phút Mơ.opus")
-    p = encode(yt / nfd, "libopus", 48000, seconds=0.3, fmt="ogg")
+    p = encode(singles / nfd, "libopus", 48000, seconds=0.3, fmt="ogg")
     tag_opus(p, title=unicodedata.normalize("NFD", "5 Phút Mơ"), artist="Lúa")
     # Collisions: same stem, different format; and case-only difference
-    p = encode(yt / "Tide Drive.flac", "flac", 44100, seconds=0.4, freq=500)
+    p = encode(singles / "Tide Drive.flac", "flac", 44100, seconds=0.4, freq=500)
     tag_flac(p, title="Tide Drive (FLAC)", artist="Velvet Harbor")
-    p = encode(yt / "Tide Drive.opus", "libopus", 48000, seconds=0.4, fmt="ogg", freq=700)
+    p = encode(singles / "Tide Drive.opus", "libopus", 48000, seconds=0.4, fmt="ogg", freq=700)
     tag_opus(p, title="Tide Drive (Opus)", artist="Velvet Harbor")
-    p = encode(yt / "pebble.mp3", "libmp3lame", 44100, seconds=0.3, bitrate=320000)
+    p = encode(singles / "pebble.mp3", "libmp3lame", 44100, seconds=0.3, bitrate=320000)
     tag_mp3(p, "pebble (mp3)", "Pebble")
-    p = encode(yt / "PEBBLE.opus", "libopus", 48000, seconds=0.3, fmt="ogg")
+    p = encode(singles / "PEBBLE.opus", "libopus", 48000, seconds=0.3, fmt="ogg")
     tag_opus(p, title="PEBBLE (opus)", artist="Pebble")
     # Trailing dots, reserved name, surround
-    p = encode(yt / "Dear Wren....flac", "flac", 44100, seconds=0.3)
-    encode(yt / "CON.flac", "flac", 44100, seconds=0.3)
-    encode(yt / "Surround Test.flac", "flac", 48000, channels=6, seconds=0.3)
+    p = encode(singles / "Dear Wren....flac", "flac", 44100, seconds=0.3)
+    encode(singles / "CON.flac", "flac", 44100, seconds=0.3)
+    encode(singles / "Surround Test.flac", "flac", 48000, channels=6, seconds=0.3)
 
     # A brick-walled master: a full-scale square wave overshoots after resampling
     t = np.arange(int(44100 * 0.8)) / 44100

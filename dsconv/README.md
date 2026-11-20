@@ -119,3 +119,6 @@ frequencies, block layout, index and font.
 GPL-2.0-or-later with the font embedding exception (see `LICENSES/`).
 
 Code: <https://github.com/alya-can-eat>
+
+dsconv is part of an unofficial homebrew project, not affiliated with or
+endorsed by Nintendo. Nintendo DS is a trademark of Nintendo.

@@ -314,3 +314,24 @@ with it).
 Makefiles: BlocksDS templates (CC0).
 
 Code: <https://github.com/alya-can-eat>
+
+### Third-party code in the `.nds`
+
+Besides the code of this repository, a built `alya-bangers.nds` contains:
+
+| Part | Licence | Notice |
+|---|---|---|
+| libnds (BlocksDS) | zlib | none needed in a binary |
+| BlocksDS crts (start-up code, linker scripts), © 2023, 2025 Antonio Niño Díaz | Mozilla Public License 2.0 (`LICENSES/MPL-2.0.txt`) | source: <https://codeberg.org/blocksds/sdk/src/branch/master/sys/crts> |
+| picolibc (the C library of the Wonderful toolchain) | BSD-style licences | all copyright notices: `LICENSES/picolibc-COPYING.txt` |
+| libgcc | GPL v3 with the GCC Runtime Library Exception | none needed |
+| GNU Unifont glyphs | GPL-2.0-or-later with the font embedding exception | `LICENSES/GPL-2.0.txt`, `LICENSES/Unifont-NOTICE.txt` |
+
+Whoever publishes an `.nds` built from this code passes on `LICENSE`, the
+`LICENSES/` folder and where the source is (this repository) along with it.
+
+### Trademarks
+
+alya-bangers is an unofficial homebrew project, not affiliated with or
+endorsed by Nintendo. Nintendo DS and Nintendo DS Lite are trademarks of
+Nintendo.

@@ -93,7 +93,7 @@ for a, t in [("Keito Hayama", "終ワリノ鐘"), ("Keiji Onoda", "取リ残サ�
              ("Ken Aoba", "Secondhand"), ("kensei umino", "Rocketry"), ("Kenna Gray", "Strangeness"),
              ("Kivara feat. Ombo", "Altogether"), ("Kivara x Lumen The Moth", "Hushed"), ("King Marrow", "Pigeonhole"),
              ("Aethel", "Sunward"), ("D512", "Norrland")]:
-    song(f"{SRC}/YouTube Music/{a} - {t}.opus", 4, 260, title=t, artist=a)
+    song(f"{SRC}/Singles/{a} - {t}.opus", 4, 260, title=t, artist=a)
 song(f"{SRC}/CD/Track 01.flac", 4, 200)   # no tags at all
 
 
@@ -115,7 +115,7 @@ for a, t, g in [("洛星涵", "星之河", "Vocal Synth"), ("洛星涵", "Glint"
                 ("NEKO*09", "ラビットロード", "Vocal Synth"), ("Витор", "Ария №3", "Pop"), ("Винил", "Ива", "Pop"),
                 ("Gölmo", "Schwalbe", "Rock"), ("Velvet Harbor", "Golden Hours", "Electronic"),
                 ("Velvet Harbor", "Goodbye Again", "Electronic")]:
-    song(f"{SRC}/YouTube Music/{a} - {t}.opus", 3, 240, title=t, artist=a, genre=g)
+    song(f"{SRC}/Singles/{a} - {t}.opus", 3, 240, title=t, artist=a, genre=g)
 
 env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "dsconv", "src"))
 subprocess.run([sys.executable, "-m", "dsconv", SRC, CARD, "--yes"], check=True, env=env)
