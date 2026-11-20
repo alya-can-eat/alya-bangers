@@ -1,5 +1,5 @@
 # alya-bangers
-Music player for the Nintendo DS, made for the DS Lite with a DSpico. :-)
+Music player for the Nintendo DS, requires a flashcart. :-)
 
 Version 1.0 (in the making), the DS Edition.
 
