@@ -14,9 +14,21 @@ def c5(r, g, b):
     f = lambda v: (v << 3) | (v >> 2)
     return (f(r), f(g), f(b))
 
+# the default theme (theme_default in arm9/source/palette.c): background, text, accent
+BG, TEXT, ACC = (4, 0, 5), (31, 29, 31), (30, 17, 31)
+
+
+def toward(a, b, k):
+    """k/256 of the way from a to b, like palette.c."""
+    return tuple((x * (256 - k) + y * k + 128) >> 8 for x, y in zip(a, b))
+
+
 P = {
-    "bg": c5(2, 2, 4), "edge": c5(31, 17, 23), "vinyl": c5(4, 4, 6), "groove": c5(7, 7, 10),
-    "rim": c5(12, 12, 15), "label": c5(18, 10, 14), "sky0": c5(5, 3, 11), "sky1": c5(10, 5, 15),
+    # the record follows the theme (mixes fitted to the hand-picked icon of the first theme)
+    "bg": c5(*BG), "edge": c5(*ACC), "vinyl": c5(*toward(BG, TEXT, 19)), "groove": c5(*toward(BG, TEXT, 52)),
+    "rim": c5(*toward(BG, TEXT, 92)), "label": c5(*toward(BG, ACC, 138)),
+    # the moonlit cover is the default cover art, the same in every theme
+    "sky0": c5(5, 3, 11), "sky1": c5(10, 5, 15),
     "sky2": c5(19, 10, 18), "moon": c5(31, 28, 27), "mount": c5(3, 2, 6), "wl": c5(31, 24, 25),
     "wd": c5(16, 8, 16), "beach": c5(13, 7, 13), "shore": c5(21, 13, 19),
 }

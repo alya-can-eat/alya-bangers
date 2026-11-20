@@ -3,7 +3,9 @@
 #include "gfx.h"
 #include "palette.h"
 
-const Theme theme_default = { COLOR(2, 2, 4), COLOR(29, 29, 30), COLOR(31, 17, 23) };
+// Alya's theme: a very dark purple, a pinkish white, a violet pink
+// (tools/gen_icon.py draws the icon in the same colours)
+const Theme theme_default = { COLOR(4, 0, 5), COLOR(31, 29, 31), COLOR(30, 17, 31) };
 
 uint16_t pal[P_COUNT];
 static uint32_t version;
