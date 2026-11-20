@@ -14,6 +14,7 @@
 #include "i18n.h"
 #include "library.h"
 #include "palette.h"
+#include "search.h"
 #include "state.h"
 
 // ---- colors ----
@@ -50,6 +51,16 @@
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here at least (ui_info_value_x)
 #define INFO_STAR_W 18              // a star and the gap after it
+// search tab (🔍): the query, the filters, then the results (keyboard down)
+// or the keyboard (typing; the results are on the top screen then)
+#define FIELD_Y     22
+#define CHIPS_Y     44
+#define SEARCH_LIST_Y 64
+#define SEARCH_ROWS 6
+#define KB_Y        64              // the keyboard, when it's up
+#define SHEET_Y     18              // the results on the top screen, under the clock
+#define SHEET_ROWS  10
+#define HINGE       16              // the gap between the screens, for the results moving across
 
 #define APP_NAME    "alya-bangers"
 #define APP_VERSION "1.0"
@@ -63,6 +74,10 @@
 #define KNOB_TICKS  8               // seek knob grows while dragged
 #define LID_OUT     6               // lid closing: fade to black first
 #define LID_IN      18              // lid opening: fade in from black
+#define KB_TICKS    18              // the keyboard up or down (the results move with it), 0.3 s
+#define SHEET_TICKS 12              // results come up on the top screen while typing, 0.2 s
+#define IM_TICKS    18              // another input method pushes the keyboard out, 0.3 s
+#define ACC_TICKS   8               // a held letter's other forms pop up
 
 // Song change on the top screen (player layout). Forward: the cover leaves to
 // the left over its record, the next cover grows from the Next spot, its
@@ -89,7 +104,7 @@ enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BT
        BTN_SHUFFLE, BTN_PREV, BTN_PPLAY, BTN_PNEXT, BTN_REPEAT, BTN_INFO, BTN_UP, BTN_QUEUE };
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
-typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Overlay;
+typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM } Overlay;
 
 // Settings: a top page leading to pages of settings.
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL, PAGE_ABOUT,
@@ -188,9 +203,48 @@ typedef struct {
     uint16_t thumb[32 * 32];
 
     int lib_error;              // why library.idx couldn't be used (LIB_ERR_..., library.h)
+
+    // search (search.h); the results are app.items
+    char query[128];
+    int im;                     // input method, IM_...
+    bool kb_num;                // the 123 keys
+    bool shift;                 // the next letter in upper case
+    bool kb_up;                 // typing: the keyboard is wanted up
+    int kb_t;                   // 0 = down .. KB_TICKS = up; the results move with it
+    int sheet_t;                // results on the top screen: 0 = out of sight .. SHEET_TICKS
+    bool sel_on;                // the D-pad highlight shows in the results while typing
+    int key_down;               // the key under the stylus, -1: none
+    uint32_t key_since;         // since when (holding: other forms, ⌫ repeats)
+    int key_flash;              // a typed key lights up until key_flash_until (frames)
+    uint32_t key_flash_until;
+    int im_from, im_t;          // input switch: the old layout leaves to the left (im_t counts down)
+    int acc_key;                // the key held for its other forms, -1: none
+    int acc_t;                  // their row grows: 0 .. ACC_TICKS
+    int acc_sel;                // the form under the stylus, -1: none
+    int acc_vis;                // x of its highlight (glides)
+    SearchFilter sf;
+    SearchMark *marks;          // per result row
+    int fpage;                  // filter menu: -1 the filters, else the F_... whose choices show
+    int fkind;                  // the filter whose choices are loaded (they stay while sliding back)
+    int fpage_t;                // the choices push in: 0 .. TAB_TICKS
+    int fscroll;                // first choice shown
+    SearchOpt *fopts;
+    int n_fopts;
+    int chip_w[F_COUNT];        // chips grow in and shrink away: their width now
 } App;
 
 extern App app;
+
+// The browser's list: in the search tab it starts under the query and the
+// filters, and while typing it's on the top screen (more rows).
+static inline int list_y(void)
+{
+    return app.tab == TAB_SEARCH ? SEARCH_LIST_Y : LIST_Y;
+}
+static inline int list_rows(void)
+{
+    return app.tab != TAB_SEARCH ? ROWS : (app.kb_up ? SHEET_ROWS : SEARCH_ROWS);
+}
 
 // ui.c
 void ui_init(void);
@@ -221,5 +275,13 @@ int app_song_rating(uint32_t t);        // stars shown: given on the DS, else fr
 uint32_t app_song_plays(uint32_t t);    // plays from the tags + plays on the DS
 int app_panel_offset(void);     // y of the browser panel (0 .. PANEL_DOWN)
 int app_slide_p256(void);       // slide progress 0..256, eased
+// search: the chip of a filter at x, y (F_COUNT: "+ Filter"; on_x: its ×), -1: none
+int ui_chip_at(int x, int y, bool *on_x);
+int ui_chip_full_w(int kind);   // its width when it's in
+// the filter menu: the y of its first row
+#define FMENU_Y     64
+#define FMENU_ROWS  6
+// the input methods menu
+int ui_im_menu_y(void);
 
 #endif

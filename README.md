@@ -18,6 +18,27 @@ edit, ratings and plays, themes, in English or German.
   or open an artist, album or folder. Tapping a song plays the list it is in. Artists that differ
   only in case ("KIVARA", "Kivara") are one artist unless you change that in
   the settings.
+- **Search (🔍):** the keyboard comes up, and the results show on the top
+  screen while you type: artists, albums and songs, the matching part
+  highlighted. D-pad Up/Down and A pick one. ⮟ (or B) puts the keyboard
+  away and the results slide down into a list on the bottom screen: tap a
+  song to play the results from it, hold one for the row menu, tap an
+  artist or album to open it. Tap the query to type again, × clears it.
+  - Case and accents don't matter ("golmo" finds Gölmo), unless you type the
+    accent: "gö" means exactly ö. Hiragana finds katakana. Names with
+    kanji or hanzi are also found by their readings (from dsconv): kana
+    with the かな keyboard, pinyin with 拼音 ("lin" or "linxingyue" for
+    林星月).
+  - Keyboards: ABC (QWERTY, or QWERTZ in Settings › Regional), かな (the
+    50-sound table, ゛ ゜ and 小 change the last kana), 拼音, АБВ (ЙЦУКЕН),
+    and 123. Tap the input key for the next one, hold it for the list.
+    Hold a letter for its other forms (ä à á â …, е gives ё), slide onto
+    one and let go.
+  - **+ Filter:** search in (all, only artists, only albums, only songs),
+    genre, rating, year (decades), played (never, at least once, 10 times
+    or more), folder. Each choice shows how many songs it has and becomes a
+    chip; × removes it. With a filter on, the results are songs, and what
+    you type also looks at their artists and albums.
 - **Bottom bar:** play/pause, next, add to queue, ⮟ (the player), sort,
   brightness (4 levels), ⋮ settings.
 - **Player:** tap ⮟ and the browser slides down until only the tabs are left.
@@ -59,7 +80,7 @@ edit, ratings and plays, themes, in English or German.
     Up / Down choose the colour, Left / Right turn its hue. *Reset* (always
     in fixed colours, findable with any theme) brings back the default.
   - *Regional:* the language (English or German, German in Swiss spelling)
-    and the keyboard for the search that comes later (QWERTY or QWERTZ).
+    and the search keyboard (QWERTY or QWERTZ).
     The language changes at once, everywhere.
   - *About:* name, version and edition, licence, where the code lives
 - **The artist in the player** (start of the top line): tap it for the
@@ -199,13 +220,15 @@ text exists in both languages and fits its place. All texts of the
 interface are in `arm9/source/i18n.c` (English and German side by side).
 
 `tools/gen_builtin_font.py` regenerates the built-in glyphs (ASCII, UI
-symbols, icons and the umlauts) from dsconv's copy of Unifont, `tools/gen_default_cover.py`
+symbols, icons, the umlauts and the keyboards' letters) from dsconv's copy
+of Unifont, `tools/gen_fold_tables.py` the tables search uses to ignore
+accents, `tools/gen_default_cover.py`
 the picture shown for songs without a cover, `tools/gen_icon.py` the
 icon of the `.nds` file.
 
 ## Not yet
 
-Search, playlists, genre and other tags as tabs, colours from the cover,
+Playlists, genre and other tags as tabs, colours from the cover,
 gapless playback, a date and time format of its own (it follows the
 language), Arabic script (right to left, joined letters; Persian and Urdu
 with it).

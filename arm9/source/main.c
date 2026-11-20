@@ -17,6 +17,7 @@
 #include "app.h"
 #include "default_cover.h"
 #include "font.h"
+#include "keyboard.h"
 #include "player.h"
 #include "queue.h"
 #include "stats.h"
@@ -136,9 +137,10 @@ static void select_index(int i)
     app.sel = i;
     if (app.sel < app.scroll)
         app.scroll = app.sel;
-    if (app.sel >= app.scroll + ROWS)
-        app.scroll = app.sel - ROWS + 1;
-    int max_scroll = app.n_items > ROWS ? app.n_items - ROWS : 0;
+    int rows = list_rows();
+    if (app.sel >= app.scroll + rows)
+        app.scroll = app.sel - rows + 1;
+    int max_scroll = app.n_items > rows ? app.n_items - rows : 0;
     if (app.scroll > max_scroll) app.scroll = max_scroll;
     if (app.scroll < 0) app.scroll = 0;
     redraw = true;
@@ -173,6 +175,9 @@ static void rebuild_list(void)
         app.n_items = n;
         break;
     }
+    case TAB_SEARCH:
+        app.n_items = search_run(app.query, app.im, &app.sf, app.items, app.marks, item_cap);
+        break;
     default:
         break;
     }
@@ -185,7 +190,7 @@ static bool select_item(ItemKind kind, uint32_t id)
     {
         if (app.items[i].kind == kind && app.items[i].id == id)
         {
-            app.scroll = i - ROWS / 2;
+            app.scroll = i - list_rows() / 2;
             select_index(i);
             return true;
         }
@@ -195,8 +200,18 @@ static bool select_item(ItemKind kind, uint32_t id)
 
 // Switch list. dir: +1 the new list slides in from the right, -1 from the
 // left, 0 no slide (default: from the side of the new tab).
+static void search_leave(void);
+static int search_first_row(void);
+
 static void show_tab_dir(Tab t, int dir)
 {
+    if (app.tab == TAB_SEARCH && t != TAB_SEARCH)
+        search_leave();
+    if (t == TAB_SEARCH && app.tab != TAB_SEARCH)
+    {
+        app.kb_t = 0;           // comes up once the search page is in place
+        app.sheet_t = 0;
+    }
     if (dir == 0)
         dir = t > app.tab ? 1 : (t < app.tab ? -1 : 0);
     if (dir != 0 && app.slide == 0 && !app.player_mode && app.overlay != OV_SETTINGS)
@@ -210,7 +225,17 @@ static void show_tab_dir(Tab t, int dir)
     app.overlay = OV_NONE;
     app.sel = app.scroll = 0;
     app.sel_frame = app.frame;
+    if (t == TAB_SEARCH)
+        app.kb_up = true;       // ready to type
     rebuild_list();
+    if (t == TAB_SEARCH)
+    {
+        app.sel = search_first_row();
+        app.sel_on = false;
+        app.sel_vis = (app.sel - app.scroll) * ROW_H;
+        redraw = true;
+        return;
+    }
     uint32_t cur = app_current_track();
     bool found = false;
     app.sel_vis = 0;
@@ -236,7 +261,7 @@ static void show_tab_dir(Tab t, int dir)
             if ((!dl || (strncmp(cp, app.folder, dl) == 0 && cp[dl] == '/'))
                 && strncmp(rest, name, nl) == 0 && rest[nl] == '/')
             {
-                app.scroll = i - ROWS / 2;
+                app.scroll = i - list_rows() / 2;
                 select_index(i);
                 found = true;
             }
@@ -255,6 +280,12 @@ static void show_tab(Tab t)
 
 static void slide_to(bool player)
 {
+    if (player && app.tab == TAB_SEARCH)
+    {
+        app.kb_up = false;
+        app.kb_t = app.sheet_t = 0;
+        app.acc_key = app.key_down = -1;
+    }
     app.player_mode = player;
     app.overlay = OV_NONE;
     redraw = true;
@@ -500,6 +531,8 @@ static void activate(int i)
 {
     if (i < 0 || i >= app.n_items)
         return;
+    if (app.items[i].kind == ITEM_HEADER)
+        return;
     select_index(i);
     const Item *it = &app.items[i];
     if (app.add_mode && it->kind != ITEM_UP)
@@ -546,7 +579,7 @@ static void activate(int i)
             lib_folder_name(&app.items[k], app.folder, name, sizeof(name));
             if (strcmp(name, left) == 0)
             {
-                app.scroll = k - ROWS / 2;
+                app.scroll = k - list_rows() / 2;
                 select_index(k);
                 break;
             }
@@ -580,7 +613,8 @@ static void row_menu_choose(int option)
 
 static void open_row_menu(int i)
 {
-    if (i < 0 || i >= app.n_items || app.items[i].kind == ITEM_UP || !lib_loaded())
+    if (i < 0 || i >= app.n_items || app.items[i].kind == ITEM_UP || app.items[i].kind == ITEM_HEADER
+        || !lib_loaded())
         return;
     select_index(i);
     app.menu_item = i;
@@ -629,6 +663,485 @@ static void cycle_brightness(void)
 }
 
 // Settings: change one.
+// ------------------------------------------------------------------ search
+
+static int search_first_row(void)
+{
+    for (int i = 0; i < app.n_items; i++)
+        if (app.items[i].kind != ITEM_HEADER)
+            return i;
+    return 0;
+}
+
+// New results (the query or a filter changed): from the top, no highlight
+// until the D-pad asks for it.
+static void search_refresh(void)
+{
+    rebuild_list();
+    app.scroll = 0;
+    app.sel = search_first_row();
+    app.sel_frame = app.frame;
+    app.sel_on = false;
+    app.sel_vis = (app.sel - app.scroll) * ROW_H;
+    redraw = true;
+}
+
+static bool search_has_content(void)
+{
+    return app.query[0] || search_songs_filtered(&app.sf);
+}
+
+static void search_leave(void)
+{
+    app.kb_up = false;
+    app.kb_t = 0;
+    app.key_down = app.acc_key = -1;
+    app.shift = false;
+}
+
+static void kb_raise(void)
+{
+    app.kb_up = true;
+    if (search_has_content())
+        app.sheet_t = SHEET_TICKS;      // the results go straight up to the top screen
+    select_index(app.sel);
+}
+
+static void kb_lower(void)
+{
+    app.kb_up = false;
+    app.acc_key = app.key_down = -1;
+    select_index(app.sel);              // fewer rows: the selection stays in view
+}
+
+// D-pad in the results: header rows are stepped over.
+static void search_step(int d)
+{
+    if (app.n_items == 0)
+        return;
+    int dir = d > 0 ? 1 : -1, i = app.sel + d;
+    if (i < 0) i = 0;
+    if (i >= app.n_items) i = app.n_items - 1;
+    while (i >= 0 && i < app.n_items && app.items[i].kind == ITEM_HEADER)
+        i += dir;
+    if (i < 0 || i >= app.n_items)
+        return;
+    select_index(i);
+    // a section's first result shows its header too
+    if (i > 0 && app.items[i - 1].kind == ITEM_HEADER && app.scroll == i)
+        app.scroll = i - 1;
+}
+
+static int utf8_encode(uint32_t c, char *out)
+{
+    if (c < 0x80) { out[0] = (char)c; return 1; }
+    if (c < 0x800) { out[0] = (char)(0xC0 | c >> 6); out[1] = (char)(0x80 | (c & 63)); return 2; }
+    if (c < 0x10000)
+    {
+        out[0] = (char)(0xE0 | c >> 12); out[1] = (char)(0x80 | ((c >> 6) & 63)); out[2] = (char)(0x80 | (c & 63));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | c >> 18); out[1] = (char)(0x80 | ((c >> 12) & 63));
+    out[2] = (char)(0x80 | ((c >> 6) & 63)); out[3] = (char)(0x80 | (c & 63));
+    return 4;
+}
+
+// The last character of the query and where it starts.
+static uint32_t query_last(int *at)
+{
+    int n = (int)strlen(app.query), i = n;
+    if (n == 0)
+    {
+        *at = 0;
+        return 0;
+    }
+    do
+        i--;
+    while (i > 0 && (app.query[i] & 0xC0) == 0x80);
+    *at = i;
+    const char *p = app.query + i;
+    return utf8_next(&p);
+}
+
+static void query_put(uint32_t c)
+{
+    char u[4];
+    int l = utf8_encode(c, u);
+    size_t n = strlen(app.query);
+    if (n + l >= sizeof(app.query))
+        return;
+    memcpy(app.query + n, u, l);
+    app.query[n + l] = 0;
+    search_refresh();
+}
+
+static void query_back(void)
+{
+    int at;
+    if (query_last(&at) == 0)
+        return;
+    app.query[at] = 0;
+    search_refresh();
+}
+
+static void query_clear(void)
+{
+    app.query[0] = 0;
+    search_refresh();
+}
+
+// ゛ ゜ 小: change the last kana.
+static void query_kana(int mod)
+{
+    int at;
+    uint32_t c = kana_mod(query_last(&at), mod);
+    if (c == 0)
+        return;
+    app.query[at] = 0;
+    query_put(c);
+}
+
+static void im_switch(int im)
+{
+    if (im == app.im)
+        return;
+    app.im_from = app.im;
+    app.im = im;
+    app.im_t = IM_TICKS;
+    app.kb_num = app.shift = false;
+    search_refresh();               // pinyin readings count only with pinyin
+}
+
+static Key kb_keys[KB_MAX_KEYS];
+static int kb_n;
+static bool kb_pressing;            // the stylus went down on the keyboard
+static int acc_x0, acc_y0;          // where the stylus was when the forms popped up
+static uint32_t kb_repeat_at;       // ⌫ held: when it last deleted
+
+static void kb_load(void)
+{
+    kb_n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift, kb_keys);
+}
+
+static void kb_flash(int k)
+{
+    app.key_flash = k;
+    app.key_flash_until = app.frame + 5;
+}
+
+static void key_act(const Key *k)
+{
+    switch (k->kind)
+    {
+    case K_CHAR:
+        app.shift = false;
+        query_put(k->cp);
+        break;
+    case K_SPACE: query_put(' '); break;
+    case K_SHIFT: app.shift = !app.shift; break;
+    case K_BACK: query_back(); break;
+    case K_NUM: app.kb_num = !app.kb_num; app.shift = false; break;
+    case K_IM: im_switch((app.im + 1) % IM_COUNT); break;
+    case K_DONE: kb_lower(); break;
+    case K_KANA: query_kana((int)k->cp); break;
+    default: break;
+    }
+    redraw = true;
+}
+
+// The n-th of a held letter's other forms (upper case with shift), 0: none.
+static uint32_t form_at(const Key *k, int n)
+{
+    const char *f = k->kind == K_CHAR ? letter_forms(cp_lower(k->cp)) : NULL;
+    uint32_t c = 0;
+    for (int i = 0; f && i <= n; i++)
+        if ((c = utf8_next(&f)) == 0)
+            return 0;
+    return app.shift ? cp_upper(c) : c;
+}
+
+static int forms_count(const Key *k)
+{
+    const char *f = k->kind == K_CHAR ? letter_forms(cp_lower(k->cp)) : NULL;
+    int n = 0;
+    while (f && utf8_next(&f))
+        n++;
+    return n;
+}
+
+static bool kb_ready(void)
+{
+    return app.tab == TAB_SEARCH && app.kb_up && app.kb_t == KB_TICKS && app.overlay == OV_NONE
+           && app_panel_offset() == 0;
+}
+
+static void kb_touch_down(int x, int y)
+{
+    kb_load();
+    kb_pressing = true;
+    app.key_down = kb_key_at(kb_keys, kb_n, x, y - KB_Y);
+    app.key_since = ticks;
+    if (app.key_down >= 0 && kb_keys[app.key_down].kind == K_BACK)
+    {
+        query_back();               // at once, then again while held
+        kb_flash(app.key_down);
+        kb_repeat_at = ticks + 24;
+    }
+}
+
+static void acc_follow(int x, int y)
+{
+    const Key *k = &kb_keys[app.acc_key];
+    int n = forms_count(k), bx, by, bw;
+    kb_forms_box(k, n, &bx, &by, &bw);
+    int ky = y - KB_Y;
+    if (ky >= by - 16 && ky < k->y + k->h && x >= bx - 8 && x < bx + bw + 8)
+    {
+        int i = (x - bx - 2) / 25;
+        app.acc_sel = i < 0 ? 0 : (i >= n ? n - 1 : i);
+    }
+    else
+        app.acc_sel = -1;
+}
+
+static void kb_touch_move(int x, int y)
+{
+    if (app.acc_key >= 0)
+    {
+        // the first form stays chosen until the stylus moves
+        if (abs(x - acc_x0) > 4 || abs(y - acc_y0) > 4)
+        {
+            acc_x0 = -100;
+            acc_follow(x, y);
+        }
+        return;
+    }
+    int k = kb_key_at(kb_keys, kb_n, x, y - KB_Y);
+    if (k != app.key_down)
+    {
+        // slid onto another key: that one counts now
+        app.key_down = k;
+        app.key_since = ticks;
+        kb_repeat_at = ticks + 24;
+        return;
+    }
+    if (k < 0)
+        return;
+    const Key *key = &kb_keys[k];
+    uint32_t held = ticks - app.key_since;
+    if (key->kind == K_BACK && ticks >= kb_repeat_at)
+    {
+        query_back();
+        kb_flash(k);
+        kb_repeat_at = ticks + 4;
+    }
+    else if (key->kind == K_IM && held >= HOLD_TICKS)
+    {
+        // held: the list of input methods
+        app.overlay = OV_IM;
+        app.menu_sel = app.im;
+        app.key_down = -1;
+        kb_pressing = false;
+    }
+    else if (key->kind == K_CHAR && held >= HOLD_TICKS && forms_count(key) > 0)
+    {
+        app.acc_key = k;
+        app.acc_t = 0;
+        app.acc_sel = 0;
+        acc_x0 = x;
+        acc_y0 = y;
+        int bx, by, bw;
+        kb_forms_box(key, forms_count(key), &bx, &by, &bw);
+        app.acc_vis = bx + 2;
+    }
+}
+
+static void kb_touch_up(void)
+{
+    kb_pressing = false;
+    if (app.acc_key >= 0)
+    {
+        const Key *k = &kb_keys[app.acc_key];
+        if (app.acc_sel >= 0)
+        {
+            uint32_t c = form_at(k, app.acc_sel);
+            app.shift = false;
+            if (c)
+                query_put(c);
+        }
+        kb_flash(app.acc_key);
+        app.acc_key = -1;
+    }
+    else if (app.key_down >= 0 && kb_keys[app.key_down].kind != K_BACK)
+    {
+        int k = app.key_down;
+        kb_flash(k);
+        key_act(&kb_keys[k]);
+    }
+    app.key_down = -1;
+    redraw = true;
+}
+
+// ---- filter menu: the filters, then a filter's choices
+
+static void fpage_open(int kind)
+{
+    app.fpage = app.fkind = kind;
+    app.n_fopts = search_options(kind, app.fopts, 256);
+    app.fscroll = 0;
+    app.menu_sel = -1;
+    // the current choice is highlighted and in view
+    for (int i = 0; i < app.n_fopts; i++)
+    {
+        char a[96], b[96];
+        search_option_label(kind, app.fopts[i].value, a, sizeof(a));
+        search_chip_label(&app.sf, kind, b, sizeof(b));
+        if (search_filter_on(&app.sf, kind) && strcmp(a, b) == 0)
+        {
+            app.menu_sel = i;
+            app.fscroll = i >= FMENU_ROWS ? i - FMENU_ROWS + 1 : 0;
+        }
+    }
+}
+
+static void filter_menu(int page)
+{
+    app.overlay = OV_FILTER;
+    app.fpage = -1;
+    app.fpage_t = 0;
+    app.menu_sel = -1;
+    if (page > F_IN)
+    {
+        fpage_open(page);
+        app.fpage_t = TAB_TICKS;    // straight to its choices
+    }
+    redraw = true;
+}
+
+static void filter_in_cycle(void)
+{
+    app.sf.in = (uint8_t)((app.sf.in + 1) % IN_COUNT);
+    search_refresh();
+}
+
+static void filter_choose(int i)
+{
+    if (i < 0 || i >= app.n_fopts)
+        return;
+    char a[96], b[96];
+    search_option_label(app.fkind, app.fopts[i].value, a, sizeof(a));
+    search_chip_label(&app.sf, app.fkind, b, sizeof(b));
+    if (search_filter_on(&app.sf, app.fkind) && strcmp(a, b) == 0)
+        search_filter_off(&app.sf, app.fkind);      // the one that's on: off again
+    else
+        search_filter_set(&app.sf, app.fkind, app.fopts[i].value);
+    app.overlay = OV_NONE;
+    search_refresh();
+}
+
+static void filter_list_choose(int r)
+{
+    if (r == 0)
+        filter_in_cycle();
+    else if (r > 0 && r < F_COUNT)
+        fpage_open(r);
+}
+
+static void filter_back(void)
+{
+    if (app.fpage >= 0)
+    {
+        app.menu_sel = app.fpage;   // back on its row
+        app.fpage = -1;
+    }
+    else
+        app.overlay = OV_NONE;
+    redraw = true;
+}
+
+static void filter_scroll_to_sel(void)
+{
+    if (app.fpage < 0 || app.menu_sel < 0)
+        return;
+    if (app.menu_sel < app.fscroll)
+        app.fscroll = app.menu_sel;
+    if (app.menu_sel >= app.fscroll + FMENU_ROWS)
+        app.fscroll = app.menu_sel - FMENU_ROWS + 1;
+}
+
+static void filter_tap(int x, int y)
+{
+    (void)x;
+    if (y < FMENU_Y)
+    {
+        app.overlay = OV_NONE;      // a tap above the menu closes it
+        return;
+    }
+    if (y < FMENU_Y + 20)
+    {
+        if (app.fpage >= 0)
+            filter_back();          // "‹ Genre"
+        return;
+    }
+    int r = (y - FMENU_Y - 20) / 16;
+    if (r >= FMENU_ROWS)
+        return;
+    if (app.fpage < 0)
+        filter_list_choose(r);
+    else
+        filter_choose(app.fscroll + r);
+}
+
+static void im_menu_choose(int i)
+{
+    app.overlay = OV_NONE;
+    if (i >= 0 && i < IM_COUNT)
+        im_switch(i);
+}
+
+static void im_menu_tap(int x, int y)
+{
+    int y0 = ui_im_menu_y();
+    if (x >= 4 && x < 180 && y >= y0 + 20 && y < y0 + 20 + 16 * IM_COUNT)
+        im_menu_choose((y - y0 - 20) / 16);
+    else
+        app.overlay = OV_NONE;
+}
+
+// Taps on the search page above the keyboard (or above the bar): the query,
+// the chips, the results. True if it was one of those.
+static bool tap_search(int x, int y)
+{
+    if (y < TAB_H || (y >= BAR_Y && !app.kb_up))
+        return false;
+    if (y < CHIPS_Y - 1)
+    {
+        if (x >= 228 && app.query[0])
+            query_clear();
+        else if (!app.kb_up)
+            kb_raise();
+        return true;
+    }
+    if (y < SEARCH_LIST_Y)
+    {
+        bool on_x;
+        int k = ui_chip_at(x, y, &on_x);
+        if (k == F_COUNT)
+            filter_menu(-1);
+        else if (k >= 0 && on_x)
+        {
+            search_filter_off(&app.sf, k);
+            search_refresh();
+        }
+        else if (k >= 0)
+            filter_menu(k == F_IN ? -1 : k);
+        return true;
+    }
+    if (!app.kb_up && y < BAR_Y && x < SCROLL_X && lib_loaded())
+        activate(app.scroll + (y - SEARCH_LIST_Y) / ROW_H);
+    return true;
+}
+
 static void set_change(int id)
 {
     switch (id)
@@ -796,14 +1309,15 @@ static void tab_tap(int x)
 
 static void scroll_to_y(int y)
 {
-    int max_scroll = app.n_items > ROWS ? app.n_items - ROWS : 0;
-    int h = ROWS * ROW_H;
-    int s = (y - LIST_Y) * (max_scroll + 1) / h;
+    int rows = list_rows();
+    int max_scroll = app.n_items > rows ? app.n_items - rows : 0;
+    int h = rows * ROW_H;
+    int s = (y - list_y()) * (max_scroll + 1) / h;
     if (s < 0) s = 0;
     if (s > max_scroll) s = max_scroll;
     app.scroll = s;
     if (app.sel < s) app.sel = s;
-    if (app.sel >= s + ROWS) app.sel = s + ROWS - 1;
+    if (app.sel >= s + rows) app.sel = s + rows - 1;
     app.sel_frame = app.frame;
     app.sel_vis = (app.sel - app.scroll) * ROW_H;
     redraw = true;
@@ -824,6 +1338,18 @@ static int queue_row_at(int y)
 
 static void tap_browser(int x, int y)
 {
+    if (app.overlay == OV_FILTER)
+    {
+        filter_tap(x, y);
+        redraw = true;
+        return;
+    }
+    if (app.overlay == OV_IM)
+    {
+        im_menu_tap(x, y);
+        redraw = true;
+        return;
+    }
     if (app.overlay == OV_SORT)
     {
         int n = ui_sort_option_count(ui_sort_slot());
@@ -837,12 +1363,17 @@ static void tap_browser(int x, int y)
     }
     if (app.overlay == OV_ROWMENU)
     {
-        int row_y = LIST_Y + (app.menu_item - app.scroll) * ROW_H;
+        int row_y = list_y() + (app.menu_item - app.scroll) * ROW_H;
         int y0 = ui_rowmenu_y(row_y);
         if (x >= 88 && x < 240 && y >= y0 + 20 && y < y0 + 20 + 48)
             row_menu_choose((y - y0 - 20) / 16);
         else
             app.overlay = OV_NONE;
+        redraw = true;
+        return;
+    }
+    if (app.tab == TAB_SEARCH && tap_search(x, y))
+    {
         redraw = true;
         return;
     }
@@ -1031,13 +1562,24 @@ static void flash(int id)
     redraw = true;
 }
 
+static int fdrag_from;              // filter choices: where the stylus started scrolling them
+
 static void touch_down(int x, int y)
 {
     app.press_id = button_at(x, y);
     app.press_down = app.press_id != BTN_NONE;
     tp = (typeof(tp)){ true, x, y, x, y, ticks, false, false };
     int oy = app_panel_offset();
-    if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= LIST_Y && y < BAR_Y && app.n_items > ROWS)
+    if (kb_ready() && y >= KB_Y)
+    {
+        kb_touch_down(x, y);
+        tp.held = true;             // keys are handled on their own, not as taps
+        redraw = true;
+        return;
+    }
+    fdrag_from = app.fscroll;
+    if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
+        && !(app.tab == TAB_SEARCH && app.kb_up))
     {
         app.scroll_drag = true;
         scroll_to_y(y);
@@ -1069,6 +1611,21 @@ static void touch_move(int x, int y)
         app.press_down = false;
         app.press_id = BTN_NONE;    // slid off: no tap, no light
     }
+    if (kb_pressing)
+    {
+        kb_touch_move(x, y);
+        redraw = true;
+        return;
+    }
+    if (app.overlay == OV_FILTER && app.fpage >= 0 && tp.moved)
+    {
+        // drag the choices
+        int max = app.n_fopts > FMENU_ROWS ? app.n_fopts - FMENU_ROWS : 0;
+        int s = fdrag_from + (tp.y0 - y) / 16;
+        app.fscroll = s < 0 ? 0 : (s > max ? max : s);
+        redraw = true;
+        return;
+    }
     if (app.scroll_drag)
         scroll_to_y(y);
     else if (app.seek_drag)
@@ -1094,8 +1651,9 @@ static void touch_move(int x, int y)
     {
         tp.held = true;
         int oy = app_panel_offset();
-        if (oy == 0 && app.overlay == OV_NONE && tp.y0 >= LIST_Y && tp.y0 < BAR_Y && tp.x0 < SCROLL_X)
-            open_row_menu(app.scroll + (tp.y0 - LIST_Y) / ROW_H);
+        if (oy == 0 && app.overlay == OV_NONE && tp.y0 >= list_y() && tp.y0 < BAR_Y && tp.x0 < SCROLL_X
+            && !(app.tab == TAB_SEARCH && app.kb_up))
+            open_row_menu(app.scroll + (tp.y0 - list_y()) / ROW_H);
         else if (oy == PANEL_DOWN && app.overlay == OV_QUEUE && tp.y0 >= 20 && tp.y0 < 20 + ROWS * ROW_H)
         {
             int i = queue_row_at(tp.y0);
@@ -1114,6 +1672,11 @@ static void touch_up(void)
     {
         app.press_down = false;
         app.press_until = app.frame + 6;    // stays lit a moment after the tap
+    }
+    if (kb_pressing)
+    {
+        kb_touch_up();
+        return;
     }
     if (app.scroll_drag)
         app.scroll_drag = false;
@@ -1208,6 +1771,33 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     case OV_ROWMENU:
         menu_keys(rep, down, 3, row_menu_choose);
         return;
+    case OV_IM:
+        menu_keys(rep, down, IM_COUNT, im_menu_choose);
+        return;
+    case OV_FILTER:
+    {
+        int count = app.fpage < 0 ? F_COUNT : app.n_fopts;
+        if ((rep & (KEY_UP | KEY_DOWN)) && count > 0)
+        {
+            if (app.menu_sel < 0)
+                app.menu_sel = 0;
+            else if (rep & KEY_UP)
+                app.menu_sel = app.menu_sel <= 0 ? count - 1 : app.menu_sel - 1;
+            else
+                app.menu_sel = app.menu_sel + 1 >= count ? 0 : app.menu_sel + 1;
+            filter_scroll_to_sel();
+        }
+        if ((down & (KEY_A | KEY_RIGHT)) && app.menu_sel >= 0)
+        {
+            if (app.fpage < 0 && ((down & KEY_A) || app.menu_sel > 0))
+                filter_list_choose(app.menu_sel);
+            else if (app.fpage >= 0 && (down & KEY_A))
+                filter_choose(app.menu_sel);
+        }
+        if (down & (KEY_B | KEY_LEFT))
+            filter_back();
+        return;
+    }
     case OV_INFO:
     {
         uint32_t t = app_current_track();
@@ -1253,6 +1843,34 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         if (down & KEY_Y) { app.overlay = OV_QUEUE; app.q_sel = -1; app.q_drag_from = -1;
                             app.q_scroll = queue_pos() > 2 ? queue_pos() - 2 : 0; }
         if (down & (KEY_B | KEY_SELECT)) slide_to(false);
+        return;
+    }
+    if (app.tab == TAB_SEARCH)
+    {
+        // while typing the first press shows the highlight; header rows are stepped over
+        if (rep & (KEY_UP | KEY_DOWN))
+        {
+            if (app.kb_up && !app.sel_on)
+                app.sel_on = true;
+            else
+                search_step((rep & KEY_UP) ? -step : step);
+        }
+        if ((down & KEY_LEFT) && app.overlay == OV_NONE) show_tab(TAB_FOLDER);
+        if (down & KEY_A)
+        {
+            if (app.kb_up && !app.sel_on)
+                app.sel_on = app.n_items > 0;
+            else
+                activate(app.sel);
+        }
+        if ((down & KEY_Y) && !app.kb_up) open_row_menu(app.sel);
+        if ((down & KEY_X) && !app.kb_up) toggle_add_mode();
+        if (down & KEY_B)
+        {
+            if (app.kb_up) kb_lower();
+            else slide_to(true);
+        }
+        if (down & KEY_SELECT) slide_to(true);
         return;
     }
     if (rep & KEY_UP) select_index(app.sel - step);
@@ -1405,9 +2023,15 @@ static void app_init(void)
     snprintf(path, sizeof(path), "%s/.dsmusic/library.idx", music_root);
     lib_load(path, &app.lib_error);
 
-    item_cap = (int)lib_track_count() + (int)lib_album_count() + 2;
+    // room for any list: in search, every artist, album and song can be a result
+    item_cap = 2 * (int)lib_track_count() + (int)lib_album_count() + 8;
     tracks_cap = (int)lib_track_count() + 1;
     app.items = malloc(item_cap * sizeof(Item));
+    app.marks = malloc(item_cap * sizeof(SearchMark));
+    app.fopts = malloc(256 * sizeof(SearchOpt));
+    search_filter_clear(&app.sf);
+    app.key_down = app.acc_key = app.key_flash = -1;
+    app.fpage = app.fkind = -1;
     tracks_buf = malloc(tracks_cap * sizeof(uint32_t));
     app.added = calloc((lib_track_count() + 8) / 8, 1);
     app.artist = -1;
@@ -1561,6 +2185,67 @@ static void app_tick(void)
         redraw = true;
     }
 
+    // search: the keyboard comes up once the search page is in place, the
+    // results move with it; while typing they come up on the top screen
+    {
+        int kb_target = app.tab == TAB_SEARCH && app.kb_up && app.tab_anim == 0 ? KB_TICKS : 0;
+        if (app.kb_t != kb_target)
+        {
+            app.kb_t += app.kb_t < kb_target ? (int)elapsed : -(int)elapsed;
+            if ((kb_target && app.kb_t > KB_TICKS) || (!kb_target && app.kb_t < 0))
+                app.kb_t = kb_target;
+            redraw = true;
+        }
+        int sheet_target = app.tab == TAB_SEARCH && app.kb_up && search_has_content() ? SHEET_TICKS : 0;
+        if (app.tab == TAB_SEARCH && !app.kb_up && app.kb_t > 0)
+            sheet_target = app.sheet_t;     // goes down with the keyboard
+        else if (app.tab == TAB_SEARCH && !app.kb_up)
+            app.sheet_t = 0;                // on the bottom screen now
+        if (app.sheet_t != sheet_target)
+        {
+            app.sheet_t += app.sheet_t < sheet_target ? (int)elapsed : -(int)elapsed;
+            if (app.sheet_t > SHEET_TICKS) app.sheet_t = SHEET_TICKS;
+            if (app.sheet_t < 0) app.sheet_t = 0;
+            redraw = true;
+        }
+        if (app.im_t > 0)
+        {
+            app.im_t = app.im_t > (int)elapsed ? app.im_t - (int)elapsed : 0;
+            redraw = true;
+        }
+        if (app.acc_key >= 0 && app.acc_t < ACC_TICKS)
+        {
+            app.acc_t = app.acc_t + (int)elapsed > ACC_TICKS ? ACC_TICKS : app.acc_t + (int)elapsed;
+            redraw = true;
+        }
+        if (app.acc_key >= 0 && app.acc_sel >= 0)
+        {
+            const Key *k = &kb_keys[app.acc_key];
+            int bx, by, bw;
+            kb_forms_box(k, forms_count(k), &bx, &by, &bw);
+            redraw |= glide(&app.acc_vis, bx + 2 + app.acc_sel * 25, elapsed, 1000);
+        }
+        int fp_target = app.fpage >= 0 ? TAB_TICKS : 0;
+        if (app.fpage_t != fp_target)
+        {
+            app.fpage_t += app.fpage_t < fp_target ? (int)elapsed : -(int)elapsed;
+            if (app.fpage_t > TAB_TICKS) app.fpage_t = TAB_TICKS;
+            if (app.fpage_t < 0) app.fpage_t = 0;
+            redraw = true;
+        }
+        for (int k = 0; k < F_COUNT; k++)
+        {
+            int w = search_filter_on(&app.sf, k) ? ui_chip_full_w(k) : 0;
+            if (app.chip_w[k] != w && glide(&app.chip_w[k], w, elapsed, 1000))
+                redraw = true;
+        }
+        static bool flash_was;
+        bool flashing = app.frame < app.key_flash_until;
+        if (flashing != flash_was)
+            redraw = true;
+        flash_was = flashing;
+    }
+
     // play <-> pause shape, seek knob size
     int pp_target = player_state() == PLAYER_PLAYING ? PP_TICKS : 0;
     if (app.pp_t != pp_target)
@@ -1579,11 +2264,14 @@ static void app_tick(void)
         redraw = true;
     }
     // the highlights in the list, the menus and the queue glide to the selection
-    redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, ROWS * ROW_H);
+    redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
-    int menu_target = app.menu_sel * (app.ov_vis == OV_SETTINGS ? SET_H : 16);
-    bool page_changed = app.set_page != page_was;
+    int menu_target = app.ov_vis == OV_SETTINGS ? app.menu_sel * SET_H
+                      : (app.ov_vis == OV_FILTER && app.fpage >= 0 ? (app.menu_sel - app.fscroll) * 16 : app.menu_sel * 16);
+    static int fpage_was = -1;
+    bool page_changed = app.set_page != page_was || app.fpage != fpage_was;
     page_was = app.set_page;
+    fpage_was = app.fpage;
     if (menu_opened || page_changed || app.menu_sel < 0 || menu_was < 0)
         app.menu_vis = menu_target;         // nothing to glide from
     else
@@ -1608,7 +2296,8 @@ static void app_tick(void)
     static uint32_t last_sec;
     uint32_t pos = player_position_smooth_ms(), dur = player_duration_ms();
     int px = dur ? (int)((uint64_t)240 * pos / dur) : 0;
-    if (px != last_px || pos / 1000 != last_sec || app.frame / 30 != prev_frame / 30)
+    bool blink = app.tab == TAB_SEARCH && app.kb_up && app.frame / 15 != prev_frame / 15;
+    if (px != last_px || pos / 1000 != last_sec || app.frame / 30 != prev_frame / 30 || blink)
     {
         last_px = px;
         last_sec = pos / 1000;

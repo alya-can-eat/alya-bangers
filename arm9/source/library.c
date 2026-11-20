@@ -25,6 +25,9 @@ static const LibTrack *tracks;
 static const LibRef *refs;
 static const LibAlbum *albums;
 static uint32_t fingerprint;
+typedef struct { uint32_t value, kana, pinyin; } LibReading;
+static const LibReading *readings;     // sorted by value id (FORMAT.md 2.9)
+static uint32_t n_readings;
 
 static uint32_t *path_hash;     // track id + 1, 0 = empty
 static uint32_t path_hash_mask;
@@ -147,6 +150,26 @@ bool lib_load(const char *path, int *err)
     for (uint32_t i = 0; i < n_refs; i++)
         if (refs[i].key >= n_keys || refs[i].value >= n_values) goto damaged;
 
+    // readings for search: optional, a table that doesn't add up is left out
+    readings = NULL;
+    n_readings = 0;
+    uint32_t rd_off = rd32(h + 60);
+    if (rd_off && (rd_off & 3) == 0 && rd_off <= data_size - 4)
+    {
+        uint32_t n = rd32(data + rd_off);
+        const LibReading *r = (const LibReading *)(data + rd_off + 4);
+        bool ok = table_ok(rd_off + 4, n, sizeof(LibReading));
+        for (uint32_t i = 0; ok && i < n; i++)
+            ok = r[i].value < n_values && (i == 0 || r[i].value > r[i - 1].value)
+                 && (r[i].kana == LIB_NONE || r[i].kana < strings_size)
+                 && (r[i].pinyin == LIB_NONE || r[i].pinyin < strings_size);
+        if (ok)
+        {
+            readings = r;
+            n_readings = n;
+        }
+    }
+
     uint32_t buckets = 16;
     while (buckets < n_tracks * 2)
         buckets <<= 1;
@@ -184,6 +207,24 @@ const LibTrack *lib_track(uint32_t id) { return &tracks[id]; }
 const LibAlbum *lib_album(uint32_t id) { return &albums[id]; }
 uint32_t lib_album_track(const LibAlbum *a, int i) { return album_tracks[a->first + i]; }
 const char *lib_path(uint32_t track) { return strings + tracks[track].path; }
+
+bool lib_reading(uint32_t value, const char **kana, const char **pinyin)
+{
+    uint32_t lo = 0, hi = n_readings;
+    while (lo < hi)
+    {
+        uint32_t mid = (lo + hi) / 2;
+        if (readings[mid].value < value)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    if (lo >= n_readings || readings[lo].value != value)
+        return false;
+    *kana = readings[lo].kana != LIB_NONE ? strings + readings[lo].kana : NULL;
+    *pinyin = readings[lo].pinyin != LIB_NONE ? strings + readings[lo].pinyin : NULL;
+    return true;
+}
 
 const char *lib_value(uint32_t v)
 {

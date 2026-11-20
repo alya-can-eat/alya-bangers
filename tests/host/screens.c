@@ -177,6 +177,63 @@ static void tap_row(const char *label)
     tap(100, LIST_Y + (i - app.scroll) * ROW_H + 8);
 }
 
+// Tap a key of the search keyboard: a character, or a key kind (K_BACK, ...).
+static bool key_pos(uint32_t cp, int kind, int *x, int *y)
+{
+    Key keys[KB_MAX_KEYS];
+    int n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift && !app.kb_num, keys);
+    for (int i = 0; i < n; i++)
+        if ((kind == K_CHAR && keys[i].kind == K_CHAR && keys[i].cp == cp) || (kind != K_CHAR && keys[i].kind == kind
+            && (kind != K_KANA || keys[i].cp == cp)))
+        {
+            *x = keys[i].x + keys[i].w / 2;
+            *y = KB_Y + keys[i].y + keys[i].h / 2;
+            return true;
+        }
+    return false;
+}
+
+static void tap_key(uint32_t cp, int kind)
+{
+    int x, y;
+    if (!key_pos(cp, kind, &x, &y))
+    {
+        printf("FAIL: no key U+%04X kind %d\n", (unsigned)cp, kind);
+        failures++;
+        return;
+    }
+    tap(x, y);
+}
+
+static void type_text(const char *s)
+{
+    while (*s)
+        tap_key(utf8_next(&s), K_CHAR);
+}
+
+// The first result row of a section with this label, or -1.
+static int result_row_named(const char *label)
+{
+    for (int i = 0; i < app.n_items; i++)
+    {
+        if (app.items[i].kind == ITEM_HEADER)
+            continue;
+        char buf[256];
+        ui_item_label(&app.items[i], buf, sizeof(buf));
+        if (strcmp(buf, label) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int section_count(int sec)
+{
+    for (int i = 0; i < app.n_items; i++)
+        if (app.items[i].kind == ITEM_HEADER && (int)app.items[i].id == sec)
+            return app.marks[i].count;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3)
@@ -872,6 +929,274 @@ int main(int argc, char **argv)
         app.theme = kept;
         palette_make(&app.theme);
         run(10);
+    }
+
+    // ---- search (🔍): the engine first, then typing with the stylus
+    {
+        slide_to(false);
+        run(40);
+        Item *it = app.items;
+        SearchMark *mk = app.marks;
+        SearchFilter f;
+        search_filter_clear(&f);
+        int n = search_run("go", IM_ABC, &f, it, mk, item_cap);
+        bool golmo = false, golden = false;
+        for (int i = 0; i < n; i++)
+        {
+            char b[256];
+            ui_item_label(&it[i], b, sizeof(b));
+            golmo |= strcmp(b, "Gölmo") == 0;
+            golden |= strcmp(b, "Golden Hours") == 0;
+        }
+        check(golmo && golden, "\"go\" finds Gölmo and Golden Hours (accents don't matter)");
+        n = search_run("gö", IM_ABC, &f, it, mk, item_cap);
+        golmo = golden = false;
+        for (int i = 0; i < n; i++)
+        {
+            char b[256];
+            ui_item_label(&it[i], b, sizeof(b));
+            golmo |= strcmp(b, "Gölmo") == 0;
+            golden |= strcmp(b, "Golden Hours") == 0;
+        }
+        check(golmo && !golden, "\"gö\" means exactly ö: Gölmo, not Golden Hours");
+        n = search_run("GOLMO", IM_ABC, &f, it, mk, item_cap);
+        check(n == 2 && it[1].kind == ITEM_ARTIST, "\"GOLMO\" finds Gölmo too (case and accents)");
+        n = search_run("らび", IM_KANA, &f, it, mk, item_cap);
+        check(n == 2 && it[1].kind == ITEM_TRACK && strcmp(lib_value(lib_track(it[1].id)->title), "ラビットロード") == 0,
+              "hiragana らび finds katakana ラビットロード");
+        n = search_run("おわり", IM_KANA, &f, it, mk, item_cap);
+        check(n == 2 && mk[1].via == VIA_KANA && strcmp(lib_value(lib_track(it[1].id)->title), "終ワリノ鐘") == 0,
+              "おわり finds 終ワリノ鐘 by its reading");
+        n = search_run("luo", IM_ABC, &f, it, mk, item_cap);
+        check(n == 0, "with ABC, \"luo\" doesn't look at pinyin");
+        n = search_run("luo", IM_PINYIN, &f, it, mk, item_cap);
+        check(n >= 2 && it[0].kind == ITEM_HEADER && it[0].id == SEC_ARTISTS && it[1].kind == ITEM_ARTIST
+              && mk[1].via == VIA_PINYIN && mk[1].start == 0 && mk[1].len == 3, "pinyin \"luo\" finds 洛星涵 (luò)");
+        n = search_run("luoxinghan", IM_PINYIN, &f, it, mk, item_cap);
+        check(n >= 2 && it[1].kind == ITEM_ARTIST && mk[1].len == 12, "\"luoxinghan\" too, spaces don't matter");
+        n = search_run("ви", IM_CYR, &f, it, mk, item_cap);
+        check(n == 3 && mk[0].count == 2, "\"ви\" finds Винил and Витор");
+        n = search_run("kiva", IM_ABC, &f, it, mk, item_cap);
+        char first[256];
+        ui_item_label(&it[1], first, sizeof(first));
+        check(it[0].kind == ITEM_HEADER && strcmp(first, "Kivara") == 0, "\"kiva\": Kivara first (starts with it)");
+        search_filter_set(&f, F_IN, IN_ALBUMS);
+        n = search_run("e", IM_ABC, &f, it, mk, item_cap);
+        bool albums_only = n > 0;
+        for (int i = 0; i < n; i++)
+            albums_only &= it[i].kind == ITEM_HEADER ? it[i].id == SEC_ALBUMS : it[i].kind == ITEM_ALBUM;
+        check(albums_only, "search in: only albums");
+        search_filter_clear(&f);
+        SearchOpt opts[64];
+        int no = search_options(F_GENRE, opts, 64);
+        int voc = -1;
+        for (int i = 0; i < no; i++)
+            if (strcmp(lib_value(opts[i].value), "Vocal Synth") == 0)
+                voc = i;
+        check(voc >= 0 && opts[voc].count == 3, "genres with counts: Vocal Synth 3");
+        search_filter_set(&f, F_GENRE, opts[voc].value);
+        n = search_run("", IM_ABC, &f, it, mk, item_cap);
+        check(n == 4 && it[0].id == SEC_SONGS && mk[0].count == 3, "genre Vocal Synth, nothing typed: its 3 songs");
+        n = search_run("luo", IM_PINYIN, &f, it, mk, item_cap);
+        check(n == 3, "with a filter, the query also looks at artists: 洛星涵's 2 Vocal Synth songs");
+        search_filter_clear(&f);
+        search_filter_set(&f, F_YEAR, 2020);
+        n = search_run("", IM_ABC, &f, it, mk, item_cap);
+        check(n == 19, "year: the 2020s (18 songs)");
+        check(kana_mod(0x304B, KANA_DAKU) == 0x304C && kana_mod(0x306F, KANA_HANDAKU) == 0x3071
+              && kana_mod(0x3064, KANA_SMALL) == 0x3063 && kana_mod(0x3063, KANA_SMALL) == 0x3064, "か゛ = が, は゜ = ぱ, つ 小 = っ");
+
+        // the 🔍 tab: the search page slides in, then the keyboard comes up
+        tap(240, 10);
+        check(app.tab == TAB_SEARCH && app.kb_up && app.kb_t == 0, "🔍: search, the keyboard on its way");
+        run(TAB_TICKS + KB_TICKS + 4);
+        check(app.kb_t == KB_TICKS, "keyboard up");
+        shot("30_search_open");
+        type_text("kiva");
+        check(strcmp(app.query, "kiva") == 0, "typed \"kiva\" on the keys");
+        run(SHEET_TICKS + 2);
+        check(app.sheet_t == SHEET_TICKS && section_count(SEC_ARTISTS) >= 3, "the results are on the top screen");
+        shot("31_search_typing");
+        press(KEY_DOWN);
+        check(app.sel_on && app.items[app.sel].kind == ITEM_ARTIST, "D-pad: the highlight comes on");
+        press(KEY_DOWN);
+        run(10);
+        shot("31b_search_dpad");
+        // ⌫ and the 123 keys
+        tap_key(0, K_NUM);
+        tap_key('2', K_CHAR);
+        check(strcmp(app.query, "kiva2") == 0, "123: typed 2");
+        tap_key(0, K_BACK);
+        tap_key(0, K_NUM);
+        check(strcmp(app.query, "kiva") == 0 && !app.kb_num, "⌫ deletes it, back to the letters");
+        // ⮟: the keyboard goes down, the results onto the bottom screen
+        tap_key(0, K_DONE);
+        check(!app.kb_up, "⮟: keyboard down");
+        run(KB_TICKS / 2);
+        shot("32a_search_dropping");
+        run(KB_TICKS);
+        check(app.kb_t == 0, "the results are a list on the bottom screen");
+        shot("32_search_results");
+        {
+            // hold a result: the row menu, next to the row
+            int rr = result_row_named("Kivara feat. Ombo");
+            hold(100, SEARCH_LIST_Y + (rr - app.scroll) * ROW_H + 8, HOLD_TICKS + 2);
+            release();
+            check(app.overlay == OV_ROWMENU && app.menu_item == rr, "holding a result: its row menu");
+            run(OV_TICKS + 2);
+            shot("32b_search_rowmenu");
+            press(KEY_B);
+            run(OV_TICKS + 2);
+        }
+        int r = result_row_named("Kivara");
+        check(r >= 0 && r < app.scroll + SEARCH_ROWS, "Kivara in the list");
+        tap(100, SEARCH_LIST_Y + (r - app.scroll) * ROW_H + 8);
+        check(app.tab == TAB_ALBUM && app.artist >= 0 && strcmp(lib_value(lib_group_name(app.artist)), "Kivara") == 0,
+              "tapping Kivara: Kivara's albums");
+        run(40);
+        // back: the query is kept, the keyboard comes up again
+        tap(240, 10);
+        run(TAB_TICKS + KB_TICKS + 4);
+        check(strcmp(app.query, "kiva") == 0 && app.kb_t == KB_TICKS, "back in search: \"kiva\" kept, keyboard up");
+        // the × clears it
+        tap(240, FIELD_Y + 10);
+        check(app.query[0] == 0 && app.n_items == 0, "× clears the query");
+        run(SHEET_TICKS + 2);
+
+        // hold o: its other forms, slide onto ö, let go
+        type_text("g");
+        int ox, oy2;
+        key_pos('o', K_CHAR, &ox, &oy2);
+        hold(ox, oy2, HOLD_TICKS + 2);
+        check(app.acc_key >= 0, "holding o: its other forms");
+        hold(ox, oy2, ACC_TICKS + 2);
+        check(app.acc_sel == 0, "held still: the first form (ö) is chosen");
+        shot("33_search_accents");
+        int bx, by, bw;
+        kb_forms_box(&kb_keys[app.acc_key], forms_count(&kb_keys[app.acc_key]), &bx, &by, &bw);
+        int fy = KB_Y + by + 14;
+        drag_to(bx + 2 + 3 * 25 + 12, fy, 6);         // over ô
+        hold(bx + 2 + 3 * 25 + 12, fy, 10);
+        check(app.acc_sel == 3 && app.acc_vis == bx + 2 + 3 * 25, "the highlight glides to ô");
+        drag_to(bx + 2 + 12, fy, 6);                  // back to ö
+        hold(bx + 2 + 12, fy, 10);
+        release();
+        check(strcmp(app.query, "gö") == 0 && app.acc_key < 0, "slid back to ö and let go: \"gö\"");
+        run(10);
+        check(result_row_named("Gölmo") >= 0 && result_row_named("Golden Hours") < 0, "gö: Gölmo only");
+        shot("33b_search_go");
+        tap(240, FIELD_Y + 10);
+
+        app.set.keyboard = KB_QWERTZ;
+        int zx, zy;
+        check(key_pos('z', K_CHAR, &zx, &zy) && zy < KB_Y + 32, "QWERTZ (Settings › Regional): z in the top row");
+        app.set.keyboard = KB_QWERTY;
+        // the input key: かな pushes ABC out
+        tap_key(0, K_IM);
+        check(app.im == IM_KANA && app.im_t > 0, "input key: かな");
+        run(IM_TICKS / 2);
+        shot("34_search_im_push");
+        run(IM_TICKS);
+        tap_key(0x3089, K_CHAR);                    // ら
+        tap_key(0x3072, K_CHAR);                    // ひ
+        tap_key(KANA_DAKU, K_KANA);                 // ゛: び
+        check(strcmp(app.query, "らび") == 0, "ら ひ ゛ typed らび");
+        run(SHEET_TICKS + 2);
+        check(result_row_named("ラビットロード") >= 0, "らび finds ラビットロード");
+        shot("34b_search_kana");
+        tap(240, FIELD_Y + 10);
+        // hold the input key: the list; pinyin
+        key_pos(0, K_IM, &ox, &oy2);
+        hold(ox, oy2, HOLD_TICKS + 2);
+        release();
+        check(app.overlay == OV_IM, "holding the input key: the list of input methods");
+        run(OV_TICKS + 2);
+        shot("35_search_im_menu");
+        tap(60, ui_im_menu_y() + 20 + IM_PINYIN * 16 + 8);
+        run(IM_TICKS + 2);
+        check(app.im == IM_PINYIN && app.overlay == OV_NONE, "pinyin chosen");
+        type_text("luo");
+        run(SHEET_TICKS + 2);
+        check(app.n_items >= 2 && app.items[1].kind == ITEM_ARTIST, "pinyin \"luo\": 洛星涵");
+        shot("35b_search_pinyin");
+        tap(240, FIELD_Y + 10);
+        key_pos(0, K_IM, &ox, &oy2);
+        hold(ox, oy2, HOLD_TICKS + 2);
+        release();
+        run(OV_TICKS + 2);
+        tap(60, ui_im_menu_y() + 20 + IM_CYR * 16 + 8);
+        run(IM_TICKS + 2);
+        type_text("ви");
+        run(SHEET_TICKS + 2);
+        check(app.im == IM_CYR && section_count(SEC_ARTISTS) == 2, "АБВ: \"ви\" finds two artists");
+        shot("36_search_cyrillic");
+        tap(240, FIELD_Y + 10);
+        key_pos(0, K_IM, &ox, &oy2);
+        hold(ox, oy2, HOLD_TICKS + 2);
+        release();
+        run(OV_TICKS + 2);
+        tap(60, ui_im_menu_y() + 20 + IM_ABC * 16 + 8);
+        run(IM_TICKS + 2);
+
+        // + Filter: the menu, a genre, the chip
+        bool on_x;
+        int px = -1;
+        for (int x = 4; x < 252 && px < 0; x++)
+            if (ui_chip_at(x, CHIPS_Y + 8, &on_x) == F_COUNT)
+                px = x;
+        tap(px + 10, CHIPS_Y + 8);
+        check(app.overlay == OV_FILTER && app.fpage < 0, "+ Filter: the filters");
+        run(OV_TICKS + 2);
+        shot("37_search_filter");
+        tap(100, FMENU_Y + 20 + F_GENRE * 16 + 8);
+        check(app.fpage == F_GENRE && app.n_fopts > 0, "Genre: its choices");
+        run(TAB_TICKS / 2);
+        shot("37a_search_genre_push");
+        run(TAB_TICKS);
+        shot("37b_search_genre");
+        int vi = -1;
+        for (int i = 0; i < app.n_fopts; i++)
+            if (strcmp(lib_value(app.fopts[i].value), "Vocal Synth") == 0)
+                vi = i;
+        tap(100, FMENU_Y + 20 + (vi - app.fscroll) * 16 + 8);
+        check(app.overlay == OV_NONE && search_filter_on(&app.sf, F_GENRE) && section_count(SEC_SONGS) == 3,
+              "Vocal Synth: a chip, its 3 songs");
+        run(4);
+        check(app.chip_w[F_GENRE] > 0 && app.chip_w[F_GENRE] < ui_chip_full_w(F_GENRE), "the chip grows in");
+        run(OV_TICKS + SHEET_TICKS + 4);
+        shot("37c_search_filtered");
+        tap_key(0, K_DONE);
+        run(KB_TICKS + 2);
+        shot("37d_search_filtered_list");
+        int gx = -1;
+        for (int x = 4; x < 252 && gx < 0; x++)
+            if (ui_chip_at(x, CHIPS_Y + 8, &on_x) == F_GENRE && on_x)
+                gx = x;
+        tap(gx + 4, CHIPS_Y + 8);
+        check(!search_filter_on(&app.sf, F_GENRE) && app.n_items == 0, "× on the chip: the filter is off");
+        run(4);
+        check(app.chip_w[F_GENRE] > 0, "the chip shrinks away");
+        run(20);
+        check(app.chip_w[F_GENRE] == 0, "gone");
+
+        // in German
+        tap(150, FIELD_Y + 10);
+        run(KB_TICKS + 2);
+        app.set.lang = i18n_lang = LANG_DE;
+        tap(px + 10, CHIPS_Y + 8);
+        run(OV_TICKS + 2);
+        shot("38_search_de_filter");
+        press(KEY_B);
+        run(OV_TICKS + 2);
+        type_text("go");
+        run(SHEET_TICKS + 2);
+        shot("38b_search_de");
+        app.set.lang = i18n_lang = LANG_EN;
+        tap(240, FIELD_Y + 10);
+        press(KEY_B);
+        run(KB_TICKS + 2);
+        show_tab(TAB_ARTIST);
+        run(30);
     }
 
     // ---- the German interface: every text there, every screen drawn, the texts fit

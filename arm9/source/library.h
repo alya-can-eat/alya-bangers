@@ -53,6 +53,9 @@ const LibAlbum *lib_album(uint32_t id);
 uint32_t lib_album_track(const LibAlbum *a, int i);
 const char *lib_value(uint32_t value_id);    // "" for LIB_NONE
 const char *lib_path(uint32_t track);
+// Readings of a name with kanji / hanzi, for search (either may be NULL);
+// false: it has none (or library.idx is from before readings).
+bool lib_reading(uint32_t value, const char **kana, const char **pinyin);
 // First value of a tag (e.g. "genre"), or NULL.
 // The first value of a tag (NULL: none).
 const char *lib_tag(uint32_t track, const char *key);
@@ -76,7 +79,8 @@ int lib_value_group(uint32_t value);            // an artist value's group, -1: 
 
 // ---- lists for the browser ----
 
-typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP } ItemKind;
+// ITEM_HEADER: a section title in search results (id: SEC_ARTISTS, ...)
+typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP, ITEM_HEADER } ItemKind;
 
 typedef struct {
     uint8_t kind;

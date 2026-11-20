@@ -12,6 +12,7 @@
 #include "app.h"
 #include "default_cover.h"
 #include "font.h"
+#include "keyboard.h"
 #include "player.h"
 #include "queue.h"
 #include "stats.h"
@@ -1016,10 +1017,30 @@ static bool draw_background(int p2)
     return busy;
 }
 
+static bool sheet_on_top(int *sy);
+static bool draw_sheet_top(int sy);
+static bool ui_draw_top_screen(void);
+
 bool ui_draw_top(void)
 {
     T = gfx_canvas(SCREEN_TOP);
     gfx_unclip(T);
+    int sy;
+    bool sheet = sheet_on_top(&sy);
+    if (sheet && sy <= SHEET_Y)
+    {
+        // typing: the results cover the top screen
+        header();
+        return draw_sheet_top(sy);
+    }
+    bool anim = ui_draw_top_screen();
+    if (sheet)
+        anim |= draw_sheet_top(sy);
+    return anim;
+}
+
+static bool ui_draw_top_screen(void)
+{
     uint32_t t = app.frame;
     int p = app_slide_p256();
     int p1 = smooth256(p * 256 / 154);
@@ -1189,6 +1210,8 @@ static void centered(Canvas *c, int y, const char *s, uint16_t color)
     text(c, (SCREEN_W - w) / 2, y, s, color);
 }
 
+static bool draw_search_page(int oy);
+
 static bool draw_list(int oy)
 {
     bool anim = false;
@@ -1203,11 +1226,7 @@ static bool draw_list(int oy)
         return false;
     }
     if (app.tab == TAB_SEARCH)
-    {
-        gfx_fill(B, 0, y0, SCREEN_W, ROWS * ROW_H, C_BG);
-        centered(B, y0 + 64, txt(S_SEARCH_LATER), C_DIM);
-        return false;
-    }
+        return draw_search_page(oy);
     bool numbers = app.tab == TAB_TITLE && (app.album != LIB_NONE || app.add_mode);
     for (int r = 0; r < ROWS; r++)
     {
@@ -1484,7 +1503,7 @@ static void draw_row_menu(int oy)
 {
     if (app.menu_item < 0 || app.menu_item >= app.n_items)
         return;
-    int row_y = LIST_Y + (app.menu_item - app.scroll) * ROW_H;
+    int row_y = list_y() + (app.menu_item - app.scroll) * ROW_H;
     int y0 = oy + ui_rowmenu_y(row_y);
     int x0 = 88, x1 = 240, h = 20 + 16 * 3 + 4;
     gfx_fill(B, x0, y0, x1 - x0, h, C_PANEL);
@@ -1541,8 +1560,559 @@ static bool row_menu_moving(int oy)
         draw_row_menu(oy);
         return false;
     }
-    int y0 = oy + ui_rowmenu_y(LIST_Y + (app.menu_item - app.scroll) * ROW_H);
+    int y0 = oy + ui_rowmenu_y(list_y() + (app.menu_item - app.scroll) * ROW_H);
     shifted(w_row, oy, 88, y0, 240, y0 + 72, (oy + BAR_Y - y0) * (256 - p) / 256, oy + BAR_Y);
+    return true;
+}
+
+// ------------------------------------------------------------ search (🔍)
+
+static int ease_io(int q)
+{
+    q = clamp256(q);
+    return q * q * (768 - 2 * q) / 65536;
+}
+
+static uint16_t key_fill(bool fn)
+{
+    return gfx_mix(C_TEXT, C_BG, fn ? 28 : 50);
+}
+
+// A rounded box with an outline.
+static void round_box(Canvas *c, int x, int y, int w, int h, int r, uint16_t fill, uint16_t line)
+{
+    gfx_round_fill(c, x, y, w, h, r, line);
+    gfx_round_fill(c, x + 1, y + 1, w - 2, h - 2, r > 1 ? r - 1 : 1, fill);
+}
+
+// Where the results' top edge is, in one tall picture of both screens (the
+// bottom screen starts at SCREEN_H + HINGE): on the top screen while typing,
+// in the list under the filters otherwise, moving with the keyboard.
+static int sheet_y(void)
+{
+    int kp = app.tab == TAB_SEARCH ? ease_io(app.kb_t * 256 / KB_TICKS) : 256;
+    int up = SCREEN_H - (SCREEN_H - SHEET_Y) * ease_out(clamp256(app.sheet_t * 256 / SHEET_TICKS)) / 256;
+    int down = SCREEN_H + HINGE + SEARCH_LIST_Y;
+    return down + (up - down) * kp / 256;
+}
+
+static void draw_field(int oy)
+{
+    int y = oy + FIELD_Y;
+    bool typing = app.tab == TAB_SEARCH && app.kb_up;
+    round_box(B, 4, y, 248, 20, 4, C_ZEBRA, typing ? C_ACC : C_LINE);
+    int right = app.query[0] ? 228 : 246;
+    int tw = font_text_width(app.query);
+    int x = 10 + (tw > right - 16 ? right - 16 - tw : 0);     // long: its end shows
+    gfx_clip(B, 6, y, right, y + 20);
+    if (app.query[0])
+        text(B, x, y + 2, app.query, C_TEXT);
+    else
+        text(B, 14, y + 2, txt(S_SEARCH_HINT), C_FAINT);     // after the cursor
+    if (typing && (app.frame / 15) % 2 == 0)
+        gfx_fill(B, (app.query[0] ? x + tw : 10) + 1, y + 3, 2, 14, C_ACC);
+    gfx_clip(B, 0, oy, SCREEN_W, SCREEN_H);
+    if (app.query[0])
+        text(B, 236, y + 2, "×", C_DIM);
+}
+
+int ui_chip_full_w(int kind)
+{
+    char label[96];
+    search_chip_label(&app.sf, kind, label, sizeof(label));
+    int tw = font_text_width(label);
+    return (tw > 96 ? 96 : tw) + 28;
+}
+
+static int plus_chip_w(int x)
+{
+    int w = font_text_width(txt(S_FILTER)) + 12;
+    return x + w <= 252 ? w : 20;       // no room: just "+"
+}
+
+int ui_chip_at(int x, int y, bool *on_x)
+{
+    *on_x = false;
+    if (y < CHIPS_Y - 2 || y >= CHIPS_Y + 20)
+        return -1;
+    int cx = 4;
+    for (int k = 0; k < F_COUNT; k++)
+    {
+        int w = app.chip_w[k];
+        if (w <= 0)
+            continue;
+        if (x >= cx && x < cx + w + 2)
+        {
+            *on_x = x >= cx + w - 20;
+            return k;
+        }
+        cx += w + 4;
+    }
+    return x >= cx - 2 && x < cx + plus_chip_w(cx) + 4 ? F_COUNT : -1;
+}
+
+static void draw_chips(int oy)
+{
+    int y = oy + CHIPS_Y, x = 4;
+    for (int k = 0; k < F_COUNT; k++)
+    {
+        int w = app.chip_w[k];
+        if (w <= 0)
+            continue;
+        gfx_round_fill(B, x, y, w, 18, 8, C_SEL);
+        if (search_filter_on(&app.sf, k) && w >= ui_chip_full_w(k) - 1)
+        {
+            char label[96];
+            search_chip_label(&app.sf, k, label, sizeof(label));
+            font_draw(B, x + 7, y + 1, w - 28, label, C_TEXT);
+            text(B, x + w - 15, y + 1, "×", C_DIM);
+        }
+        x += w + 4;
+    }
+    int w = plus_chip_w(x);
+    bool open = app.overlay == OV_FILTER;
+    const char *s = w > 20 ? txt(S_FILTER) : "+";
+    if (open)
+        gfx_round_fill(B, x, y, w, 18, 8, C_ACC);
+    else
+        round_box(B, x, y, w, 18, 8, C_BG, C_LINE);
+    text(B, x + 6, y + 1, s, open ? C_BG : C_DIM);
+}
+
+// ---- result rows (on either screen)
+
+static void search_meta(const Item *it, char *buf, int size)
+{
+    buf[0] = 0;
+    if (it->kind == ITEM_ARTIST)
+        snprintf(buf, size, "%d", lib_group_size((int)it->id));
+    else if (it->kind == ITEM_ALBUM)
+        snprintf(buf, size, "%s", lib_value(lib_album(it->id)->artist));
+    else if (it->kind == ITEM_TRACK)
+        artists_of(it->id, buf, size);
+}
+
+// Byte offset of the n-th character.
+static int char_at(const char *s, int n)
+{
+    const char *p = s;
+    for (int i = 0; i < n && *p; i++)
+        utf8_next(&p);
+    return (int)(p - s);
+}
+
+// Pieces of text in w pixels, cut with "…" if they don't fit.
+static void pieces_fit(Canvas *c, int x, int y, int w, const char *const *s, const uint16_t *col, int n)
+{
+    char all[600];
+    all[0] = 0;
+    for (int i = 0; i < n; i++)
+        strncat(all, s[i], sizeof(all) - strlen(all) - 1);
+    int jp = font_has_kana(all);
+    if (font_text_width(all) <= w)
+    {
+        int pen = x;
+        for (int i = 0; i < n; i++)
+            pen += font_draw_ex(c, pen, y, x, x + w, s[i], col[i], jp, 1);
+        return;
+    }
+    // the whole in the first colour with "…", then the other pieces over it up to the "…"
+    int drawn = font_draw(c, x, y, w, all, col[0]);
+    int cut = x + drawn - font_text_width("…");
+    int pen = x;
+    for (int i = 0; i < n; i++)
+    {
+        if (i > 0 && col[i] != col[0])
+            font_draw_ex(c, pen, y, x, cut, s[i], col[i], jp, 1);
+        pen += font_text_width(s[i]);
+    }
+}
+
+static bool result_row(Canvas *c, int y, int i, int right, bool sel)
+{
+    const Item *it = &app.items[i];
+    const SearchMark *m = &app.marks[i];
+    if (it->kind == ITEM_HEADER)
+    {
+        static const uint8_t names[3] = { S_SEC_ARTISTS, S_SEC_ALBUMS, S_SEC_SONGS };
+        char n[12];
+        snprintf(n, sizeof(n), "%u", (unsigned)m->count);
+        text(c, 4, y, txt(names[it->id < 3 ? it->id : 2]), C_DIM);
+        text_r(c, right, y, n, C_DIM);
+        gfx_fill(c, 4, y + 15, right - 4, 1, C_LINE);
+        return false;
+    }
+    static char name[256], meta[200];
+    ui_item_label(it, name, sizeof(name));
+    search_meta(it, meta, sizeof(meta));
+    bool playing = item_playing(it);
+    int mw = 0;
+    if (meta[0])
+    {
+        mw = font_text_width(meta);
+        if (mw > 104)
+            mw = 104;
+        font_draw(c, right - mw, y, mw, meta, playing ? C_ACC : C_DIM);
+    }
+    int w = right - 4 - (meta[0] ? mw + 8 : 0);
+    // the name (then the reading it was found by, dim), the match in the accent colour
+    uint16_t base = playing ? C_ACC : C_TEXT;
+    const char *reading = search_reading(it, m->via);
+    const char *where = reading ? reading : name;
+    uint16_t rest_col = reading ? C_DIM : base;
+    int a = char_at(where, m->start), b = char_at(where, m->start + m->len);
+    static char p0[300], p1[256], p2[256], p3[256];
+    const char *pieces[4];
+    uint16_t cols[4];
+    int n = 0;
+    if (reading)
+    {
+        snprintf(p0, sizeof(p0), "%s  ", name);
+        pieces[n] = p0, cols[n++] = base;
+    }
+    snprintf(p1, sizeof(p1), "%.*s", a, where);
+    pieces[n] = p1, cols[n++] = rest_col;
+    snprintf(p2, sizeof(p2), "%.*s", b - a, where + a);
+    pieces[n] = p2, cols[n++] = m->len ? C_ACC : rest_col;
+    snprintf(p3, sizeof(p3), "%s", where + b);
+    pieces[n] = p3, cols[n++] = rest_col;
+    if (sel || app.set.scroll_all)
+        return marquee(c, 4, y, w, pieces, cols, n, sel ? app.frame - app.sel_frame : app.frame, false);
+    pieces_fit(c, 4, y, w, pieces, cols, n);
+    return false;
+}
+
+// The results as a sheet with its top at y: rows from app.scroll, drawn
+// only between clip0 and clip1. hl: the selection highlight shows.
+static bool draw_sheet(Canvas *c, int y, int clip0, int clip1, int right, bool hl)
+{
+    int bottom = y + (SCREEN_H - SHEET_Y);
+    if (bottom > clip1) bottom = clip1;
+    int top = y > clip0 ? y : clip0;
+    if (top >= bottom)
+        return false;
+    gfx_clip(c, 0, top, SCREEN_W, bottom);
+    gfx_fill(c, 0, top, SCREEN_W, bottom - top, C_BG);
+    bool anim = false;
+    int rows = (bottom - y + ROW_H - 1) / ROW_H;
+    int w = right == 240 ? SCROLL_X : SCREEN_W;
+    for (int k = 0; k < rows; k++)
+    {
+        int i = app.scroll + k;
+        if (i < app.n_items && app.items[i].kind != ITEM_HEADER)
+            gfx_fill(c, 0, y + k * ROW_H, w, ROW_H, k % 2 ? C_ZEBRA : C_BG);
+    }
+    if (hl && app.sel >= 0 && app.sel < app.n_items)
+        gfx_fill(c, 0, y + app.sel_vis, w, ROW_H, C_SEL);
+    for (int k = 0; k < rows; k++)
+    {
+        int i = app.scroll + k;
+        if (i >= app.n_items)
+            break;
+        anim |= result_row(c, y + k * ROW_H, i, right, hl && i == app.sel);
+    }
+    if (app.n_items == 0 && (app.query[0] || search_songs_filtered(&app.sf)))
+    {
+        const char *s = txt(S_NO_RESULTS);
+        font_draw_ex(c, (SCREEN_W - font_text_width(s)) / 2, y + 24, 0, SCREEN_W, s, C_DIM, -1, 1);
+    }
+    gfx_unclip(c);
+    return anim;
+}
+
+// Top screen: the results while typing (or on their way down).
+static bool draw_sheet_top(int sy)
+{
+    return draw_sheet(T, sy, SHEET_Y, SCREEN_H, 252, app.sel_on || !app.kb_up);
+}
+
+static bool sheet_on_top(int *sy)
+{
+    if (app.player_mode || app.slide > 0 || (app.tab != TAB_SEARCH && app.sheet_t == 0))
+        return false;
+    *sy = sheet_y();
+    return *sy < SCREEN_H;
+}
+
+// The search page under the tabs: the query, the filters, and (keyboard
+// down) the results.
+static bool draw_search_page(int oy)
+{
+    gfx_fill(B, 0, oy + TAB_H, SCREEN_W, BAR_Y - TAB_H, C_BG);
+    draw_field(oy);
+    draw_chips(oy);
+    if (app.kb_t > 0)
+        return false;
+    int y0 = oy + SEARCH_LIST_Y;
+    bool anim = draw_sheet(B, y0, y0, y0 + SEARCH_ROWS * ROW_H, 240, true);
+    gfx_clip(B, 0, oy, SCREEN_W, SCREEN_H);
+    scrollbar(y0, SEARCH_ROWS, app.scroll, app.n_items, app.scroll_drag);
+    return anim;
+}
+
+// ---- keyboards
+
+static void key_label(const Key *k, int im, char *buf)
+{
+    static const char *const kana[3] = { "゛", "゜", "小" };
+    switch (k->kind)
+    {
+    case K_CHAR: buf[utf8_put(buf, k->cp)] = 0; break;
+    case K_SPACE: strcpy(buf, txt(S_SPACE)); break;
+    case K_IM: strcpy(buf, kb_im_label(im)); break;
+    case K_NUM: strcpy(buf, "123"); break;
+    case K_KANA: strcpy(buf, kana[k->cp < 3 ? k->cp : 0]); break;
+    default: buf[0] = 0; break;
+    }
+}
+
+static void draw_key(int x, int y, const Key *k, bool lit, int im)
+{
+    gfx_round_fill(B, x, y, k->w, k->h, 3, lit ? C_ACC : key_fill(k->fn));
+    uint16_t col = lit ? C_BG : (k->fn ? C_DIM : C_TEXT);
+    uint32_t sym = k->kind == K_SHIFT ? 0x21E7 : (k->kind == K_BACK ? 0x232B : (k->kind == K_DONE ? 0x2B9F : 0));
+    if (sym)
+    {
+        icon(B, x + (k->w - 16) / 2, y + (k->h - 16) / 2, sym, col);
+        return;
+    }
+    char label[48];
+    key_label(k, im, label);
+    int jp = im == IM_KANA ? 1 : -1;
+    int tw = font_text_width(label);
+    font_draw_ex(B, x + (k->w - tw) / 2, y + (k->h - 16) / 2, x, x + k->w, label, col, jp, 1);
+}
+
+static void draw_layout(int dx, int y0, int im, bool current)
+{
+    Key keys[KB_MAX_KEYS];
+    bool num = current && app.kb_num;
+    int n = kb_layout(im, num, app.set.keyboard == KB_QWERTZ, current && app.shift && !num, keys);
+    for (int i = 0; i < n; i++)
+    {
+        const Key *k = &keys[i];
+        int x = dx + k->x;
+        if (x + k->w <= 0 || x >= SCREEN_W)
+            continue;
+        bool lit = current && (i == app.key_down || i == app.acc_key
+                               || (i == app.key_flash && app.frame < app.key_flash_until)
+                               || (k->kind == K_SHIFT && app.shift) || (k->kind == K_NUM && app.kb_num));
+        draw_key(x, y0 + k->y, k, lit, im);
+    }
+}
+
+// A held letter: its other forms in a row above it.
+static void draw_forms(int y0)
+{
+    Key keys[KB_MAX_KEYS];
+    int n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift && !app.kb_num, keys);
+    if (app.acc_key < 0 || app.acc_key >= n)
+        return;
+    const Key *k = &keys[app.acc_key];
+    const char *f = letter_forms(cp_lower(k->cp));
+    if (f == NULL)
+        return;
+    uint32_t forms[12];
+    int nf = 0;
+    while (nf < 12 && (forms[nf] = utf8_next(&f)) != 0)
+    {
+        if (app.shift)
+            forms[nf] = cp_upper(forms[nf]);
+        nf++;
+    }
+    int bx, by, bw;
+    kb_forms_box(k, nf, &bx, &by, &bw);
+    int g = ease_out(clamp256(app.acc_t * 256 / ACC_TICKS));
+    int w = k->w + (bw - k->w) * g / 256;
+    int x0 = k->x + k->w / 2 - w / 2;
+    if (x0 > SCREEN_W - 2 - w) x0 = SCREEN_W - 2 - w;
+    if (x0 < 2) x0 = 2;
+    gfx_unclip(B);
+    round_box(B, x0, y0 + by, w, 32, 4, C_PANEL, C_ACC);
+    if (g < 256)
+        return;
+    for (int i = 0; i < nf; i++)
+        gfx_round_fill(B, bx + 2 + i * 25, y0 + by + 2, 23, 27, 3, key_fill(false));
+    int hi = -1;
+    if (app.acc_sel >= 0)
+    {
+        gfx_round_fill(B, app.acc_vis, y0 + by + 2, 23, 27, 3, C_ACC);
+        hi = (app.acc_vis - bx - 2 + 12) / 25;
+    }
+    for (int i = 0; i < nf; i++)
+    {
+        char s[8];
+        s[utf8_put(s, forms[i])] = 0;
+        int tw = font_text_width(s);
+        text(B, bx + 2 + i * 25 + (23 - tw) / 2, y0 + by + 7, s, i == hi ? C_BG : C_TEXT);
+    }
+}
+
+// Over the page and the bar: the results moving between the screens, the keyboard.
+static bool search_layers(int oy)
+{
+    if (app.kb_t <= 0 || oy != 0)
+        return false;
+    int kb_y = SCREEN_H - (SCREEN_H - KB_Y) * ease_io(app.kb_t * 256 / KB_TICKS) / 256;
+    bool anim = false;
+    if (app.kb_t < KB_TICKS)
+    {
+        int sy = sheet_y() - (SCREEN_H + HINGE);
+        draw_sheet(B, sy, 0, kb_y < BAR_Y ? kb_y : BAR_Y, 240, !app.kb_up || app.sel_on);
+        anim = true;
+    }
+    gfx_clip(B, 0, kb_y, SCREEN_W, SCREEN_H);
+    gfx_fill(B, 0, kb_y, SCREEN_W, SCREEN_H - kb_y, C_BG);
+    if (app.im_t > 0)
+    {
+        // another input method: the new keys push the old ones out to the left
+        int p = ease_io((IM_TICKS - app.im_t) * 256 / IM_TICKS);
+        int off = SCREEN_W * p / 256;
+        draw_layout(-off, kb_y, app.im_from, false);
+        draw_layout(SCREEN_W - off, kb_y, app.im, true);
+        anim = true;
+    }
+    else
+        draw_layout(0, kb_y, app.im, true);
+    gfx_unclip(B);
+    if (app.acc_key >= 0 && app.kb_t == KB_TICKS)
+    {
+        draw_forms(kb_y);
+        anim |= app.acc_t < ACC_TICKS;
+    }
+    return anim;
+}
+
+// ---- menus: input methods, filters
+
+int ui_im_menu_y(void)
+{
+    return 161 - (20 + 16 * IM_COUNT + 4) - 2;
+}
+
+static void draw_im_menu(int oy)
+{
+    int x0 = 4, x1 = 180, h = 20 + 16 * IM_COUNT + 4, y0 = oy + ui_im_menu_y();
+    gfx_fill(B, x0, y0, x1 - x0, h, C_PANEL);
+    gfx_rect(B, x0, y0, x1 - x0, h, C_ACC);
+    text(B, x0 + 8, y0 + 2, txt(S_INPUT), C_DIM);
+    if (app.menu_sel >= 0)
+        highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * IM_COUNT, C_SEL);
+    for (int i = 0; i < IM_COUNT; i++)
+    {
+        int y = y0 + 20 + i * 16;
+        bool cur = i == app.im;
+        font_draw_ex(B, x0 + 8, y, 0, SCREEN_W, kb_im_label(i), cur ? C_ACC : C_TEXT, i == IM_KANA, 1);
+        text(B, x0 + 48, y, txt(S_IM_LATIN + i), cur ? C_TEXT : C_DIM);
+    }
+}
+
+static bool w_im(int oy) { draw_im_menu(oy); return false; }
+
+static bool im_menu_moving(int oy)
+{
+    int p = ov_progress();
+    if (p >= 256)
+    {
+        draw_im_menu(oy);
+        return false;
+    }
+    int y0 = oy + ui_im_menu_y(), h = 20 + 16 * IM_COUNT + 4;
+    shifted(w_im, oy, 4, y0, 180, y0 + h, (SCREEN_H - y0) * (256 - p) / 256, SCREEN_H);
+    return true;
+}
+
+static const uint8_t filter_names[F_COUNT] = { S_SEARCH_IN, S_GENRE, S_INFO_RATING, S_INFO_YEAR, S_PLAYED, S_FOLDER };
+
+// The filters (kind -1) or a filter's choices, with the left edge at dx.
+static void filter_page(int kind, int dx, int oy)
+{
+    int y0 = oy + FMENU_Y;
+    int x0 = dx < 0 ? 0 : dx, x1 = dx + SCREEN_W > SCREEN_W ? SCREEN_W : dx + SCREEN_W;
+    if (x1 <= x0)
+        return;
+    gfx_clip(B, x0, y0, x1, SCREEN_H);
+    gfx_fill(B, dx, y0, SCREEN_W, SCREEN_H - FMENU_Y, C_PANEL);
+    gfx_rect(B, dx, y0, SCREEN_W, SCREEN_H - FMENU_Y, C_ACC);
+    bool active = (kind < 0) == (app.fpage < 0);
+    int r0 = y0 + 20;
+    if (kind < 0)
+    {
+        text(B, dx + 8, y0 + 2, txt(S_ADD_FILTER), C_DIM);
+        if (active && app.menu_sel >= 0)
+            highlight(dx + 1, r0 + app.menu_vis, SCREEN_W - 2, 16, r0, r0 + 16 * FMENU_ROWS, C_SEL);
+        for (int k = 0; k < F_COUNT; k++)
+        {
+            int y = r0 + k * 16;
+            text(B, dx + 8, y, txt(filter_names[k]), C_TEXT);
+            if (k == F_IN || search_filter_on(&app.sf, k))
+            {
+                char v[96];
+                search_chip_label(&app.sf, k, v, sizeof(v));
+                int vw = font_text_width(v);
+                if (vw > 120) vw = 120;
+                font_draw(B, dx + SCREEN_W - 8 - vw, y, vw, v, C_ACC);
+            }
+            else
+                text_r(B, dx + SCREEN_W - 8, y, "›", C_DIM);
+        }
+    }
+    else
+    {
+        char title[64];
+        snprintf(title, sizeof(title), "‹ %s", txt(filter_names[kind]));
+        text(B, dx + 8, y0 + 2, title, C_DIM);
+        if (active && app.menu_sel >= 0)
+            highlight(dx + 1, r0 + app.menu_vis, SCREEN_W - 2, 16, r0, r0 + 16 * FMENU_ROWS, C_SEL);
+        char cur[96];
+        bool on = search_filter_on(&app.sf, kind);
+        search_chip_label(&app.sf, kind, cur, sizeof(cur));
+        for (int r = 0; r < FMENU_ROWS; r++)
+        {
+            int i = app.fscroll + r;
+            if (i >= app.n_fopts)
+                break;
+            int y = r0 + r * 16;
+            char label[96], count[12];
+            search_option_label(kind, app.fopts[i].value, label, sizeof(label));
+            snprintf(count, sizeof(count), "%d", app.fopts[i].count);
+            int cw = font_text_width(count);
+            text_r(B, dx + SCREEN_W - 12, y, count, C_DIM);
+            font_draw(B, dx + 8, y, SCREEN_W - 28 - cw, label, on && strcmp(label, cur) == 0 ? C_ACC : C_TEXT);
+        }
+        if (app.n_fopts > FMENU_ROWS)
+        {
+            // where in the choices this is
+            int h = 16 * FMENU_ROWS, th = h * FMENU_ROWS / app.n_fopts;
+            int ty = r0 + (h - th) * app.fscroll / (app.n_fopts - FMENU_ROWS);
+            gfx_fill(B, dx + SCREEN_W - 5, ty, 2, th, C_ACC_DIM);
+        }
+        if (app.n_fopts == 0)
+            text(B, dx + 8, r0, "–", C_DIM);
+    }
+    gfx_clip(B, 0, oy, SCREEN_W, SCREEN_H);
+}
+
+static bool draw_filter_menu(int oy)
+{
+    // a filter's choices push the list out to the left (and back)
+    int q = ease_out(clamp256(app.fpage_t * 256 / TAB_TICKS));
+    int dx = SCREEN_W - SCREEN_W * q / 256;
+    if (dx > 0)
+        filter_page(-1, dx - SCREEN_W, oy);
+    if (dx < SCREEN_W && app.fkind >= 0)
+        filter_page(app.fkind, dx, oy);
+    return app.fpage_t > 0 && app.fpage_t < TAB_TICKS;
+}
+
+static bool w_filter(int oy) { return draw_filter_menu(oy); }
+
+static bool filter_menu_moving(int oy)
+{
+    int p = ov_progress();
+    if (p >= 256)
+        return draw_filter_menu(oy);
+    shifted(w_filter, oy, 0, oy + FMENU_Y, SCREEN_W, oy + SCREEN_H, (SCREEN_H - FMENU_Y) * (256 - p) / 256, SCREEN_H);
     return true;
 }
 
@@ -1557,10 +2127,16 @@ static bool draw_panel(int oy)
         slide_lists(oy);
         anim |= app.tab_anim > 0;
         draw_bar(oy);
+        if (app.tab == TAB_SEARCH)
+            anim |= search_layers(oy);
         if (app.ov_vis == OV_SORT)
             anim |= sort_menu_moving(oy);
         if (app.ov_vis == OV_ROWMENU)
             anim |= row_menu_moving(oy);
+        if (app.ov_vis == OV_FILTER)
+            anim |= filter_menu_moving(oy);
+        if (app.ov_vis == OV_IM)
+            anim |= im_menu_moving(oy);
         anim |= draw_toast(oy);
     }
     gfx_unclip(B);
