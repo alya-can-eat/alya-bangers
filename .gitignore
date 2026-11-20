@@ -6,3 +6,4 @@ tests/host/screens
 tests/host/shots/
 sdroot/
 image.bin
+__pycache__/

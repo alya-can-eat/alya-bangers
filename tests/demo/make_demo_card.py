@@ -14,7 +14,9 @@ import os
 import random
 import subprocess
 import sys
+import wave
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 OUT = sys.argv[1]
@@ -23,19 +25,167 @@ CARD = os.path.join(OUT, "card", "music")
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+# --- audio: short songs that look like music to the visualizer (drums, bass,
+# chords, a melody; calmer for Ambient and Lo-fi), the same every run
+
+# minor key: i - VI - III - VII (semitones above the root, triad intervals)
+PROG = [(0, (0, 3, 7)), (8, (0, 4, 7)), (3, (0, 4, 7)), (10, (0, 4, 7))]
+PENTA = [0, 3, 5, 7, 10, 12, 15]
+
+
+def _env(m, rate, attack, decay=None, release=0.02):
+    t = np.arange(m) / rate
+    e = np.minimum(1.0, t / max(attack, 1e-4))
+    if decay:
+        e *= np.exp(-t / decay)
+    r = min(m, int(release * rate))
+    if r > 1:
+        e[-r:] *= np.linspace(1.0, 0.0, r)
+    return e
+
+
+def _tone(f, m, rate, harmonics, vibrato=0.0):
+    t = np.arange(m) / rate
+    ph = 2 * np.pi * f * t
+    if vibrato:
+        ph += vibrato * np.sin(2 * np.pi * 5.5 * t)
+    w = np.zeros(m)
+    for k, a in harmonics:
+        if f * k < rate * 0.45:
+            w += a * np.sin(k * ph)
+    return w
+
+
+def _hp(x):
+    """Crude high-pass (first difference), keeps noise bright."""
+    return np.diff(x, prepend=0.0)
+
+
+def _mtof(n):
+    return 440.0 * 2 ** ((n - 69) / 12)
+
+
+def synth(secs, seed, genre="", rate=44100):
+    """Stereo float array (n, 2), peak 0.85."""
+    rnd = np.random.default_rng(seed)
+    n = int(secs * rate)
+    out = np.zeros((n, 2))
+    style = {"Ambient": "ambient", "Lo-fi": "lofi", "Dream Pop": "dream"}.get(genre, "beat")
+    bpm = {"ambient": 66, "lofi": 82, "dream": 92}.get(style, 104 + seed % 24)
+    beat = 60.0 / bpm
+    root = 40 + seed % 9                      # E2..C3
+    eighth = beat / 2
+
+    def add(start, sig, pan=0.0):
+        a = int(start * rate)
+        if a >= n:
+            return
+        sig = sig[: n - a]
+        out[a:a + len(sig), 0] += sig * (1 - max(pan, 0.0))
+        out[a:a + len(sig), 1] += sig * (1 + min(pan, 0.0))
+
+    saw = [(k, 1.0 / k) for k in range(1, 9)]
+    square = [(k, 1.0 / k) for k in (1, 3, 5, 7, 9)]
+    bars = int(secs / (4 * beat)) + 1
+    for bar in range(bars):
+        t0 = bar * 4 * beat
+        off, tri = PROG[bar % 4]
+        chord_root = root + off
+        # chords (pad): held for the bar
+        m = int(4 * beat * rate)
+        for i, iv in enumerate(tri + (12,)):
+            f = _mtof(chord_root + 12 + iv)
+            amp = 0.05 if style != "ambient" else 0.07
+            add(t0, amp * _tone(f * (1.003 if i % 2 else 0.997), m, rate, saw) *
+                _env(m, rate, 0.25 if style != "ambient" else 1.2, release=0.3), pan=(i - 1.5) * 0.3)
+        if style == "ambient":
+            # slow bells high up, a breath of wind
+            for k in range(3):
+                nt = chord_root + 36 + PENTA[rnd.integers(len(PENTA))]
+                mm = int(2.5 * rate)
+                add(t0 + k * 1.3 * beat + rnd.uniform(0, 0.3),
+                    0.06 * _tone(_mtof(nt), mm, rate, [(1, 1), (2.76, 0.4), (5.4, 0.2)]) *
+                    _env(mm, rate, 0.005, 0.7), pan=rnd.uniform(-0.6, 0.6))
+            mm = int(4 * beat * rate)
+            wind = np.convolve(rnd.standard_normal(mm), np.ones(24) / 24, "same")
+            add(t0, 0.05 * wind * (0.6 + 0.4 * np.sin(np.linspace(0, np.pi, mm))))
+            continue
+        # bass: eighths on the chord root, a fifth now and then
+        for e in range(8):
+            if style == "lofi" and e % 2:
+                continue
+            nt = chord_root - 12 + (7 if e == 6 and rnd.random() < 0.5 else 0)
+            mm = int(eighth * rate * (2 if style == "lofi" else 1))
+            add(t0 + e * eighth, 0.22 * _tone(_mtof(nt), mm, rate, saw[:5]) * _env(mm, rate, 0.004, 0.22))
+        # drums
+        for b in range(4):
+            tb = t0 + b * beat
+            mm = int(0.35 * rate)
+            tt = np.arange(mm) / rate
+            f = 48 + 90 * np.exp(-tt / 0.035)
+            kick = np.sin(2 * np.pi * np.cumsum(f) / rate) * np.exp(-tt / 0.16)
+            if style != "dream" or b in (0, 2):
+                add(tb, 0.55 * kick)
+            if b in (1, 3):
+                mm = int(0.25 * rate)
+                tt = np.arange(mm) / rate
+                sn = 0.22 * _hp(rnd.standard_normal(mm)) * np.exp(-tt / 0.08) + \
+                    0.18 * np.sin(2 * np.pi * 185 * tt) * np.exp(-tt / 0.05)
+                add(tb, sn * (0.6 if style == "lofi" else 1.0))
+            for h in range(2):
+                swing = 0.06 * beat if (style == "lofi" and h) else 0.0
+                mm = int(0.08 * rate)
+                tt = np.arange(mm) / rate
+                open_hat = h == 1 and b == 3 and rnd.random() < 0.5
+                hat = _hp(_hp(rnd.standard_normal(mm if not open_hat else mm * 3)))
+                tt = np.arange(len(hat)) / rate
+                hat *= np.exp(-tt / (0.025 if not open_hat else 0.09))
+                add(tb + h * eighth + swing, (0.035 if style == "lofi" else 0.05) * hat, pan=0.3)
+        # melody: pentatonic eighths with rests, square-ish, a little vibrato
+        if style in ("beat", "dream") and bar % 8 >= 2:
+            for e in range(8):
+                if rnd.random() < 0.35:
+                    continue
+                nt = root + 24 + PENTA[rnd.integers(len(PENTA))]
+                ln = eighth * (2 if rnd.random() < 0.3 else 1)
+                mm = int(ln * rate)
+                add(t0 + e * eighth, 0.09 * _tone(_mtof(nt), mm, rate, square, vibrato=0.4) *
+                    _env(mm, rate, 0.01, 0.35), pan=-0.2)
+        if style == "lofi" and bar % 2:
+            for e in (1, 4, 6):
+                nt = chord_root + 24 + tri[e % 3]
+                mm = int(beat * rate)
+                add(t0 + e * eighth, 0.07 * _tone(_mtof(nt), mm, rate, [(1, 1), (2, 0.3), (3, 0.1)]) *
+                    _env(mm, rate, 0.003, 0.4), pan=0.25)
+    # vinyl-ish hiss for lo-fi
+    if style == "lofi":
+        out += 0.004 * rnd.standard_normal((n, 2))
+    fade = int(0.5 * rate)
+    out[:fade] *= np.linspace(0, 1, fade)[:, None]
+    out[-fade:] *= np.linspace(1, 0, fade)[:, None]
+    # mastered loud like real music: a soft limiter, then the peak at 0.85
+    out = np.tanh(2.2 * out / max(1e-9, np.abs(out).max())) / np.tanh(2.2)
+    return 0.85 * out
+
+
 def song(path, secs, freq, **tags):
-    """A few seconds of a chord with a beat, so the visualizer moves."""
+    """A synthetic song, style from its genre, seeded by freq and length."""
     path = os.path.join(SRC, path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if os.path.exists(path):
         return
+    x = synth(secs, int(freq) * 1000 + int(secs), tags.get("genre", ""))
+    tmp = path + ".wav"
+    with wave.open(tmp, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        w.writeframes((x * 32767).astype("<i2").tobytes())
     meta = []
     for k, v in tags.items():
         meta += ["-metadata", f"{k}={v}"]
-    expr = (f"0.22*sin({freq}*2*PI*t)+0.14*sin({freq * 1.5}*2*PI*t)+0.09*sin({freq * 4}*2*PI*t)"
-            f"+0.05*(random(0)-0.5)+0.2*sin(55*2*PI*t)*gt(mod(t,0.5),0.4)")
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
-                    f"aevalsrc=exprs='{expr}|{expr}':s=44100:d={secs}", *meta, path], check=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", tmp, *meta, path], check=True)
+    os.remove(tmp)
 
 
 def cover_frost(path):
