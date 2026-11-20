@@ -1,7 +1,10 @@
 # alya-bangers
 Music player for the Nintendo DS, requires a flashcart. :-)
 
-Version 1.0 (in the making), the DS Edition.
+Version pre-1.0, DS Edition. 1.0 is in the making.
+
+> [!NOTE]
+> There's no ready-made `.nds` to download yet. If you want to try it, build it yourself (see [Building](#building)).
 
 <table>
 <tr>

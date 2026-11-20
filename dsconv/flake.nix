@@ -13,7 +13,7 @@
       packages = forAll (pkgs: rec {
         dsconv = pkgs.python3Packages.buildPythonApplication {
           pname = "dsconv";
-          version = "1.0.0";
+          version = "1.0.0.dev0";
           pyproject = true;
           src = ./.;
           build-system = [ pkgs.python3Packages.setuptools ];
