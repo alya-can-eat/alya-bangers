@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Both screens as 256x192 16-bit bitmaps. Drawing goes to a back buffer in
+// RAM; gfx_present() copies changed screens to VRAM during vblank. Every
+// primitive is clipped to the canvas' clip rectangle.
+
+#ifndef DSPLAYER_GFX_H__
+#define DSPLAYER_GFX_H__
+
+#include <stdbool.h>
+#include <stdint.h>
+
+// Hot loops: ARM code in ITCM (fast memory) on the DS.
+#ifdef __NDS__
+#include <nds/ndstypes.h>
+#define HOT ARM_CODE ITCM_CODE __attribute__((noinline))
+#else
+#define HOT
+#endif
+
+#define SCREEN_W 256
+#define SCREEN_H 192
+
+// Opaque BGR555 color (bit 15 must be set or the pixel is transparent).
+#define COLOR(r, g, b) ((uint16_t)((r) | ((g) << 5) | ((b) << 10) | 0x8000))
+
+typedef enum { SCREEN_TOP = 0, SCREEN_BOTTOM = 1 } Screen;
+
+typedef struct {
+    uint16_t *px;   // SCREEN_W * SCREEN_H pixels
+    bool dirty;
+    int cx0, cy0, cx1, cy1;     // clip rectangle, x1/y1 exclusive
+} Canvas;
+
+void gfx_init(void);
+Canvas *gfx_canvas(Screen s);
+void gfx_present(void);
+
+void gfx_clip(Canvas *c, int x0, int y0, int x1, int y1);
+void gfx_unclip(Canvas *c);
+
+void gfx_fill(Canvas *c, int x, int y, int w, int h, uint16_t color);
+void gfx_rect(Canvas *c, int x, int y, int w, int h, uint16_t color);   // 1 px outline
+void gfx_round_fill(Canvas *c, int x, int y, int w, int h, int r, uint16_t color);
+void gfx_disc(Canvas *c, int cx, int cy, int r, uint16_t color);
+void gfx_triangle(Canvas *c, int x0, int y0, int x1, int y1, int x2, int y2, uint16_t color);
+// A triangle pointing right (dir 1) or left (dir -1): flat side at x0 from
+// cy - h to cy + h, tip len pixels away at cy. Exactly symmetric.
+void gfx_arrow(Canvas *c, int x0, int cy, int h, int len, int dir, uint16_t color);
+void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src);
+// A 128x128 picture drawn size x size (nearest pixel).
+void gfx_blit_scaled(Canvas *c, int x, int y, int size, const uint16_t *src128);
+
+// Mix two colors: t = 0..256 parts of a.
+uint16_t gfx_mix(uint16_t a, uint16_t b, int t);
+
+#endif
