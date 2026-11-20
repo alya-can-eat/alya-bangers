@@ -45,7 +45,9 @@ edit, ratings and plays, themes, in English or German.
   queue and sort orders are kept in `/_nds/alya-bangers/state.bin` (one saved
   under the old name, `/_nds/dsplayer/state.bin`, is read once).
 - **Settings (⋮):** pages that slide in from the right (‹, B or Left go
-  back; A or Right open one):
+  back; A or Right open one). Every page has an icon, so the language can be
+  found without reading it: the globe (🌐) leads to Regional, then to
+  Language, whose value is the language's own name (English, Deutsch):
   - *Playback:* ReplayGain, pause when the lid closes, L/R skip with the lid closed
   - *Browsing:* case-sensitive names, scroll all long rows
   - *Player:* time on the right (length or time left), cover background,

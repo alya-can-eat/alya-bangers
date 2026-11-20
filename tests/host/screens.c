@@ -526,6 +526,27 @@ int main(int argc, char **argv)
     run(20);
     check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 2, "Regional: language and keyboard");
     check(app.set.lang == LANG_EN && app.set.keyboard == KB_QWERTY, "English and QWERTY by default");
+    {
+        // findable without reading: every top row has an icon, the globe leads to Language
+        bool all = true;
+        for (int i = 0; i < ui_set_count(PAGE_TOP); i++)
+            all &= ui_set_item(PAGE_TOP, i)->icon != 0;
+        check(all, "every row of the top settings page has an icon");
+        check(ui_set_item(PAGE_TOP, 4)->icon == 0x1F310 && ui_set_item(PAGE_REGIONAL, 0)->icon == 0x1F310
+              && ui_set_item(PAGE_REGIONAL, 0)->id == SET_LANG, "the globe: Regional, then Language");
+        // the icons are glyphs the player always has
+        for (int i = 0; i < ui_set_count(PAGE_TOP); i++)
+        {
+            uint32_t cp = ui_set_item(PAGE_TOP, i)->icon;
+            char u[8] = { 0 };
+            if (cp < 0x10000)
+                u[0] = 0xE0 | cp >> 12, u[1] = 0x80 | ((cp >> 6) & 63), u[2] = 0x80 | (cp & 63);
+            else
+                u[0] = 0xF0 | cp >> 18, u[1] = 0x80 | ((cp >> 12) & 63), u[2] = 0x80 | ((cp >> 6) & 63), u[3] = 0x80 | (cp & 63);
+            all &= font_text_width(u) == 16;
+        }
+        check(all, "the icons are drawn 16 px wide");
+    }
     tap(100, SET_Y + 1 * SET_H + 10);
     check(app.set.keyboard == KB_QWERTZ, "tap: QWERTZ");
     tap(100, SET_Y + 1 * SET_H + 10);

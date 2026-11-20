@@ -1848,30 +1848,30 @@ static void toggle(int x, int y, bool on)
 }
 
 static const SetItem items_top[] = {
-    { S_PLAYBACK, SI_PAGE, PAGE_PLAYBACK },
-    { S_BROWSING, SI_PAGE, PAGE_BROWSING },
-    { S_PLAYER, SI_PAGE, PAGE_PLAYER },
-    { S_THEME, SI_PAGE, PAGE_THEME },
-    { S_REGIONAL, SI_PAGE, PAGE_REGIONAL },
-    { S_ABOUT, SI_PAGE, PAGE_ABOUT },
+    { S_PLAYBACK, SI_PAGE, PAGE_PLAYBACK, ICON_PLAYBACK },
+    { S_BROWSING, SI_PAGE, PAGE_BROWSING, ICON_BROWSING },
+    { S_PLAYER, SI_PAGE, PAGE_PLAYER, ICON_PLAYER },
+    { S_THEME, SI_PAGE, PAGE_THEME, ICON_THEME },
+    { S_REGIONAL, SI_PAGE, PAGE_REGIONAL, ICON_REGIONAL },
+    { S_ABOUT, SI_PAGE, PAGE_ABOUT, ICON_ABOUT },
 };
 static const SetItem items_playback[] = {
-    { S_REPLAYGAIN, SI_VALUE, SET_RG },
-    { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID },
-    { S_LR_LID, SI_TOGGLE, SET_LR_LID },
+    { S_REPLAYGAIN, SI_VALUE, SET_RG, 0 },
+    { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID, 0 },
+    { S_LR_LID, SI_TOGGLE, SET_LR_LID, 0 },
 };
 static const SetItem items_browsing[] = {
-    { S_CASE, SI_TOGGLE, SET_CASE },
-    { S_SCROLL_ALL, SI_TOGGLE, SET_SCROLL_ALL },
+    { S_CASE, SI_TOGGLE, SET_CASE, 0 },
+    { S_SCROLL_ALL, SI_TOGGLE, SET_SCROLL_ALL, 0 },
 };
 static const SetItem items_player[] = {
-    { S_TIME_RIGHT, SI_VALUE, SET_TIME_RIGHT },
-    { S_COVER_BG, SI_TOGGLE, SET_COVER_BG },
-    { S_SHUFFLE_W, SI_TOGGLE, SET_SHUFFLE_W },
+    { S_TIME_RIGHT, SI_VALUE, SET_TIME_RIGHT, 0 },
+    { S_COVER_BG, SI_TOGGLE, SET_COVER_BG, 0 },
+    { S_SHUFFLE_W, SI_TOGGLE, SET_SHUFFLE_W, 0 },
 };
 static const SetItem items_regional[] = {
-    { S_LANGUAGE, SI_VALUE, SET_LANG },
-    { S_KEYBOARD, SI_VALUE, SET_KEYBOARD },
+    { S_LANGUAGE, SI_VALUE, SET_LANG, ICON_REGIONAL },
+    { S_KEYBOARD, SI_VALUE, SET_KEYBOARD, ICON_KEYBOARD },
 };
 #define N_ITEMS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 static const struct {
@@ -1897,6 +1897,15 @@ int ui_set_count(int page)
 const SetItem *ui_set_item(int page, int i)
 {
     return &pages[page].items[i];
+}
+
+// A page shows the icon of its row on the top page.
+static uint32_t page_icon(int page)
+{
+    for (int i = 0; i < N_ITEMS(items_top); i++)
+        if (items_top[i].id == page)
+            return items_top[i].icon;
+    return 0;
 }
 
 static bool set_on(int id)
@@ -1994,7 +2003,8 @@ static bool settings_page(int page, int dx, bool lit)
     else
     {
         text(B, dx + 6, 2, "‹", C_TEXT);
-        text(B, dx + 18, 2, txt(pages[page].title), C_TEXT);
+        icon(B, dx + 18, 2, page_icon(page), C_ACC);
+        text(B, dx + 38, 2, txt(pages[page].title), C_TEXT);
     }
     text(B, dx + 236, 2, "×", C_TEXT);
     bool anim = false;
@@ -2020,8 +2030,14 @@ static bool settings_page(int page, int dx, bool lit)
             const SetItem *it = &pages[page].items[i];
             int y = SET_Y + i * SET_H;
             const char *value = it->kind == SI_VALUE ? set_value(it->id) : NULL;
-            int w = value ? 232 - 8 - font_text_width(value) - 8 : 196;
-            anim |= marquee1(B, dx + 8, y + ty, w, txt(it->label), C_TEXT, app.frame, false);
+            int lx = 8;
+            if (it->icon)
+            {
+                icon(B, dx + 8, y + ty, it->icon, C_ACC);
+                lx = 30;
+            }
+            int w = (value ? 232 - font_text_width(value) - 8 : 204) - lx;
+            anim |= marquee1(B, dx + lx, y + ty, w, txt(it->label), C_TEXT, app.frame, false);
             if (it->kind == SI_TOGGLE)
                 toggle(dx + 216, y + gy, set_on(it->id));
             else if (value)

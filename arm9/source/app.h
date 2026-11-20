@@ -101,7 +101,15 @@ typedef struct {
     uint16_t label;         // S_... (i18n.h)
     uint8_t kind;
     uint8_t id;             // SET_... or, for SI_PAGE, PAGE_...
+    uint32_t icon;          // in front of the label (0: none); the way to Language without reading
 } SetItem;
+#define ICON_PLAYBACK 0x1F50A       // 🔊
+#define ICON_BROWSING 0xE005        // a list (builtin_font.c)
+#define ICON_PLAYER   0xE006        // a record
+#define ICON_THEME    0x1F3A8       // 🎨
+#define ICON_REGIONAL 0x1F310       // 🌐, also Language
+#define ICON_ABOUT    0x24D8        // ⓘ
+#define ICON_KEYBOARD 0x1F5AE       // 🖮
 
 extern const int tab_x[TAB_COUNT + 1];
 
