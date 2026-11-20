@@ -524,7 +524,13 @@ int main(int argc, char **argv)
     check(app.set_page == PAGE_TOP, "B leaves the Theme page");
     tap(100, SET_Y + 4 * SET_H + 10);
     run(20);
-    check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 0, "Regional: a page saying it comes later");
+    check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 2, "Regional: language and keyboard");
+    check(app.set.lang == LANG_EN && app.set.keyboard == KB_QWERTY, "English and QWERTY by default");
+    tap(100, SET_Y + 1 * SET_H + 10);
+    check(app.set.keyboard == KB_QWERTZ, "tap: QWERTZ");
+    tap(100, SET_Y + 1 * SET_H + 10);
+    check(app.set.keyboard == KB_QWERTY, "tap again: QWERTY");
+    shot("13h_regional");
     press(KEY_B);
     run(20);
     // About
@@ -591,7 +597,7 @@ int main(int argc, char **argv)
     check(app.overlay == OV_INFO, "X opens the song info");
     {
         uint32_t rated = app_current_track();
-        int sx = INFO_STARS_X, sy = INFO_Y + INFO_RATING_ROW * 16;
+        int sx = ui_info_value_x(), sy = INFO_Y + INFO_RATING_ROW * 16;
         tap(sx + 3 * INFO_STAR_W + 8, sy + 8);
         check(app_song_rating(rated) == 4 && stats_rating(lib_path(rated)) == 4, "the 4th star: 4 stars");
         shot("06b_info_rated");
@@ -845,6 +851,122 @@ int main(int argc, char **argv)
         app.theme = kept;
         palette_make(&app.theme);
         run(10);
+    }
+
+    // ---- the German interface: every text there, every screen drawn, the texts fit
+    {
+        check(i18n_missing(LANG_DE) == S_NONE && i18n_missing(LANG_EN) == S_NONE, "every text in English and German");
+        bool fit = true;
+        for (int lang = 0; lang < LANG_COUNT; lang++)
+        {
+            i18n_lang = lang;
+            for (int id = 1; id < S_COUNT; id++)
+                if ((id < S_CANT_PLAY || id > S_ERR_BLOCK) && font_text_width(txt(id)) > SCREEN_W - 8)   // toasts scroll
+                {
+                    printf("      (too wide: %s)\n", txt(id));
+                    fit = false;
+                }
+            for (int i = 0; i < 3; i++)
+                fit &= font_text_width(txt(S_TAB_ARTIST + i)) <= tab_x[i + 1] - tab_x[i] - 8;
+            fit &= font_text_width(txt(S_ACCENT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_BACKGROUND)) <= THEME_CHIP_W - 4
+                   && font_text_width(txt(S_TEXT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_RESET)) <= THEME_CHIP_W - 4;
+            for (int i = 0; i < 3; i++)
+                fit &= font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4;       // the row menu
+            for (int i = S_SORT_ARTISTS; i <= S_SORT_FOLDERS; i++)
+                fit &= font_text_width(txt(i)) <= 248 - 96 - 8;                        // sort menu title
+            for (int i = S_SORT_NAME_UP; i <= S_SORT_TRACK; i++)
+                fit &= font_text_width(txt(i)) <= 248 - 96 - 24 - 4;
+            fit &= font_text_width(txt(S_NEXT)) <= 48 && 248 - ui_info_value_x() >= 150;
+            fit &= font_text_width(txt(S_NO_MUSIC)) <= 240 && font_text_width(txt(S_MAKE_MUSIC)) <= 240
+                   && font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
+            for (int i = S_LIB_MISSING; i <= S_RUN_DSCONV; i++)
+                fit &= font_text_width(txt(i)) <= SCREEN_W - 16;
+        }
+        i18n_lang = app.set.lang;
+        check(fit, "the texts fit their places, in both languages");
+
+        slide_to(false);
+        run(40);
+        tap(240, BAR_Y + 14);
+        run(20);
+        tap(100, SET_Y + 4 * SET_H + 10);
+        run(20);
+        tap(100, SET_Y + 0 * SET_H + 10);
+        check(app.set.lang == LANG_DE && strcmp(txt(S_SETTINGS), "Einstellungen") == 0, "tap Language: Deutsch");
+        shot("20_de_regional");
+        press(KEY_B);
+        run(20);
+        shot("20_de_settings");
+        static const char *const names[] = { "20_de_playback", "20_de_browsing", "20_de_player", "20_de_theme" };
+        for (int i = 0; i < 4; i++)
+        {
+            tap(100, SET_Y + i * SET_H + 10);
+            run(20);
+            shot(names[i]);
+            press(KEY_B);
+            run(20);
+        }
+        tap(100, SET_Y + 5 * SET_H + 10);
+        run(20);
+        shot("20_de_about");
+        press(KEY_B);
+        run(20);
+        save_now();
+        Settings sd;
+        Theme td;
+        Resume rd;
+        check(state_load(&sd, &td, &rd) && sd.lang == LANG_DE, "the language is saved");
+        tap(240, 8);
+        run(20);
+        check(app.overlay == OV_NONE, "settings closed");
+
+        show_tab(TAB_ARTIST);
+        run(20);
+        shot("21_de_artist");
+        tap(176, BAR_Y + 14);
+        run(20);
+        shot("21_de_sort");
+        press(KEY_B);
+        run(20);
+        app.artist = -1;
+        app.album = LIB_NONE;
+        show_tab(TAB_ALBUM);
+        run(20);
+        hold(100, LIST_Y + 1 * ROW_H + 8, 35);
+        release();
+        check(app.overlay == OV_ROWMENU, "German row menu");
+        shot("21_de_rowmenu");
+        tap(150, ui_rowmenu_y(LIST_Y + 1 * ROW_H) + 20 + 2 * 16 + 8);
+        check(strcmp(app.toast, "Eingereiht") == 0 || strstr(app.toast, "Titel eingereiht") != NULL
+              || strcmp(app.toast, "Die Warteschlange ist voll.") == 0, "German toast");
+        shot("21_de_toast");
+        run(200);
+        slide_to(true);
+        run(40);
+        shot("22_de_player");
+        tap(20, 140);
+        run(10);
+        shot("22_de_info");
+        tap(240, 8);
+        tap(236, 146);
+        run(10);
+        shot("22_de_queue");
+        tap(240, 8);
+        run(10);
+        slide_to(false);
+        run(40);
+
+        // back to English
+        tap(240, BAR_Y + 14);
+        run(20);
+        tap(100, SET_Y + 4 * SET_H + 10);
+        run(20);
+        tap(100, SET_Y + 0 * SET_H + 10);
+        check(app.set.lang == LANG_EN && strcmp(txt(S_SETTINGS), "Settings") == 0, "and back to English");
+        press(KEY_B);
+        run(20);
+        tap(240, 8);
+        run(20);
     }
 
     if (film_on)

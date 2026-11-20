@@ -365,7 +365,7 @@ static bool open_pos(int pos, uint32_t start_ms, bool play, SongAnim anim)
             redraw = true;
             return true;
         }
-        toast("Can't play %s: %s", path_basename(path), err);
+        toast(txt(S_CANT_PLAY), path_basename(path), err);
         start_ms = 0;
         pos = queue_next_pos(false);
     }
@@ -460,15 +460,15 @@ static void add_to_queue(const Item *it, bool next)
     bool was_empty = queue_count() == 0;
     if (next ? !queue_insert_next(tracks_buf, n) : !queue_append(tracks_buf, n))
     {
-        toast("The queue is full.");
+        toast("%s", txt(S_QUEUE_FULL));
         return;
     }
     for (int i = 0; i < n; i++)
         mark(tracks_buf[i]);
     if (n == 1)
-        toast("%s", next ? "Plays next" : "Added to the queue");
+        toast("%s", txt(next ? S_PLAYS_NEXT : S_ADDED));
     else
-        toast("%d %s", n, next ? "songs play next" : "added to the queue");
+        toast(txt(next ? S_N_PLAY_NEXT : S_N_ADDED), n);
     if (was_empty)
         open_pos(0, 0, false, SA_NONE);
     touch_state();
@@ -649,6 +649,11 @@ static void set_change(int id)
         break;
     case SET_TIME_RIGHT: app.set.show_remaining ^= 1; break;
     case SET_COVER_BG: app.set.plain_bg ^= 1; break;
+    case SET_LANG:
+        app.set.lang = (app.set.lang + 1) % LANG_COUNT;
+        i18n_lang = app.set.lang;
+        break;
+    case SET_KEYBOARD: app.set.keyboard = (app.set.keyboard + 1) % KB_LAYOUTS; break;
     case SET_SHUFFLE_W:
         app.set.shuffle_weighted ^= 1;
         apply_weighting();
@@ -902,7 +907,7 @@ static void tap_player(int x, int y)
     }
     if (app.overlay == OV_INFO)
     {
-        int sy = INFO_Y + INFO_RATING_ROW * 16, sx = INFO_STARS_X - 1;
+        int sy = INFO_Y + INFO_RATING_ROW * 16, sx = ui_info_value_x() - 1;
         if (y < 20 && x >= 224)
             app.overlay = OV_NONE;
         else if (y >= sy - 4 && y < sy + 20 && x >= sx && x < sx + 5 * INFO_STAR_W)
@@ -1337,6 +1342,7 @@ static void restore(void)
     Resume r;
     state_defaults(&app.set);
     bool ok = state_load(&app.set, &app.theme, &r);
+    i18n_lang = app.set.lang;
     palette_make(&app.theme);
     lib_group_artists(app.set.case_sensitive);
     if (!ok || !r.path[0] || !lib_loaded())
@@ -1364,7 +1370,7 @@ static void fatal_screen(const char *line1, const char *line2)
     font_draw(c, 8, 8, 240, APP_NAME, C_ACC);
     font_draw(c, 8, 40, 240, line1, C_TEXT);
     font_draw(c, 8, 56, 240, line2, C_DIM);
-    font_draw(c, 8, 160, 240, "Press START to exit", C_DIM);
+    font_draw(c, 8, 160, 240, txt(S_PRESS_START), C_DIM);
     gfx_fill(gfx_canvas(SCREEN_BOTTOM), 0, 0, SCREEN_W, SCREEN_H, C_BG);
     while (1)
     {
@@ -1397,7 +1403,7 @@ static void app_init(void)
     snprintf(path, sizeof(path), "%s/.dsmusic/font.bin", music_root);
     font_load(path);
     snprintf(path, sizeof(path), "%s/.dsmusic/library.idx", music_root);
-    lib_load(path, app.lib_error, sizeof(app.lib_error));
+    lib_load(path, &app.lib_error);
 
     item_cap = (int)lib_track_count() + (int)lib_album_count() + 2;
     tracks_cap = (int)lib_track_count() + 1;
@@ -1657,9 +1663,9 @@ int main(int argc, char **argv)
     irqEnable(IRQ_VBLANK);
 
     if (!fatInitDefault())
-        fatal_screen("Can't read the SD card.", "Is the flashcart's DLDI driver OK?");
+        fatal_screen(txt(S_NO_SD), txt(S_DLDI));
     if (!find_music_root())
-        fatal_screen("No /music folder on the card.", "Convert your music there with dsconv.");
+        fatal_screen(txt(S_NO_MUSIC), txt(S_MAKE_MUSIC));
     app_init();
 
     while (1)

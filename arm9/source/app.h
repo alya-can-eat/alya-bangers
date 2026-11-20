@@ -11,6 +11,7 @@
 
 #include "colorpick.h"
 #include "gfx.h"
+#include "i18n.h"
 #include "library.h"
 #include "palette.h"
 #include "state.h"
@@ -47,7 +48,7 @@
 #define THEME_RESET_Y 162           // the Reset button under them
 #define INFO_Y      24              // song info: first row
 #define INFO_RATING_ROW 6           // the stars
-#define INFO_STARS_X 72             // values (and the stars) start here
+#define INFO_STARS_X 72             // values (and the stars) start here at least (ui_info_value_x)
 #define INFO_STAR_W 18              // a star and the gap after it
 
 #define APP_NAME    "alya-bangers"
@@ -94,10 +95,10 @@ typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE } Ov
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL, PAGE_ABOUT,
        PAGE_COUNT };
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
-       SET_SHUFFLE_W };
+       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD };
 enum { SI_TOGGLE, SI_VALUE, SI_PAGE };      // switch, value (tap: the next one), › another page
 typedef struct {
-    const char *label;
+    uint16_t label;         // S_... (i18n.h)
     uint8_t kind;
     uint8_t id;             // SET_... or, for SI_PAGE, PAGE_...
 } SetItem;
@@ -178,7 +179,7 @@ typedef struct {
     bool has_thumb;
     uint16_t thumb[32 * 32];
 
-    char lib_error[96];         // why library.idx couldn't be used
+    int lib_error;              // why library.idx couldn't be used (LIB_ERR_..., library.h)
 } App;
 
 extern App app;
@@ -204,6 +205,7 @@ int ui_rowmenu_y(int row_y);
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
 int ui_set_count(int page);
+int ui_info_value_x(void);
 int ui_player_artist_at(int x, int y);     // which artist name, -1: none
 int ui_cover_bg_contrast(const uint16_t *cover);    // for the tests
 const SetItem *ui_set_item(int page, int i);

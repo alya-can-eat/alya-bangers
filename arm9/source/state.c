@@ -7,6 +7,7 @@
 #include "library.h"
 #include "queue.h"
 #include "state.h"
+#include "i18n.h"
 #include "util.h"
 
 #include <stddef.h>
@@ -99,6 +100,10 @@ bool state_load(Settings *s, Theme *t, Resume *r)
         s->brightness = 5;
     if (s->rg_mode >= RG_MODES)
         s->rg_mode = RG_OFF;
+    if (s->lang >= LANG_COUNT)
+        s->lang = LANG_EN;
+    if (s->keyboard >= KB_LAYOUTS)
+        s->keyboard = KB_QWERTY;
     h.path[sizeof(h.path) - 1] = 0;
     memcpy(r->path, h.path, sizeof(r->path));
     r->pos_ms = h.pos_ms;

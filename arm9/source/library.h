@@ -39,7 +39,9 @@ typedef struct {
 _Static_assert(sizeof(LibTrack) == 48, "library.idx tracks are 48 bytes");
 _Static_assert(sizeof(LibAlbum) == 32, "library.idx albums are 32 bytes");
 
-bool lib_load(const char *path, char *err, int err_size);
+// why library.idx can't be used (*err, LIB_OK when it loaded)
+enum { LIB_OK, LIB_ERR_MISSING, LIB_ERR_DAMAGED, LIB_ERR_TOO_BIG, LIB_ERR_VERSION };
+bool lib_load(const char *path, int *err);
 bool lib_loaded(void);
 // Changes whenever the converter rebuilt the index.
 uint32_t lib_fingerprint(void);

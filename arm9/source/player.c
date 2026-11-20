@@ -14,6 +14,7 @@
 
 #include "ipc.h"
 #include "player.h"
+#include "i18n.h"
 
 #define RING_BLOCKS     8                       // 8 x 125 ms = 1 s of buffer
 #define START_BLOCKS    4                       // read before starting; the rest follows
@@ -169,7 +170,7 @@ bool player_open(const char *path, uint32_t start_ms, bool play, char *err, int 
     song_file = fopen(path, "rb");
     if (song_file == NULL)
     {
-        snprintf(err, err_size, "can't open file");
+        snprintf(err, err_size, "%s", txt(S_ERR_OPEN));
         return false;
     }
     if (!dsa_read_header(song_file, &hdr, err, err_size))
@@ -179,7 +180,7 @@ bool player_open(const char *path, uint32_t start_ms, bool play, char *err, int 
     }
     if (hdr.block_frames != BLOCK_FRAMES)
     {
-        snprintf(err, err_size, "unexpected block size %lu", (unsigned long)hdr.block_frames);
+        snprintf(err, err_size, txt(S_ERR_BLOCK), (unsigned long)hdr.block_frames);
         close_file();
         return false;
     }

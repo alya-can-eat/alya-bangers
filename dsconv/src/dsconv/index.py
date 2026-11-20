@@ -34,7 +34,7 @@ DISC_DIR = re.compile(DISC_DIR_PATTERN, re.IGNORECASE)
 KANA = re.compile(r"[぀-ヿㇰ-ㇿｦ-ﾟ]")
 HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 
-UI_CHARS = "".join(chr(c) for c in range(0x20, 0x7F)) + "…•·♪°–—×←↑→↓�"
+UI_CHARS = "".join(chr(c) for c in range(0x20, 0x7F)) + "…•·♪°–—×←↑→↓�äöüÄÖÜ"
 
 TRACK_HAS_COVER = 1 << 0
 TRACK_HAS_TITLE = 1 << 1

@@ -282,7 +282,8 @@ order.
 ## 3. `font.bin` — glyphs
 
 Contains every character that appears in the index (values, keys, paths)
-plus printable ASCII and a few UI symbols (… • · ♪ ° – — × ← ↑ → ↓ �). Glyphs
+plus printable ASCII, a few UI symbols (… • · ♪ ° – — × ← ↑ → ↓ �) and the
+umlauts of the German interface (ä ö ü Ä Ö Ü). Glyphs
 come from GNU Unifont 15.1.01: 16 pixels high, 8 or 16 pixels wide.
 
 ### 3.1 Header (32 bytes)

@@ -56,12 +56,13 @@ static bool table_ok(uint32_t off, uint32_t count, uint32_t size)
     return (off & 3) == 0 && off <= data_size && (uint64_t)count * size <= data_size - off;
 }
 
-bool lib_load(const char *path, char *err, int err_size)
+bool lib_load(const char *path, int *err)
 {
+    *err = LIB_OK;
     FILE *f = fopen(path, "rb");
     if (f == NULL)
     {
-        snprintf(err, err_size, "No library.idx found.");
+        *err = LIB_ERR_MISSING;
         return false;
     }
     fseek(f, 0, SEEK_END);
@@ -70,14 +71,14 @@ bool lib_load(const char *path, char *err, int err_size)
     if (size < 64)
     {
         fclose(f);
-        snprintf(err, err_size, "library.idx is damaged.");
+        *err = LIB_ERR_DAMAGED;
         return false;
     }
     data = malloc(size);
     if (data == NULL)
     {
         fclose(f);
-        snprintf(err, err_size, "library.idx is too big for the DS.");
+        *err = LIB_ERR_TOO_BIG;
         return false;
     }
     size_t got = fread(data, 1, size, f);
@@ -87,7 +88,7 @@ bool lib_load(const char *path, char *err, int err_size)
     const uint8_t *h = data;
     if (got != (size_t)size || memcmp(h, "DSIX", 4) != 0 || (h[4] | (h[5] << 8)) != INDEX_VERSION)
     {
-        snprintf(err, err_size, "library.idx is from another dsconv.");
+        *err = LIB_ERR_VERSION;
         goto fail;
     }
     n_tracks = rd32(h + 8);
@@ -105,7 +106,7 @@ bool lib_load(const char *path, char *err, int err_size)
         || !table_ok(t_off, n_tracks, sizeof(LibTrack)) || !table_ok(r_off, n_refs, sizeof(LibRef))
         || !table_ok(a_off, n_albums, sizeof(LibAlbum)) || !table_ok(at_off, 0, 4))
     {
-        snprintf(err, err_size, "library.idx is damaged.");
+        *err = LIB_ERR_DAMAGED;
         goto fail;
     }
     strings = (const char *)data + s_off;
@@ -153,7 +154,7 @@ bool lib_load(const char *path, char *err, int err_size)
     track_group = calloc(n_tracks ? n_tracks : 1, sizeof(uint16_t));
     if (path_hash == NULL || track_group == NULL)
     {
-        snprintf(err, err_size, "library.idx is too big for the DS.");
+        *err = LIB_ERR_TOO_BIG;
         goto fail;
     }
     path_hash_mask = buckets - 1;
@@ -167,7 +168,7 @@ bool lib_load(const char *path, char *err, int err_size)
     return true;
 
 damaged:
-    snprintf(err, err_size, "library.idx is damaged.");
+    *err = LIB_ERR_DAMAGED;
 fail:
     free(data);
     data = NULL;

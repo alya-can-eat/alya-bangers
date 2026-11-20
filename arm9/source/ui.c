@@ -239,7 +239,7 @@ void ui_item_label(const Item *it, char *buf, int size)
     case ITEM_ARTIST:
     {
         uint32_t v = lib_group_name(it->id);
-        snprintf(buf, size, "%s", v == LIB_NONE ? "(no artist)" : lib_value(v));
+        snprintf(buf, size, "%s", v == LIB_NONE ? txt(S_NO_ARTIST) : lib_value(v));
         break;
     }
     case ITEM_ALBUM:
@@ -303,12 +303,12 @@ int ui_sort_slot(void)
     }
 }
 
-static const char *const sort_names[SORT_SLOTS][4] = {
-    { "Name  0→9 A→Z", "Name  Z→A 9→0", NULL, NULL },
-    { "Name  0→9 A→Z", "Name  Z→A 9→0", "Year  old → new", "Year  new → old" },
-    { "Name  0→9 A→Z", "Name  Z→A 9→0", "Year  old → new", NULL },
-    { "Track order", "Name  0→9 A→Z", "Name  Z→A 9→0", NULL },
-    { "Name  0→9 A→Z", "Name  Z→A 9→0", NULL, NULL },
+static const uint8_t sort_names[SORT_SLOTS][4] = {
+    { S_SORT_NAME_UP, S_SORT_NAME_DOWN },
+    { S_SORT_NAME_UP, S_SORT_NAME_DOWN, S_SORT_YEAR_UP, S_SORT_YEAR_DOWN },
+    { S_SORT_NAME_UP, S_SORT_NAME_DOWN, S_SORT_YEAR_UP },
+    { S_SORT_TRACK, S_SORT_NAME_UP, S_SORT_NAME_DOWN },
+    { S_SORT_NAME_UP, S_SORT_NAME_DOWN },
 };
 
 int ui_sort_option_count(int slot)
@@ -321,7 +321,7 @@ int ui_sort_option_count(int slot)
 
 const char *ui_sort_option(int slot, int i)
 {
-    return sort_names[slot][i];
+    return txt(sort_names[slot][i]);
 }
 
 // ------------------------------------------------------------ top screen
@@ -338,20 +338,19 @@ void ui_init(void)
 static void header(void)
 {
     gfx_fill(T, 0, 0, SCREEN_W, 16, C_PANEL);
-    static const char *const days[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
     time_t now = time(NULL);
     struct tm tmv;
     localtime_r(&now, &tmv);
     char s[32];
     snprintf(s, sizeof(s), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
     text(T, 4, 0, s, C_TEXT);
-    snprintf(s, sizeof(s), "%s %02d.%02d.%04d", days[tmv.tm_wday % 7], tmv.tm_mday, tmv.tm_mon + 1,
+    snprintf(s, sizeof(s), "%s %02d.%02d.%04d", txt(S_SUN + tmv.tm_wday % 7), tmv.tm_mday, tmv.tm_mon + 1,
              tmv.tm_year + 1900);
     text_r(T, 252, 0, s, C_DIM);
     // the card was too slow somewhere (should never show)
     if (player_underruns())
     {
-        snprintf(s, sizeof(s), "drops: %lu", (unsigned long)player_underruns());
+        snprintf(s, sizeof(s), txt(S_DROPS), (unsigned long)player_underruns());
         text(T, 52, 0, s, COLOR(31, 12, 10));
     }
 }
@@ -409,8 +408,8 @@ static bool top_text_column(int x0, const SongText *st, uint32_t t, int alpha)
     bool anim = false;
     if (player_path() == NULL)
     {
-        font_draw_ex(T, x0, 24, x0, x0 + w, "Nothing", C_DIM, 0, 1);
-        font_draw_ex(T, x0, 40, x0, x0 + w, "playing", C_DIM, 0, 1);
+        font_draw_ex(T, x0, 24, x0, x0 + w, txt(S_NOTHING_1), C_DIM, 0, 1);
+        font_draw_ex(T, x0, 40, x0, x0 + w, txt(S_NOTHING_2), C_DIM, 0, 1);
         return false;
     }
     font_set_alpha(alpha);      // fading in or out on a song change
@@ -573,7 +572,7 @@ static bool top_next_column(int x, uint32_t t)
         return false;
     int w = 48 < SCREEN_W - x ? 48 : SCREEN_W - x;
     // everything centred in the 48 px column, so "Next" lines up with the picture
-    font_draw_ex(T, x + (48 - font_text_width("Next")) / 2, 24, x, SCREEN_W, "Next", C_DIM, 0, 1);
+    font_draw_ex(T, x + (48 - font_text_width(txt(S_NEXT))) / 2, 24, x, SCREEN_W, txt(S_NEXT), C_DIM, 0, 1);
     int np = queue_next_pos(true);
     if (np < 0 || !lib_loaded())
     {
@@ -668,7 +667,7 @@ static void draw_song_change(uint32_t t)
     int rot = app.vinyl_rot / 3;
     bool back = app.sa_kind == SA_BACK;
 
-    font_draw_ex(T, 200 + (48 - font_text_width("Next")) / 2, 24, 200, SCREEN_W, "Next", C_DIM, 0, 1);
+    font_draw_ex(T, 200 + (48 - font_text_width(txt(S_NEXT))) / 2, 24, 200, SCREEN_W, txt(S_NEXT), C_DIM, 0, 1);
 
     // the song leaving: its cover slides off to the left, over its record
     if (a < 256)
@@ -1105,7 +1104,7 @@ static int tab_progress(void);
 static void draw_tabs(int oy)
 {
     gfx_fill(B, 0, oy, SCREEN_W, TAB_H, C_PANEL);
-    static const char *const names[TAB_COUNT] = { "Artist", "Album", "Title", NULL, NULL };
+    static const uint8_t names[TAB_COUNT] = { S_TAB_ARTIST, S_TAB_ALBUM, S_TAB_TITLE, S_NONE, S_NONE };
     // in the player the tabs just wait: their pink fades to gray as the browser slides down
     uint16_t acc = gfx_mix(C_DIM, C_ACC, clamp256(oy * 256 / PANEL_DOWN));
     // the highlight glides from the old tab to the new one
@@ -1146,8 +1145,8 @@ static void draw_tabs(int oy)
             icon(B, x + (w - 16) / 2, oy + 2, 0x1F50D, act ? C_TEXT : C_DIM);
         else
         {
-            int tw = font_text_width(names[i]);
-            text(B, x + (w - tw) / 2, oy + 2, names[i], act ? C_TEXT : C_DIM);
+            const char *name = txt(names[i]);
+            text(B, x + (w - font_text_width(name)) / 2, oy + 2, name, act ? C_TEXT : C_DIM);
         }
     }
 }
@@ -1197,14 +1196,16 @@ static bool draw_list(int oy)
     if (!lib_loaded())
     {
         gfx_fill(B, 0, y0, SCREEN_W, ROWS * ROW_H, C_BG);
-        centered(B, y0 + 48, app.lib_error[0] ? app.lib_error : "No library.idx", C_TEXT);
-        centered(B, y0 + 72, "Run dsconv on your music.", C_DIM);
+        static const uint8_t why[] = { S_LIB_MISSING, S_LIB_MISSING, S_LIB_DAMAGED, S_LIB_TOO_BIG, S_LIB_VERSION };
+        int e = app.lib_error >= 0 && app.lib_error < (int)sizeof(why) ? app.lib_error : 0;
+        centered(B, y0 + 48, txt(why[e]), C_TEXT);
+        centered(B, y0 + 72, txt(S_RUN_DSCONV), C_DIM);
         return false;
     }
     if (app.tab == TAB_SEARCH)
     {
         gfx_fill(B, 0, y0, SCREEN_W, ROWS * ROW_H, C_BG);
-        centered(B, y0 + 64, "Search comes later.", C_DIM);
+        centered(B, y0 + 64, txt(S_SEARCH_LATER), C_DIM);
         return false;
     }
     bool numbers = app.tab == TAB_TITLE && (app.album != LIB_NONE || app.add_mode);
@@ -1460,8 +1461,8 @@ static void draw_sort_menu(int oy)
     int y0 = oy + BAR_Y - h;
     gfx_fill(B, x0, y0, x1 - x0, h + 1, C_PANEL);
     gfx_rect(B, x0, y0, x1 - x0, h + 1, C_LINE);
-    static const char *const titles[SORT_SLOTS] = { "Sort artists", "Sort albums", "Sort songs", "Sort songs", "Sort folders" };
-    text(B, x0 + 8, y0 + 2, titles[slot], C_DIM);
+    static const uint8_t titles[SORT_SLOTS] = { S_SORT_ARTISTS, S_SORT_ALBUMS, S_SORT_SONGS, S_SORT_SONGS, S_SORT_FOLDERS };
+    text(B, x0 + 8, y0 + 2, txt(titles[slot]), C_DIM);
     if (app.menu_sel >= 0)
         highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * n, C_SEL);
     for (int i = 0; i < n; i++)
@@ -1492,14 +1493,14 @@ static void draw_row_menu(int oy)
     ui_item_label(&app.items[app.menu_item], label, sizeof(label));
     font_draw(B, x0 + 8, y0 + 2, x1 - x0 - 16, label, C_DIM);
     static const uint32_t icons[3] = { 0x25B6, 0x21B3, '+' };
-    static const char *const names[3] = { "Play now", "Play next", "Add to queue" };
+    static const uint8_t names[3] = { S_PLAY_NOW, S_PLAY_NEXT, S_ADD_QUEUE };
     if (app.menu_sel >= 0)
         highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * 3, C_SEL);
     for (int i = 0; i < 3; i++)
     {
         int y = y0 + 20 + i * 16;
         icon(B, x0 + 4, y, icons[i], C_ACC);
-        text(B, x0 + 24, y, names[i], C_TEXT);
+        text(B, x0 + 24, y, txt(names[i]), C_TEXT);
     }
 }
 
@@ -1670,7 +1671,7 @@ static bool draw_player_area(void)
         anim |= marquee(B, 8, 8, 240, segs, cols, 3, app.frame, true);
     }
     else
-        centered(B, 8, "Nothing playing", C_DIM);
+        centered(B, 8, txt(S_NOTHING_PLAYING), C_DIM);
 
     uint32_t dur = player_duration_ms();
     uint32_t pos = app.seek_drag ? app.seek_preview_ms : player_position_smooth_ms();
@@ -1710,16 +1711,29 @@ static bool draw_player_area(void)
     return anim;
 }
 
+// Song info: where the values (and the stars) start, after the longest label.
+int ui_info_value_x(void)
+{
+    int w = 0;
+    for (int i = 0; i < 9; i++)
+    {
+        int lw = font_text_width(txt(S_INFO_TITLE + i));
+        if (lw > w)
+            w = lw;
+    }
+    return 8 + w + 8 > INFO_STARS_X ? 8 + w + 8 : INFO_STARS_X;
+}
+
 static bool draw_info(void)
 {
     gfx_fill(B, 0, 0, SCREEN_W, PANEL_DOWN, C_BG);
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
-    text(B, 8, 2, "Song info", C_TEXT);
+    text(B, 8, 2, txt(S_SONG_INFO), C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
     uint32_t t = app_current_track();
     if (t == LIB_NONE)
     {
-        centered(B, 72, "Nothing playing", C_DIM);
+        centered(B, 72, txt(S_NOTHING_PLAYING), C_DIM);
         return false;
     }
     const LibTrack *tr = lib_track(t);
@@ -1740,21 +1754,21 @@ static bool draw_info(void)
     unsigned rate = h ? h->sound_clock_hz / h->timer_divider : 32728;
     snprintf(format, sizeof(format), "%s%sDSA %u.%u kHz", codec ? codec : "", codec ? " → " : "",
              rate / 1000, (rate % 1000) / 100);
-    const char *labels[9] = { "Title", "Artist", "Album", "Track", "Year", "Genre", "Rating", "Plays", "Format" };
     const char *vals[9] = { st.title, st.artist[0] ? st.artist : "–", st.album[0] ? st.album : "–",
                             track, year, genre[0] ? genre : "–", "", plays, format };
     bool anim = false;
+    int vx = ui_info_value_x();
     for (int i = 0; i < 9; i++)
     {
         int y = INFO_Y + i * 16;
-        text(B, 8, y, labels[i], C_DIM);
+        text(B, 8, y, txt(S_INFO_TITLE + i), C_DIM);
         if (i != INFO_RATING_ROW)
-            anim |= marquee1(B, INFO_STARS_X, y, 176, vals[i], C_TEXT, app.frame, false);
+            anim |= marquee1(B, vx, y, 248 - vx, vals[i], C_TEXT, app.frame, false);
     }
     // the stars can be tapped (Left / Right change them too)
     int stars = app_song_rating(t);
     for (int i = 0; i < 5; i++)
-        icon(B, INFO_STARS_X + i * INFO_STAR_W, INFO_Y + INFO_RATING_ROW * 16, i < stars ? 0x2605 : 0x2606,
+        icon(B, vx + i * INFO_STAR_W, INFO_Y + INFO_RATING_ROW * 16, i < stars ? 0x2605 : 0x2606,
              i < stars ? C_ACC : C_DIM);
     return anim;
 }
@@ -1765,7 +1779,7 @@ static bool draw_queue(void)
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
     char head[48];
     int n = queue_count();
-    snprintf(head, sizeof(head), "Queue · %d song%s", n, n == 1 ? "" : "s");
+    snprintf(head, sizeof(head), txt(n == 1 ? S_QUEUE_ONE : S_QUEUE_N), n);
     text(B, 8, 2, head, C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
     bool anim = false;
@@ -1834,41 +1848,45 @@ static void toggle(int x, int y, bool on)
 }
 
 static const SetItem items_top[] = {
-    { "Playback", SI_PAGE, PAGE_PLAYBACK },
-    { "Browsing", SI_PAGE, PAGE_BROWSING },
-    { "Player", SI_PAGE, PAGE_PLAYER },
-    { "Theme", SI_PAGE, PAGE_THEME },
-    { "Regional", SI_PAGE, PAGE_REGIONAL },
-    { "About", SI_PAGE, PAGE_ABOUT },
+    { S_PLAYBACK, SI_PAGE, PAGE_PLAYBACK },
+    { S_BROWSING, SI_PAGE, PAGE_BROWSING },
+    { S_PLAYER, SI_PAGE, PAGE_PLAYER },
+    { S_THEME, SI_PAGE, PAGE_THEME },
+    { S_REGIONAL, SI_PAGE, PAGE_REGIONAL },
+    { S_ABOUT, SI_PAGE, PAGE_ABOUT },
 };
 static const SetItem items_playback[] = {
-    { "ReplayGain", SI_VALUE, SET_RG },
-    { "Pause when lid closes", SI_TOGGLE, SET_PAUSE_LID },
-    { "L/R skip, lid closed", SI_TOGGLE, SET_LR_LID },
+    { S_REPLAYGAIN, SI_VALUE, SET_RG },
+    { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID },
+    { S_LR_LID, SI_TOGGLE, SET_LR_LID },
 };
 static const SetItem items_browsing[] = {
-    { "Case-sensitive names", SI_TOGGLE, SET_CASE },
-    { "Scroll all long rows", SI_TOGGLE, SET_SCROLL_ALL },
+    { S_CASE, SI_TOGGLE, SET_CASE },
+    { S_SCROLL_ALL, SI_TOGGLE, SET_SCROLL_ALL },
 };
 static const SetItem items_player[] = {
-    { "Time on the right", SI_VALUE, SET_TIME_RIGHT },
-    { "Cover background", SI_TOGGLE, SET_COVER_BG },
-    { "Shuffle by rating", SI_TOGGLE, SET_SHUFFLE_W },
+    { S_TIME_RIGHT, SI_VALUE, SET_TIME_RIGHT },
+    { S_COVER_BG, SI_TOGGLE, SET_COVER_BG },
+    { S_SHUFFLE_W, SI_TOGGLE, SET_SHUFFLE_W },
+};
+static const SetItem items_regional[] = {
+    { S_LANGUAGE, SI_VALUE, SET_LANG },
+    { S_KEYBOARD, SI_VALUE, SET_KEYBOARD },
 };
 #define N_ITEMS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 static const struct {
-    const char *title;
+    uint16_t title;
     const SetItem *items;
     int n;
-    const char *later;      // not there yet: what it will hold
+    uint16_t later;         // not there yet: what it will hold (S_NONE: it's there)
 } pages[PAGE_COUNT] = {
-    [PAGE_TOP] = { "Settings", items_top, N_ITEMS(items_top), NULL },
-    [PAGE_PLAYBACK] = { "Playback", items_playback, N_ITEMS(items_playback), NULL },
-    [PAGE_BROWSING] = { "Browsing", items_browsing, N_ITEMS(items_browsing), NULL },
-    [PAGE_PLAYER] = { "Player", items_player, N_ITEMS(items_player), NULL },
-    [PAGE_THEME] = { "Theme", NULL, 0, NULL },
-    [PAGE_REGIONAL] = { "Regional", NULL, 0, "Language, date and time format" },
-    [PAGE_ABOUT] = { "About", NULL, 0, NULL },
+    [PAGE_TOP] = { S_SETTINGS, items_top, N_ITEMS(items_top), S_NONE },
+    [PAGE_PLAYBACK] = { S_PLAYBACK, items_playback, N_ITEMS(items_playback), S_NONE },
+    [PAGE_BROWSING] = { S_BROWSING, items_browsing, N_ITEMS(items_browsing), S_NONE },
+    [PAGE_PLAYER] = { S_PLAYER, items_player, N_ITEMS(items_player), S_NONE },
+    [PAGE_THEME] = { S_THEME, NULL, 0, S_NONE },
+    [PAGE_REGIONAL] = { S_REGIONAL, items_regional, N_ITEMS(items_regional), S_NONE },
+    [PAGE_ABOUT] = { S_ABOUT, NULL, 0, S_NONE },
 };
 
 int ui_set_count(int page)
@@ -1897,12 +1915,15 @@ static bool set_on(int id)
 
 static const char *set_value(int id)
 {
-    static const char *const rg[RG_MODES] = { "Off", "Track", "Album", "Auto" };
-    if (id == SET_RG)
-        return rg[app.set.rg_mode];
-    if (id == SET_TIME_RIGHT)
-        return app.set.show_remaining ? "Left" : "Length";
-    return "";
+    static const uint8_t rg[RG_MODES] = { S_OFF, S_RG_TRACK, S_RG_ALBUM, S_AUTO };
+    switch (id)
+    {
+    case SET_RG: return txt(rg[app.set.rg_mode]);
+    case SET_TIME_RIGHT: return txt(app.set.show_remaining ? S_LEFT : S_LENGTH);
+    case SET_LANG: return lang_name(app.set.lang);
+    case SET_KEYBOARD: return app.set.keyboard == KB_QWERTZ ? "QWERTZ" : "QWERTY";
+    default: return "";
+    }
 }
 
 static void centered_at(int cx, int y, const char *s, uint16_t color, int scale)
@@ -1914,13 +1935,15 @@ static void about_body(int dx)
 {
     int cx = dx + SCREEN_W / 2;
     centered_at(cx, 26, APP_NAME, C_ACC, 2);
-    centered_at(cx, 60, "Version " APP_VERSION, C_DIM, 1);
-    centered_at(cx, 84, "Music player for the DS Lite", C_TEXT, 1);
+    char version[48];
+    snprintf(version, sizeof(version), "Version %s · %s", APP_VERSION, txt(S_EDITION));
+    centered_at(cx, 60, version, C_DIM, 1);
+    centered_at(cx, 84, txt(S_TAGLINE), C_TEXT, 1);
     centered_at(cx, 100, "© 2026 Alya (alya-can-eat)", C_TEXT, 1);
-    centered_at(cx, 122, "Licence: GNU GPL v3", C_TEXT, 1);
-    centered_at(cx, 138, "Free software, no warranty", C_DIM, 1);
+    centered_at(cx, 122, txt(S_LICENCE), C_TEXT, 1);
+    centered_at(cx, 138, txt(S_FREE), C_DIM, 1);
     centered_at(cx, 158, APP_URL, C_ACC, 1);
-    centered_at(cx, 174, "Glyphs: GNU Unifont", C_DIM, 1);
+    centered_at(cx, 174, txt(S_GLYPHS), C_DIM, 1);
 }
 
 // Black or white, whichever reads on c.
@@ -1933,7 +1956,7 @@ static uint16_t ink_on(uint16_t c)
 // The colours to choose, Reset, and the colour triangle.
 static void theme_body(int dx)
 {
-    static const char *const names[3] = { "Accent", "Background", "Text" };
+    static const uint8_t names[3] = { S_ACCENT, S_BACKGROUND, S_TEXT };
     const uint16_t cols[3] = { app.theme.acc, app.theme.bg, app.theme.text };
     for (int i = 0; i < 3; i++)
     {
@@ -1948,13 +1971,14 @@ static void theme_body(int dx)
         else
             gfx_rect(B, x - 1, y - 1, THEME_CHIP_W + 2, THEME_CHIP_H + 2, COLOR(14, 14, 16));   // even on its own colour
         gfx_fill(B, x, y, THEME_CHIP_W, THEME_CHIP_H, c);
-        const char *s = names[i];
+        const char *s = txt(names[i]);
         text(B, x + (THEME_CHIP_W - font_text_width(s)) / 2, y + 3, s, ink_on(c));
     }
     // Reset in fixed colours: findable whatever the theme
     int x = dx + THEME_CHIP_X;
     gfx_round_fill(B, x, THEME_RESET_Y, THEME_CHIP_W, THEME_CHIP_H, 4, COLOR(9, 9, 10));
-    text(B, x + (THEME_CHIP_W - font_text_width("Reset")) / 2, THEME_RESET_Y + 3, "Reset", COLOR(31, 31, 31));
+    const char *reset = txt(S_RESET);
+    text(B, x + (THEME_CHIP_W - font_text_width(reset)) / 2, THEME_RESET_Y + 3, reset, COLOR(31, 31, 31));
     cp_draw(B, dx, app.theme_hsv);
 }
 
@@ -1966,11 +1990,11 @@ static bool settings_page(int page, int dx, bool lit)
     gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
     gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
     if (page == PAGE_TOP)
-        text(B, dx + 8, 2, pages[page].title, C_TEXT);
+        text(B, dx + 8, 2, txt(pages[page].title), C_TEXT);
     else
     {
         text(B, dx + 6, 2, "‹", C_TEXT);
-        text(B, dx + 18, 2, pages[page].title, C_TEXT);
+        text(B, dx + 18, 2, txt(pages[page].title), C_TEXT);
     }
     text(B, dx + 236, 2, "×", C_TEXT);
     bool anim = false;
@@ -1980,8 +2004,8 @@ static bool settings_page(int page, int dx, bool lit)
         theme_body(dx);
     else if (pages[page].later)
     {
-        centered_at(dx + SCREEN_W / 2, 76, pages[page].later, C_TEXT, 1);
-        centered_at(dx + SCREEN_W / 2, 96, "Coming in a later version", C_DIM, 1);
+        centered_at(dx + SCREEN_W / 2, 76, txt(pages[page].later), C_TEXT, 1);
+        centered_at(dx + SCREEN_W / 2, 96, txt(S_LATER_PAGE), C_DIM, 1);
     }
     else
     {
@@ -1997,7 +2021,7 @@ static bool settings_page(int page, int dx, bool lit)
             int y = SET_Y + i * SET_H;
             const char *value = it->kind == SI_VALUE ? set_value(it->id) : NULL;
             int w = value ? 232 - 8 - font_text_width(value) - 8 : 196;
-            anim |= marquee1(B, dx + 8, y + ty, w, it->label, C_TEXT, app.frame, false);
+            anim |= marquee1(B, dx + 8, y + ty, w, txt(it->label), C_TEXT, app.frame, false);
             if (it->kind == SI_TOGGLE)
                 toggle(dx + 216, y + gy, set_on(it->id));
             else if (value)
@@ -2006,7 +2030,7 @@ static bool settings_page(int page, int dx, bool lit)
             {
                 text_r(B, dx + 244, y + ty, "›", C_DIM);
                 if (it->kind == SI_PAGE && pages[it->id].later)
-                    text_r(B, dx + 232, y + ty, "later", C_FAINT);
+                    text_r(B, dx + 232, y + ty, txt(S_LATER), C_FAINT);
             }
         }
     }

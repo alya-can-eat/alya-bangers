@@ -5,9 +5,9 @@ plays the `.dsa` files written by [dsconv](dsconv/) from the `/music` folder
 of the SD card. Both live in this repository: the DS program at the top,
 dsconv (the PC converter) in `dsconv/`.
 
-Version 1.0 (in the making). Browse by artist, album, title or folder, a
-player screen with a turning record, a queue you can edit, ratings and
-plays, themes.
+Version 1.0 (in the making), the DS Edition. Browse by artist, album,
+title or folder, a player screen with a turning record, a queue you can
+edit, ratings and plays, themes, in English or German.
 
 ## What it does
 
@@ -56,8 +56,10 @@ plays, themes.
     is mixed from these three, and the whole app changes as you drag.
     Up / Down choose the colour, Left / Right turn its hue. *Reset* (always
     in fixed colours, findable with any theme) brings back the default.
-  - *Regional* (language, date and time format): marked "later"
-  - *About:* name, version, licence, where the code lives
+  - *Regional:* the language (English or German, German in Swiss spelling)
+    and the keyboard for the search that comes later (QWERTY or QWERTZ).
+    The language changes at once, everywhere.
+  - *About:* name, version and edition, licence, where the code lives
 - **The artist in the player** (start of the top line): tap it for the
   artist's albums in the browser, with the playing song's album selected.
   The line scrolls, so the tap goes by where the name is right then.
@@ -190,16 +192,20 @@ make screens-run CARD=/tmp/dscard/music             # clicks through the UI, che
 They need a gcc that can build 32-bit programs (`-m32`), e.g.
 `nix-shell -p gcc_multi`.
 
+The screen test also draws every screen in German and checks that every
+text exists in both languages and fits its place. All texts of the
+interface are in `arm9/source/i18n.c` (English and German side by side).
+
 `tools/gen_builtin_font.py` regenerates the built-in glyphs (ASCII, UI
-symbols and icons) from dsconv's copy of Unifont, `tools/gen_default_cover.py`
+symbols, icons and the umlauts) from dsconv's copy of Unifont, `tools/gen_default_cover.py`
 the picture shown for songs without a cover, `tools/gen_icon.py` the
 icon of the `.nds` file.
 
 ## Not yet
 
 Search, playlists, genre and other tags as tabs, colours from the cover,
-gapless playback, the Regional settings page (language, date and time
-format), Arabic script (right to left, joined letters; Persian and Urdu
+gapless playback, a date and time format of its own (it follows the
+language), Arabic script (right to left, joined letters; Persian and Urdu
 with it).
 
 ## Licence

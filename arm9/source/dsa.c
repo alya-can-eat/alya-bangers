@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "dsa.h"
+#include "i18n.h"
 #include "util.h"
 
 #define MAX_TAGS_SIZE   (64 * 1024)  // larger tag sections are skipped (long lyrics etc.)
@@ -24,22 +25,22 @@ bool dsa_read_header(FILE *f, DsaHeader *h, char *err, int err_size)
 
     if (fseek(f, 0, SEEK_SET) != 0 || fread(raw, 1, sizeof(raw), f) != sizeof(raw))
     {
-        snprintf(err, err_size, "file too short");
+        snprintf(err, err_size, "%s", txt(S_ERR_SHORT));
         return false;
     }
     if (memcmp(raw, "DSA1", 4) != 0)
     {
-        snprintf(err, err_size, "not a .dsa file");
+        snprintf(err, err_size, "%s", txt(S_ERR_NOT_DSA));
         return false;
     }
     if (rd32(raw + 508) != crc32(raw, 508))
     {
-        snprintf(err, err_size, "damaged header");
+        snprintf(err, err_size, "%s", txt(S_ERR_HEADER));
         return false;
     }
     if (rd16(raw + 4) != DSA_VERSION)
     {
-        snprintf(err, err_size, "format v%u, player needs v%u: reconvert",
+        snprintf(err, err_size, txt(S_ERR_VERSION),
                  rd16(raw + 4), DSA_VERSION);
         return false;
     }
@@ -72,13 +73,13 @@ bool dsa_read_header(FILE *f, DsaHeader *h, char *err, int err_size)
 
     if (h->sample_format != 1 || h->channels < 1 || h->channels > 2)
     {
-        snprintf(err, err_size, "unsupported audio format");
+        snprintf(err, err_size, "%s", txt(S_ERR_AUDIO));
         return false;
     }
     if (h->audio_offset % 512 != 0 || h->timer_divider == 0 || h->block_frames == 0
         || h->audio_size != h->block_count * h->block_frames * 2 * h->channels)
     {
-        snprintf(err, err_size, "inconsistent header");
+        snprintf(err, err_size, "%s", txt(S_ERR_INCONSISTENT));
         return false;
     }
     return true;

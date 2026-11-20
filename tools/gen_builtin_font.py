@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate arm9/source/builtin_font.c: glyphs the player always has, whether
-or not font.bin contains them (ASCII, the UI symbols and icons).
+or not font.bin contains them (ASCII, the UI symbols and icons, the umlauts
+of the German interface).
 
     python3 tools/gen_builtin_font.py dsconv/src > arm9/source/builtin_font.c
 
@@ -15,6 +16,7 @@ UI = (
     "…·×–‹›→↳⇅★☆●○©"   # … · × – ‹ › → ↳ ⇅ ★ ☆ ● ○ ©
     "▶⏸⏭⏮ⓘ☰⋮⮟⮝♪�"       # ▶ ⏸ ⏭ ⏮ ⓘ ☰ ⋮ ⮟ ⮝ ♪ �
     "\U0001f500\U0001f501\U0001f502\U0001f5c0\U0001f50d\U0001f506"             # 🔀 🔁 🔂 🗀 🔍 🔆
+    "äöüÄÖÜ"            # the German interface
 )
 QUEUE_ADD = [  # U+E000: add to queue (a list with a plus), bottom-aligned with ⏸ ⏭
     "................", "................", "................", "................",

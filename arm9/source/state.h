@@ -12,6 +12,7 @@
 #include "palette.h"
 
 enum { RG_OFF, RG_TRACK, RG_ALBUM, RG_AUTO, RG_MODES };
+enum { KB_QWERTY, KB_QWERTZ, KB_LAYOUTS };
 enum { SLOT_ARTIST, SLOT_ALBUM, SLOT_TITLE, SLOT_TITLE_IN_ALBUM, SLOT_FOLDER, SORT_SLOTS };
 
 typedef struct {
@@ -25,7 +26,8 @@ typedef struct {
     uint8_t show_remaining;   // right of the progress bar: time left instead of the length
     uint8_t plain_bg;         // player mode: plain background instead of one from the cover
     uint8_t shuffle_weighted; // shuffle: higher rated songs come up more often
-    uint8_t reserved[2];
+    uint8_t lang;             // LANG_EN, LANG_DE (i18n.h)
+    uint8_t keyboard;         // search keyboard: KB_QWERTY, KB_QWERTZ
 } Settings;
 
 _Static_assert(sizeof(Settings) == 16, "settings are 16 bytes in the file");

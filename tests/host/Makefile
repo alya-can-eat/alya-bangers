@@ -7,7 +7,7 @@ CC      ?= gcc
 SRC     := ../../arm9/source
 CFLAGS  := -m32 -std=gnu2x -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-function \
            -fsanitize=address,undefined -Imock -I../../common/include -I$(SRC)
-CORE    := hostsim.c $(SRC)/player.c $(SRC)/dsa.c $(SRC)/util.c
+CORE    := hostsim.c $(SRC)/player.c $(SRC)/dsa.c $(SRC)/util.c $(SRC)/i18n.c
 HDRS    := $(wildcard $(SRC)/*.h ../../common/include/*.h mock/*.h mock/nds/*.h) hostsim.h
 
 all: test_player screens
