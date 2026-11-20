@@ -1,8 +1,9 @@
 # alya-bangers
 
 A music player for the Nintendo DS (made for the DS Lite with a DSpico). It
-plays the `.dsa` files written by [dsconv](../dsconv) from the `/music` folder
-of the SD card.
+plays the `.dsa` files written by [dsconv](dsconv/) from the `/music` folder
+of the SD card. Both live in this repository: the DS program at the top,
+dsconv (the PC converter) in `dsconv/`.
 
 Version 1.0 (in the making). Browse by artist, album, title or folder, a
 player screen with a turning record, a queue you can edit, ratings and

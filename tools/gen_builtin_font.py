@@ -2,7 +2,7 @@
 """Generate arm9/source/builtin_font.c: glyphs the player always has, whether
 or not font.bin contains them (ASCII, the UI symbols and icons).
 
-    python3 tools/gen_builtin_font.py /path/to/dsconv/src > arm9/source/builtin_font.c
+    python3 tools/gen_builtin_font.py dsconv/src > arm9/source/builtin_font.c
 
 Glyphs come from GNU Unifont (via dsconv's copy); U+E000 is drawn here.
 """

@@ -1,8 +1,8 @@
 # dsconv
 
 Converts a music folder (FLAC, Opus, MP3, AAC/M4A, Vorbis, WAV, AIFF, WavPack)
-into `.dsa` files that alya-bangers, the Nintendo DS player, can stream
-straight into its sound hardware, keeping the folder structure. It also writes a library index (for
+into `.dsa` files that [alya-bangers](../README.md), the Nintendo DS player,
+can stream straight into its sound hardware, keeping the folder structure. It also writes a library index (for
 browsing by artist, album, genre or any other tag) and a font with exactly the
 characters your library needs.
 
