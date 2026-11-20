@@ -1,144 +1,206 @@
 # alya-bangers
 
-A music player for the Nintendo DS (made for the DS Lite with a DSpico). It
-plays the `.dsa` files written by [dsconv](dsconv/) from the `/music` folder
-of the SD card. Both live in this repository: the DS program at the top,
-dsconv (the PC converter) in `dsconv/`.
+A music player for the Nintendo DS, made for the DS Lite with a DSpico. It
+plays the music [dsconv](dsconv/) converts on your PC: browse by artist,
+album, title or folder, search in any script, a player with a turning
+record, a queue you can edit, ratings and plays, themes, in English or
+German. Version 1.0 (in the making), the DS Edition.
 
-Version 1.0 (in the making), the DS Edition. Browse by artist, album,
-title or folder, a player screen with a turning record, a queue you can
-edit, ratings and plays, themes, in English or German.
+<table>
+<tr>
+<td><img src="docs/img/player.png" width="256" alt="The player: a moonlit cover over its record on the top screen, the controls below"></td>
+<td><img src="docs/img/browse.png" width="256" alt="Browsing: the artists, Nightglass selected, a song playing on the top screen"></td>
+<td><img src="docs/img/search.png" width="256" alt="Search: typing night on the keyboard, the results on the top screen"></td>
+</tr>
+</table>
 
-## What it does
+Both programs live in this repository: the DS program at the top, dsconv
+(the PC converter) in `dsconv/`. All pictures here are the app itself,
+drawn by its screen test from a made-up library.
 
-- **Bottom screen, browsing:** tabs Artist · Album · Title · Folder · Search.
-  Picking an artist opens their albums, picking an album its songs; the tabs
-  then show your choice (tap the name to go back to that list, tap the small
-  × to clear it). Lists slide sideways when you switch tabs
-  or open an artist, album or folder. Tapping a song plays the list it is in. Artists that differ
-  only in case ("KIVARA", "Kivara") are one artist unless you change that in
-  the settings.
-- **Search (🔍):** the keyboard comes up, and the results show on the top
-  screen while you type: artists, albums and songs, the matching part
-  highlighted. D-pad Up/Down and A pick one. ⮟ (or B) puts the keyboard
-  away and the results slide down into a list on the bottom screen: tap a
-  song to play the results from it, hold one for the row menu, tap an
-  artist or album to open it. Tap the query to type again, × clears it.
-  - Case and accents don't matter ("golmo" finds Gölmo), unless you type the
-    accent: "gö" means exactly ö. Hiragana finds katakana. Names with
-    kanji or hanzi are also found by their readings (from dsconv): kana
-    with the かな keyboard, pinyin with 拼音 ("lin" or "linxingyue" for
-    林星月).
-  - Keyboards: ABC (QWERTY, or QWERTZ in Settings › Regional), かな (the
-    50-sound table, ゛ ゜ and 小 change the last kana), 拼音, АБВ (ЙЦУКЕН),
-    and 123. Tap the input key for the next one, hold it for the list.
-    Hold a letter for its other forms (ä à á â …, е gives ё), slide onto
-    one and let go.
-  - **+ Filter:** search in (all, only artists, only albums, only songs),
-    genre, rating, year (decades), played (never, at least once, 10 times
-    or more), folder. Each choice shows how many songs it has and becomes a
-    chip; × removes it. With a filter on, the results are songs, and what
-    you type also looks at their artists and albums.
+## Browsing
+
+<img src="docs/img/browse.webp" width="256" align="right" alt="Opening an artist, an album, a song, then the player">
+
+- **Tabs:** Artist · Album · Title · Folder · 🔍. Picking an artist opens
+  their albums, picking an album its songs; the tabs then show your choice
+  (tap the name to go back to that list, the small × clears it). Lists slide
+  sideways when you switch tabs or open something, and the highlight glides
+  from row to row.
+- **Tapping a song** plays the list it is in. Artists that differ only in
+  case ("KIVARA", "Kivara") are one artist unless you change that in the
+  settings.
 - **Bottom bar:** play/pause, next, add to queue, ⮟ (the player), sort,
   brightness (4 levels), ⋮ settings.
-- **Player:** tap ⮟ and the browser slides down until only the tabs are left.
-  Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all,
-  one), ⓘ song info, ☰ queue, ⮝ back to browsing (tapping a tab does too).
-- **Top screen:** time and date, cover, title, artist, album, progress (the
-  song's length on the right, or the time left: see settings). When the song
-  changes in player mode, the cover slides off to the left over its record,
-  the next cover grows out of the Next spot and its record rolls out. Going
-  back plays it backwards; a song picked from a list or the queue first
-  slides over the Next spot. Paused, the record spins down. In browse mode
-  the covers behave like a stack in list order: a song further up is put on
-  from the left, for a song further down the old cover is lifted off to the
-  left (next and previous do the same). A song from another list is put on. The
-  song's texts on the top screen fade out and the new ones fade in. In
-  player mode: the record turning at 33⅓ rpm, a visualizer, the next song.
 - **Add to queue:** hold a row for *Play now / Play next / Add to queue*, or
-  turn on the add-to-queue button: then tapping rows adds them instead of
-  playing them (an artist or album adds all its songs).
+  turn on the add-to-queue button: tapping rows then adds them (an artist or
+  album adds all its songs).
+- **Several artists** (several values of the artist tag, as Quod Libet
+  writes them) are shown together, the song is listed under each, and in the
+  player each name opens its own artist. Names joined inside one value
+  ("A x B") stay one artist.
+- Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
+  Cyrillic, Vietnamese and emoji show correctly.
+
+<br clear="right">
+
+## The player
+
+<img src="docs/img/player.webp" width="256" align="right" alt="Next song and back: covers slide over their records">
+
+- **⮟ in the bar:** the browser slides down until only the tabs are left.
+  Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all,
+  one), ⓘ song info, ☰ queue, ⮝ back to browsing.
+- **Top screen:** the cover on its record turning at 33⅓ rpm, a visualizer,
+  the next song, the time and date. The background is the cover, blurred and
+  darkened (made a slice per frame, faded in once the covers settle); a very
+  dark cover gets a lighter one so it doesn't melt into it.
+- **Song changes:** the cover slides off over its record, the next one grows
+  out of the Next spot and its record rolls out; going back plays it
+  backwards. In browse mode the covers behave like a stack in list order.
+  The texts fade, and scroll from their start for every song. Paused, the
+  record spins down and the bars of the visualizer fall.
+- **The artist** at the start of the top line: tap it for their albums.
+- Songs without a cover show a built-in picture, the moonlit beach.
+
+<br clear="right">
+
+<table>
+<tr>
+<td><img src="docs/img/info.png" width="256" alt="Song info with four stars"></td>
+<td><img src="docs/img/queue.png" width="256" alt="The queue with four songs"></td>
+<td><img src="docs/img/two_artists.png" width="256" alt="A song by two artists in the player"></td>
+</tr>
+<tr>
+<td align="center">ⓘ song info: rate it</td>
+<td align="center">☰ the queue</td>
+<td align="center">two artists, each tappable</td>
+</tr>
+</table>
+
+- **Rating and plays (ⓘ):** tap a star to give the song that many (the last
+  lit one again: none), or Left / Right. A song counts as played after half
+  of it or 4 minutes of listening, once per listen. Your rating from the DS
+  wins over the one in the file's tags; plays add up. They're kept in
+  `/_nds/alya-bangers/stats.bin`.
 - **Queue (☰):** tap a song to jump to it, × removes it, hold and drag to
   move it.
-- **Lid closed:** the screens go dark and the music keeps playing; L/R change
-  songs (both can be changed in the settings).
-- **Switching on** loads the last song at the same position, paused. Settings,
-  queue and sort orders are kept in `/_nds/alya-bangers/state.bin` (one saved
-  under the old name, `/_nds/dsplayer/state.bin`, is read once).
-- **Settings (⋮):** pages that slide in from the right (‹, B or Left go
-  back; A or Right open one). Every page has an icon, so the language can be
-  found without reading it: the globe (🌐) leads to Regional, then to
-  Language, whose value is the language's own name (English, Deutsch):
-  - *Playback:* ReplayGain, play on launch (go on playing where you
-    stopped, instead of waiting paused), pause when the lid closes, L/R skip
-    with the lid closed
+- **Shuffle by rating** (Settings › Player): a song's chance to come next
+  doubles with every star (unrated counts as 3 stars), so 5 stars come up
+  4× as often as unrated ones; a short queue still plays every song once per
+  round, the good ones earlier.
+- **Lid closed:** the screens fade to dark and the music keeps playing; L/R
+  change songs (both can be changed in the settings).
+- **Switching on** loads the last song at the same position, paused, or
+  playing with *Play on launch*.
+
+## Search
+
+<img src="docs/img/search.webp" width="256" align="right" alt="Typing night: the results rise onto the top screen, the D-pad picks one, the keyboard goes down and the results slide into a list">
+
+- **Type on the bottom screen**, the results show on the top screen as you
+  go: artists, albums and songs, the matching part highlighted. D-pad
+  Up/Down and A pick one.
+- **⮟ (or B)** puts the keyboard away and the results slide down into a
+  list: tap a song to play the results from it, hold one for the row menu,
+  tap an artist or album to open it. Tap the query to type again, × clears
+  it.
+- **Matching** ignores case and accents ("solve" finds Sölve) unless you
+  type the accent ("sö" means exactly ö). Hiragana finds katakana. Names
+  with kanji or hanzi are found by their readings (from dsconv): kana with
+  かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
+
+<br clear="right">
+
+<table>
+<tr>
+<td><img src="docs/img/search_accents.png" width="256" alt="Holding o: ö ó ò ô õ ø ō œ above it"></td>
+<td><img src="docs/img/search_kana.png" width="256" alt="The kana keyboard: はな finds ハナビラ"></td>
+<td><img src="docs/img/search_pinyin.png" width="256" alt="Pinyin: lin finds 林星月 by its reading"></td>
+</tr>
+<tr>
+<td align="center">hold a letter for its other forms</td>
+<td align="center">かな: はな finds ハナビラ</td>
+<td align="center">拼音: lin finds 林星月</td>
+</tr>
+<tr>
+<td><img src="docs/img/search_cyrillic.png" width="256" alt="The Cyrillic keyboard: ви finds Витражи and Вишнёвый свет"></td>
+<td><img src="docs/img/search_filter.png" width="256" alt="The genre filter with song counts"></td>
+<td><img src="docs/img/search_list.png" width="256" alt="The Synthwave songs as a list, the filter as a chip"></td>
+</tr>
+<tr>
+<td align="center">АБВ (ЙЦУКЕН)</td>
+<td align="center">+ Filter: a genre</td>
+<td align="center">the filter as a chip, songs as a list</td>
+</tr>
+</table>
+
+- **Keyboards:** ABC (QWERTY, or QWERTZ in Settings › Regional), かな (the
+  50-sound table; ゛ ゜ and 小 change the last kana), 拼音, АБВ, and 123.
+  Tap the input key for the next one (the new keys push the old ones out),
+  hold it for the list. Hold a letter for its other forms (ä à á â …, е gives
+  ё), slide onto one and let go.
+- **+ Filter:** search in (all, only artists, only albums, only songs),
+  genre, rating, year (decades), played (never, at least once, 10 times or
+  more), folder, each with how many songs it has. A filter becomes a chip;
+  × removes it. With a filter on, the results are songs, and what you type
+  also looks at their artists and albums.
+
+## Settings and themes
+
+<img src="docs/img/theme.webp" width="256" align="right" alt="Dragging the accent round the colour ring: the whole app follows; then the presets">
+
+- **Settings (⋮):** pages slide in from the right (‹, B or Left go back; A
+  or Right open one). Every page has an icon, so the language can be found
+  without reading it: the globe (🌐) leads to Regional, then to Language.
+  - *Playback:* ReplayGain, play on launch, pause when the lid closes, L/R
+    skip with the lid closed
   - *Browsing:* case-sensitive names, scroll all long rows
   - *Player:* time on the right (length or time left), cover background,
     shuffle by rating
-  - *Theme:* the app's three colours (accent, background, text), picked on
-    a colour triangle: the ring chooses the hue, the triangle (pure hue,
-    white, black at its corners) how strong and bright. Every other colour
-    is mixed from these three, and the whole app changes as you drag.
-    Up / Down choose the colour, Left / Right turn its hue. *Presets* (A;
-    always in fixed colours, findable with any theme): *Ultraviolet* (the
-    default: dark purple, pinkish white, violet pink) and *Midnight Rose*
-    (the first theme: near black, white, rose pink).
+  - *Theme:* the app's three colours (accent, background, text) on a colour
+    triangle: the ring chooses the hue, the triangle how strong and bright.
+    Every other colour is mixed from these three, and the whole app changes
+    as you drag. Up / Down choose the colour, Left / Right turn its hue.
+    *Presets* (A; in fixed colours, findable with any theme): *Ultraviolet*
+    (the default) and *Midnight Rose* (the first theme).
   - *Regional:* the language (English or German, German in Swiss spelling)
-    and the search keyboard (QWERTY or QWERTZ).
-    The language changes at once, everywhere.
+    and the search keyboard (QWERTY or QWERTZ)
   - *About:* name, version and edition, licence, where the code lives
-- **The artist in the player** (start of the top line): tap it for the
-  artist's albums in the browser, with the playing song's album selected.
-  The line scrolls, so the tap goes by where the name is right then.
-- **Several artists** (several values of the artist tag, as taggers like
-  Quod Libet write them): shown together ("Ken Aoba, Aethel"), the
-  song is listed under each in the Artist tab, and in the player each name
-  opens its own artist. Several genres are shown together in the song
-  info. Names joined inside one value ("A x B", "A, B") stay one artist:
-  split them in your tagger if you want them apart.
-- **Rating and plays (ⓘ song info):** tap a star to give the song that many
-  (the last lit one again: none), or use Left / Right. A song counts as
-  played once you've listened to half of it or 4 minutes, whichever comes
-  first (listening time: seeking ahead doesn't count), once per listen.
-  Shown: your rating from the DS, else the one from the file's tags; plays
-  from the tags plus the ones on the DS. They're kept in
-  `/_nds/alya-bangers/stats.bin` (dsconv's library index is only read).
-- **Shuffle by rating** (Settings → Player): shuffled, a song's chance to come next
-  doubles with every star. Unrated songs count as 3 stars, so 5 stars come
-  up 4× as often as them and 1 star a quarter as often. Over a long
-  shuffle (a whole tab) your favourites play much more; a short queue still
-  plays every song once per round, just the good ones earlier.
-- Songs without a cover show a built-in picture (a moonlit beach).
-- Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese,
-  Cyrillic, Vietnamese and emoji show correctly.
+
+<br clear="right">
+
+<table>
+<tr>
+<td><img src="docs/img/settings.png" width="256" alt="The settings, each page with its icon"></td>
+<td><img src="docs/img/presets.png" width="256" alt="The theme presets: Ultraviolet and Midnight Rose"></td>
+<td><img src="docs/img/german_search.png" width="256" alt="Search in German: Künstler, Alben, Titel"></td>
+</tr>
+<tr>
+<td align="center">settings</td>
+<td align="center">theme presets</td>
+<td align="center">auf Deutsch</td>
+</tr>
+</table>
+
+## Buttons
 
 | Button | Browsing | Player |
 |---|---|---|
 | Up / Down | move (faster when held) | |
 | Left / Right | tab to the left / right | −10 s / +10 s |
 | A | open / play | play / pause |
-| B | the player | back to browsing |
+| B | the player (search: keyboard away) | back to browsing |
 | X | add-to-queue mode | song info |
 | Y | row menu | queue |
 | SELECT | player | back to browsing |
 | START | play / pause | play / pause |
 | L / R | previous / next song (L restarts the song after 3 s) | same |
 
-Menus (settings, sort, the row menu, song info, queue) slide up when they
-open and down when they close. Buttons light up when tapped, play and pause morph
-into each other, the highlight glides from row to row (lists, menus, queue,
-settings), the progress bars move smoothly and the seek knob grows while you
-drag it. Settings pages slide in from the right. The record has a
-soft purple glare at the top left. In player mode the top screen's
-background is the cover, blurred and darkened (Settings → Player → Cover background).
-A new song's background is made a slice per frame while the covers move and
-faded in once they have settled. A very dark cover would melt into its dark
-background (on the DS screen, everything below about 24 of 255 looks
-black), so then the background gets lighter; covers that stand out keep it
-as it is.
-Closing the lid fades both screens to black before the light goes off;
-opening it fades them back in. In menus: Up/Down, A chooses, B closes. If the card is ever too slow, a red
-"drops: N" appears at the top. Tell me if you see it on real hardware.
+In menus: Up/Down, A chooses, B closes. Menus slide up when they open and
+down when they close, buttons light up when tapped, play and pause morph into
+each other. If the card is ever too slow, a red "drops: N" appears at the
+top. Tell me if you see it on real hardware.
 
 ## The SD card
 
@@ -222,6 +284,11 @@ They need a gcc that can build 32-bit programs (`-m32`), e.g.
 The screen test also draws every screen in German and checks that every
 text exists in both languages and fits its place. All texts of the
 interface are in `arm9/source/i18n.c` (English and German side by side).
+
+The README's pictures come from a made-up library: `tests/demo/make_demo_card.py`
+builds it, the screen test's demo mode (`./screens CARD out demo`) shoots the
+screens and films, and `tools/gen_readme_images.py` turns them into
+`docs/img/` (see the script for the three commands).
 
 `tools/gen_builtin_font.py` regenerates the built-in glyphs (ASCII, UI
 symbols, icons, the umlauts and the keyboards' letters) from dsconv's copy

@@ -134,6 +134,31 @@ static void film_screen(const char *prefix, int n, Screen which)
     }
 }
 
+// Run n vblanks; with filming on, save both screens every second one (on the
+// DS each screen is drawn every second frame: 30 per second).
+static int film_n;
+static void film_both(const char *prefix, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        tick(0);
+        if (!film_on || (i & 1))
+            continue;
+        char name[64];
+        snprintf(name, sizeof(name), "%s_%03d", prefix, film_n++);
+        shot(name);
+    }
+}
+
+// A tap, filmed.
+static void film_tap(const char *prefix, int x, int y, int after)
+{
+    sim_set_touch(x, y);
+    tick(KEY_TOUCH);
+    tick(KEY_TOUCH);
+    film_both(prefix, after);
+}
+
 static void film(const char *prefix, int n)
 {
     film_screen(prefix, n, SCREEN_TOP);
@@ -243,6 +268,238 @@ static int section_count(int sec)
     return 0;
 }
 
+// ---- README pictures, from the made-up library of tests/demo/make_demo_card.py
+//      ./screens /tmp/demo/card/music shots demo
+
+static uint32_t demo_track(const char *path)
+{
+    uint32_t t = lib_find_path(path);
+    if (t == LIB_NONE)
+    {
+        printf("FAIL: demo card has no %s\n", path);
+        failures++;
+    }
+    return t;
+}
+
+static void demo_tap_row(const char *prefix, const char *label, int after)
+{
+    int i = find_row(label);
+    if (i < 0)
+    {
+        printf("FAIL: no row %s\n", label);
+        failures++;
+        return;
+    }
+    if (i >= app.scroll + list_rows())
+        app.scroll = i - list_rows() + 2;
+    film_tap(prefix, 100, list_y() + (i - app.scroll) * ROW_H + 8, after);
+}
+
+static void demo_im(int im)
+{
+    int x, y;
+    key_pos(0, K_IM, &x, &y);
+    hold(x, y, HOLD_TICKS + 2);
+    release();
+    run(OV_TICKS + 2);
+    tap(60, ui_im_menu_y() + 20 + im * 16 + 8);
+    run(IM_TICKS + 4);
+}
+
+static int demo(void)
+{
+    film_on = true;
+    uint32_t first = demo_track("Bandcamp/Mira Kestrel/Coastline Tapes/01 Saltwater Radio.dsa");
+    play_tracks(&first, 1, 0, false, SA_JUMP);
+    run(120);
+
+    // browsing: the artists, Nightglass's albums, a song, the player
+    int k = find_row("Nightglass");
+    select_index(k);
+    run(20);
+    shot("browse");
+    film_n = 0;
+    film_both("rd_browse", 16);
+    film_tap("rd_browse", 100, LIST_Y + (k - app.scroll) * ROW_H + 8, 36);
+    demo_tap_row("rd_browse", "Afterglow Arcade", 36);
+    demo_tap_row("rd_browse", "Midnight Tram", 50);
+    film_tap("rd_browse", 128, BAR_Y + 14, 60);
+
+    // the player: covers of their own and the built-in one, next and back
+    uint32_t q[4] = { demo_track("Bandcamp/Nightglass/Afterglow Arcade/03 Midnight Tram.dsa"),
+                      demo_track("Bandcamp/Polar Moth/Frostbyte/01 Snowfield.dsa"),
+                      demo_track("Bandcamp/Sölve/Orbit/01 Solstice.dsa"),
+                      demo_track("Bandcamp/Mira Kestrel/Coastline Tapes/02 Harbor Lights.dsa") };
+    play_tracks(q, 4, 0, false, SA_PUT);
+    run(90);
+    shot("player");
+    film_n = 0;
+    film_both("rd_player", 24);
+    film_tap("rd_player", 178, 100, 70);
+    film_tap("rd_player", 178, 100, 70);
+    film_tap("rd_player", 78, 100, 70);
+    run(30);
+    rate_current(4);
+    tap(20, 140);
+    run(OV_TICKS + 6);
+    shot("info");
+    tap(240, 8);
+    run(OV_TICKS + 4);
+    tap(236, 146);
+    run(OV_TICKS + 6);
+    shot("queue");
+    tap(240, 8);
+    run(OV_TICKS + 4);
+    uint32_t two = demo_track("Singles/Nightglass, Mira Kestrel - Two Lights.dsa");
+    play_tracks(&two, 1, 0, false, SA_JUMP);
+    run(90);
+    shot("two_artists");
+
+    // search: the 🔍 tab, typing "night", the D-pad, the keyboard down
+    tap(128, 172);
+    run(40);
+    show_tab(TAB_ARTIST);
+    run(30);
+    film_n = 0;
+    film_tap("rd_search", 240, 10, TAB_TICKS + KB_TICKS + 10);
+    for (const char *c = "night"; *c; c++)
+    {
+        int kx, ky;
+        key_pos((uint32_t)*c, K_CHAR, &kx, &ky);
+        film_tap("rd_search", kx, ky, 12);
+    }
+    film_both("rd_search", 24);
+    shot("search");
+    sim_set_touch(0, 0);
+    tick(KEY_DOWN);
+    film_both("rd_search", 14);
+    tick(KEY_DOWN);
+    film_both("rd_search", 20);
+    int dx, dy;
+    key_pos(0, K_DONE, &dx, &dy);
+    film_tap("rd_search", dx, dy, KB_TICKS + 30);
+    tap(150, FIELD_Y + 10);
+    run(KB_TICKS + 4);
+    tap(240, FIELD_Y + 10);
+    run(SHEET_TICKS + 4);
+
+    // hold o: its other forms ("sö" finds Sölve)
+    type_text("s");
+    int ox, oy;
+    key_pos('o', K_CHAR, &ox, &oy);
+    hold(ox, oy, HOLD_TICKS + ACC_TICKS + 4);
+    shot("search_accents");
+    release();
+    run(SHEET_TICKS + 4);
+    tap(240, FIELD_Y + 10);
+    run(SHEET_TICKS + 4);
+    // かな: はな finds ハナビラ
+    demo_im(IM_KANA);
+    tap_key(0x306F, K_CHAR);
+    tap_key(0x306A, K_CHAR);
+    run(SHEET_TICKS + 4);
+    shot("search_kana");
+    tap(240, FIELD_Y + 10);
+    // 拼音: lin finds 林星月
+    demo_im(IM_PINYIN);
+    type_text("lin");
+    run(SHEET_TICKS + 4);
+    shot("search_pinyin");
+    tap(240, FIELD_Y + 10);
+    // АБВ
+    demo_im(IM_CYR);
+    type_text("ви");
+    run(SHEET_TICKS + 4);
+    shot("search_cyrillic");
+    tap(240, FIELD_Y + 10);
+    demo_im(IM_ABC);
+    run(SHEET_TICKS + 4);
+
+    // + Filter: a genre, then the songs as a list
+    bool on_x;
+    int px = -1;
+    for (int x = 4; x < 252 && px < 0; x++)
+        if (ui_chip_at(x, CHIPS_Y + 8, &on_x) == F_COUNT)
+            px = x;
+    tap(px + 10, CHIPS_Y + 8);
+    run(OV_TICKS + 4);
+    tap(100, FMENU_Y + 20 + F_GENRE * 16 + 8);
+    run(TAB_TICKS + 4);
+    shot("search_filter");
+    for (int i = 0; i < app.n_fopts; i++)
+        if (strcmp(lib_value(app.fopts[i].value), "Synthwave") == 0)
+            tap(100, FMENU_Y + 20 + (i - app.fscroll) * 16 + 8);
+    run(OV_TICKS + SHEET_TICKS + 8);
+    tap_key(0, K_DONE);
+    run(KB_TICKS + 8);
+    press(KEY_DOWN);
+    run(10);
+    shot("search_list");
+    search_filter_clear(&app.sf);
+    search_refresh();
+    run(20);
+
+    // settings, the theme: drag the accent round the ring, then the presets
+    show_tab(TAB_ARTIST);
+    run(40);
+    tap(240, BAR_Y + 14);
+    run(OV_TICKS + 10);
+    shot("settings");
+    tap(100, SET_Y + 3 * SET_H + 10);
+    run(30);
+    shot("theme");
+    film_n = 0;
+    film_both("rd_theme", 16);
+    theme_select(0);
+    {
+        float a0 = (float)app.theme_hsv.h * 6.2831853f / CP_HUES;
+        int rr = (CP_R_OUT + CP_R_IN) / 2;
+        sim_set_touch(CP_CX + (int)(rr * cosf(a0)), CP_CY - (int)(rr * sinf(a0)));
+        tick(KEY_TOUCH);
+        for (int i = 0; i <= 90; i++)
+        {
+            float a = a0 + 6.2831853f * i / 90;
+            sim_set_touch(CP_CX + (int)(rr * cosf(a)), CP_CY - (int)(rr * sinf(a)));
+            tick(KEY_TOUCH);
+            if (i % 2 == 0)
+            {
+                char name[64];
+                snprintf(name, sizeof(name), "rd_theme_%03d", film_n++);
+                shot(name);
+            }
+        }
+        sim_set_touch(0, 0);
+        tick(0);
+    }
+    tap(THEME_CHIP_X + 20, THEME_PRESETS_Y + 10);
+    film_both("rd_theme", OV_TICKS + 20);
+    shot("presets");
+    film_tap("rd_theme", PRESET_X0 + 60, PRESET_Y + 20 + 1 * 16 + 8, 30);       // Midnight Rose
+    film_tap("rd_theme", THEME_CHIP_X + 20, THEME_PRESETS_Y + 10, OV_TICKS + 16);
+    film_tap("rd_theme", PRESET_X0 + 60, PRESET_Y + 20 + 8, 40);                // Ultraviolet
+    tap(240, 8);
+    run(30);
+
+    // in German
+    app.set.lang = i18n_lang = LANG_DE;
+    play_tracks(q, 4, 0, false, SA_JUMP);
+    slide_to(true);
+    run(90);
+    shot("german");
+    slide_to(false);
+    run(40);
+    tap(240, 10);
+    run(TAB_TICKS + KB_TICKS + 6);
+    type_text("night");
+    run(SHEET_TICKS + 6);
+    shot("german_search");
+    app.set.lang = i18n_lang = LANG_EN;
+
+    printf("%s\n", failures ? "DEMO INCOMPLETE" : "demo pictures written");
+    return failures != 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3)
@@ -267,6 +524,8 @@ int main(int argc, char **argv)
     player_init();
     snprintf(music_root, sizeof(music_root), "%s", argv[1]);
     app_init();
+    if (argc > 3 && strcmp(argv[3], "demo") == 0)
+        return demo();
     check(lib_loaded(), "library.idx loads");
     check(sim_backlight == 5, "backlight set at start");
 
