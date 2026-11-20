@@ -197,7 +197,8 @@ icon of the `.nds` file.
 
 Search, playlists, genre and other tags as tabs, colours from the cover,
 gapless playback, the Regional settings page (language, date and time
-format).
+format), Arabic script (right to left, joined letters; Persian and Urdu
+with it).
 
 ## Licence
 
