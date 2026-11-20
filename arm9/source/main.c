@@ -864,12 +864,17 @@ static void tap_browser(int x, int y)
     redraw = true;
 }
 
-// The artist of a song in the browser: its albums, the song's one selected.
-static void browse_artist_of(uint32_t t)
+// One of a song's artists (k: which of its artist tag's values) in the
+// browser: their albums, the song's one selected.
+static void browse_artist_of(uint32_t t, int k)
 {
     if (t == LIB_NONE)
         return;
-    int g = lib_track_group(t);
+    uint32_t ids[16];
+    int n = lib_tag_ids(t, "artist", ids, 16);
+    int g = k >= 0 && k < n ? lib_value_group(ids[k]) : -1;
+    if (g < 0)
+        g = lib_track_group(t);
     if (g < 0)
         return;
     app.artist = g;
@@ -936,9 +941,10 @@ static void tap_player(int x, int y)
         redraw = true;
         return;
     }
-    if (ui_player_artist_at(x, y))
+    int who = ui_player_artist_at(x, y);
+    if (who >= 0)
     {
-        browse_artist_of(app_current_track());
+        browse_artist_of(app_current_track(), who);
         return;
     }
     int cy = 100;

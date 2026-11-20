@@ -634,13 +634,13 @@ int main(int argc, char **argv)
         for (int k = 0; k < 400 && ax < 0; k++)
         {
             for (int x = 8; x < 248 && ax < 0; x++)
-                if (ui_player_artist_at(x, 12) && ui_player_artist_at(x + 12, 12))
+                if (ui_player_artist_at(x, 12) >= 0 && ui_player_artist_at(x + 12, 12) >= 0)
                     ax = x;
             if (ax < 0)
                 run(1);
         }
         for (int x = 247; x >= 8; x--)
-            if (!ui_player_artist_at(x, 12))
+            if (ui_player_artist_at(x, 12) < 0)
             {
                 tx = x;
                 break;
@@ -657,6 +657,7 @@ int main(int argc, char **argv)
         slide_to(true);
         run(30);
     }
+
     press(KEY_B);
     check(!app.player_mode, "B in the player: back to browsing");
     run(30);
@@ -709,6 +710,46 @@ int main(int argc, char **argv)
               && r3.path[0], "a state file from before themes: everything loads, the default theme");
         app.theme = kept;
         save_now();
+    }
+
+    // ---- a song with two artists (two values of its artist tag): under both, both shown, either can be tapped
+    {
+        uint32_t duet = lib_find_path("Bandcamp/Ken Aoba, Aethel - Duet.dsa");
+        check(duet != LIB_NONE, "the two-artist song is in the library");
+        uint32_t ids[4];
+        int n = lib_tag_ids(duet, "artist", ids, 4);
+        check(n == 2 && strcmp(lib_value(ids[0]), "Ken Aoba") == 0 && strcmp(lib_value(ids[1]), "Aethel") == 0,
+              "both artist values are kept");
+        int gk = lib_value_group(ids[0]), ga = lib_value_group(ids[1]);
+        check(gk >= 0 && ga >= 0 && gk != ga && lib_track_in_group(duet, gk) && lib_track_in_group(duet, ga),
+              "it's in both artists' groups");
+        Item list[64];
+        int nk = lib_list_tracks(list, ga, LIB_NONE, 0, false), found = 0;
+        for (int i = 0; i < nk; i++)
+            found |= list[i].id == duet;
+        check(found && lib_group_size(ga) == 2, "Aethel's songs: Sunward and Duet");
+        char joined[64];
+        lib_tag_joined(duet, "artist", ", ", joined, sizeof(joined));
+        check(strcmp(joined, "Ken Aoba, Aethel") == 0, "shown as \"Ken Aoba, Aethel\"");
+        // play it, tap the second name in the player
+        uint32_t one[1] = { duet };
+        play_tracks(one, 1, 0, false, SA_JUMP);
+        slide_to(true);
+        run(40);
+        int bx = -1;
+        for (int k = 0; k < 400 && bx < 0; k++)
+        {
+            for (int x = 8; x < 248 && bx < 0; x++)
+                if (ui_player_artist_at(x, 12) == 1 && ui_player_artist_at(x + 10, 12) == 1)
+                    bx = x;
+            if (bx < 0)
+                run(1);
+        }
+        check(bx >= 0, "the second name is found in the player's top line");
+        shot("05d_two_artists_player");
+        tap(bx + 4, 12);
+        check(!app.player_mode && app.artist == ga, "tapping \"Aethel\": Aethel in the browser");
+        run(30);
     }
 
     // ---- shuffle by rating: a 5-star song comes next far more often among 1-star ones

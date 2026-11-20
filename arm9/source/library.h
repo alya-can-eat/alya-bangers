@@ -8,6 +8,7 @@
 #define DSPLAYER_LIBRARY_H__
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define LIB_NONE 0xFFFFFFFFu
@@ -51,7 +52,12 @@ uint32_t lib_album_track(const LibAlbum *a, int i);
 const char *lib_value(uint32_t value_id);    // "" for LIB_NONE
 const char *lib_path(uint32_t track);
 // First value of a tag (e.g. "genre"), or NULL.
+// The first value of a tag (NULL: none).
 const char *lib_tag(uint32_t track, const char *key);
+// All values of a tag, as value ids in the file's order; returns how many.
+int lib_tag_ids(uint32_t track, const char *key, uint32_t *out, int max);
+// All values joined with sep (empty: none); returns how many.
+int lib_tag_joined(uint32_t track, const char *key, const char *sep, char *out, size_t size);
 // Track id for a path relative to the music root, or LIB_NONE.
 uint32_t lib_find_path(const char *rel);
 
@@ -62,7 +68,9 @@ int lib_group_count(void);
 // Spelling shown for a group (the most common one), LIB_NONE = "(no artist)".
 uint32_t lib_group_name(int g);
 int lib_group_size(int g);
-int lib_track_group(uint32_t track);
+int lib_track_group(uint32_t track);           // the group of its first artist
+bool lib_track_in_group(uint32_t track, int g); // any of its artists
+int lib_value_group(uint32_t value);            // an artist value's group, -1: none
 
 // ---- lists for the browser ----
 

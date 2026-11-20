@@ -59,6 +59,12 @@ or folder, a player screen with a turning record, a queue you can edit.
 - **The artist in the player** (start of the top line): tap it for the
   artist's albums in the browser, with the playing song's album selected.
   The line scrolls, so the tap goes by where the name is right then.
+- **Several artists** (several values of the artist tag, as taggers like
+  Quod Libet write them): shown together ("Ken Aoba, Aethel"), the
+  song is listed under each in the Artist tab, and in the player each name
+  opens its own artist. Several genres are shown together in the song
+  info. Names joined inside one value ("A x B", "A, B") stay one artist:
+  split them in your tagger if you want them apart.
 - **Rating and plays (ⓘ song info):** tap a star to give the song that many
   (the last lit one again: none), or use Left / Right. A song counts as
   played once you've listened to half of it or 4 minutes, whichever comes

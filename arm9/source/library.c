@@ -29,7 +29,10 @@ static uint32_t fingerprint;
 static uint32_t *path_hash;     // track id + 1, 0 = empty
 static uint32_t path_hash_mask;
 
-static uint16_t *track_group;   // per track
+static uint16_t *track_group;   // per track: the group of its first artist
+static uint16_t *value_group;   // per value: its artist group (0xFFFF: not an artist)
+static int artist_key = -1;     // the "artist" tag key
+static int none_group = -1;     // "(no artist)"
 static int n_groups;
 static uint32_t *group_name;    // display value id
 static uint32_t *group_rank;    // first value id, for sorting
@@ -186,9 +189,9 @@ const char *lib_value(uint32_t v)
     return v < n_values ? strings + values[v] : "";
 }
 
-const char *lib_tag(uint32_t track, const char *key)
+// Index of a tag key, -1 if no track has it (keys are sorted by name).
+static int key_index(const char *key)
 {
-    // keys are sorted by name
     uint32_t lo = 0, hi = n_keys;
     while (lo < hi)
     {
@@ -198,16 +201,39 @@ const char *lib_tag(uint32_t track, const char *key)
         else
             hi = mid;
     }
-    if (lo >= n_keys || strcmp(strings + keys[lo], key) != 0)
-        return NULL;
+    return lo < n_keys && strcmp(strings + keys[lo], key) == 0 ? (int)lo : -1;
+}
+
+const char *lib_tag(uint32_t track, const char *key)
+{
+    uint32_t id;
+    return lib_tag_ids(track, key, &id, 1) ? strings + values[id] : NULL;
+}
+
+int lib_tag_ids(uint32_t track, const char *key, uint32_t *out, int max)
+{
+    int k = key_index(key), n = 0;
+    if (k < 0)
+        return 0;
     const LibTrack *t = &tracks[track];
-    for (uint32_t i = 0; i < t->ref_count; i++)
+    for (uint32_t i = 0; i < t->ref_count && n < max; i++)
     {
         const LibRef *r = &refs[t->first_ref + i];
-        if (r->key == lo)
-            return strings + values[r->value];
+        if (r->key == k)
+            out[n++] = r->value;
     }
-    return NULL;
+    return n;
+}
+
+int lib_tag_joined(uint32_t track, const char *key, const char *sep, char *out, size_t size)
+{
+    uint32_t ids[16];
+    int n = lib_tag_ids(track, key, ids, 16);
+    size_t len = 0;
+    out[0] = 0;
+    for (int i = 0; i < n && len + 1 < size; i++)
+        len += snprintf(out + len, size - len, "%s%s", i ? sep : "", strings + values[ids[i]]);
+    return n;
 }
 
 uint32_t lib_find_path(const char *rel)
@@ -264,19 +290,27 @@ bool casefold_equal(const char *a, const char *b)
 
 // ------------------------------------------------------------ artist groups
 
+// A song with several artists (several values of its artist tag) is in the
+// group of each of them.
 void lib_group_artists(bool case_sensitive)
 {
     free(group_name);
     free(group_rank);
     free(group_size);
+    free(value_group);
     group_name = group_rank = NULL;
     group_size = NULL;
+    value_group = NULL;
     n_groups = 0;
+    none_group = -1;
     if (data == NULL)
         return;
+    artist_key = key_index("artist");
 
     uint32_t *count = calloc(n_values ? n_values : 1, sizeof(uint32_t));
-    uint16_t *value_group = malloc((n_values ? n_values : 1) * sizeof(uint16_t));
+    value_group = malloc((n_values ? n_values : 1) * sizeof(uint16_t));
+    if (value_group)
+        memset(value_group, 0xFF, (n_values ? n_values : 1) * sizeof(uint16_t));
     int cap = 64;
     group_name = malloc(cap * sizeof(uint32_t));
     group_rank = malloc(cap * sizeof(uint32_t));
@@ -288,10 +322,23 @@ void lib_group_artists(bool case_sensitive)
     bool no_artist = false;
     for (uint32_t i = 0; i < n_tracks; i++)
     {
-        if (tracks[i].artist == LIB_NONE)
-            no_artist = true;
-        else
+        bool any = false;
+        for (uint32_t k = 0; artist_key >= 0 && k < tracks[i].ref_count; k++)
+        {
+            const LibRef *r = &refs[tracks[i].first_ref + k];
+            if (r->key == artist_key)
+            {
+                count[r->value]++;
+                any = true;
+            }
+        }
+        if (!any && tracks[i].artist != LIB_NONE)
+        {
             count[tracks[i].artist]++;
+            any = true;
+        }
+        if (!any)
+            no_artist = true;
     }
     for (uint32_t v = 0; v < n_values; v++)
     {
@@ -340,7 +387,6 @@ void lib_group_artists(bool case_sensitive)
             group_name[g] = v;   // the most common spelling wins
         }
     }
-    int none_group = -1;
     if (no_artist)
     {
         none_group = n_groups++;
@@ -358,7 +404,6 @@ void lib_group_artists(bool case_sensitive)
     }
 out:
     free(count);
-    free(value_group);
     free(best);
 }
 
@@ -366,6 +411,24 @@ int lib_group_count(void) { return n_groups; }
 uint32_t lib_group_name(int g) { return group_name[g]; }
 int lib_group_size(int g) { return group_size[g]; }
 int lib_track_group(uint32_t t) { return track_group[t]; }
+
+int lib_value_group(uint32_t v)
+{
+    return value_group && v < n_values && value_group[v] != 0xFFFF ? value_group[v] : -1;
+}
+
+bool lib_track_in_group(uint32_t t, int g)
+{
+    if (track_group[t] == g)
+        return true;
+    for (uint32_t k = 0; value_group && artist_key >= 0 && k < tracks[t].ref_count; k++)
+    {
+        const LibRef *r = &refs[tracks[t].first_ref + k];
+        if (r->key == artist_key && value_group[r->value] == g)
+            return true;
+    }
+    return false;
+}
 
 // ------------------------------------------------------------ lists
 
@@ -421,7 +484,7 @@ int lib_list_albums(Item *out, int group, int sort)
     {
         bool keep = group < 0;
         for (int j = 0; !keep && j < albums[i].count; j++)
-            keep = track_group[album_tracks[albums[i].first + j]] == group;
+            keep = lib_track_in_group(album_tracks[albums[i].first + j], group);
         if (keep)
             out[n++] = (Item){ ITEM_ALBUM, i };
     }
@@ -464,7 +527,7 @@ int lib_list_tracks(Item *out, int group, uint32_t album, int sort, bool in_albu
     else
     {
         for (uint32_t i = 0; i < n_tracks; i++)
-            if (group < 0 || track_group[i] == group)
+            if (group < 0 || lib_track_in_group(i, group))
                 out[n++] = (Item){ ITEM_TRACK, i };
     }
     sort_mode = sort;
@@ -586,7 +649,7 @@ int lib_item_tracks(const Item *it, const char *dir, uint32_t *out, int max)
     }
     case ITEM_ARTIST:
         for (uint32_t i = 0; i < n_tracks && n < max; i++)
-            if (track_group[i] == it->id)
+            if (lib_track_in_group(i, (int)it->id))
                 out[n++] = i;
         qsort(out, n, sizeof(uint32_t), cmp_artist_tracks);
         break;

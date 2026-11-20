@@ -360,6 +360,18 @@ typedef struct {
     char title[200], artist[200], album[200], extra[48];
 } SongText;
 
+#define ARTIST_SEP ", "     // between the artists of a song
+
+// All artists of a song, e.g. "Ken Aoba, Aethel".
+static void artists_of(uint32_t t, char *out, size_t size)
+{
+    if (lib_tag_joined(t, "artist", ARTIST_SEP, out, size) == 0)
+    {
+        const LibTrack *tr = lib_track(t);
+        snprintf(out, size, "%s", tr->artist != LIB_NONE ? lib_value(tr->artist) : "");
+    }
+}
+
 static void song_text(uint32_t t, SongText *st)
 {
     memset(st, 0, sizeof(*st));
@@ -376,7 +388,7 @@ static void song_text(uint32_t t, SongText *st)
     }
     const LibTrack *tr = lib_track(t);
     track_title(t, st->title, sizeof(st->title));
-    snprintf(st->artist, sizeof(st->artist), "%s", tr->artist != LIB_NONE ? lib_value(tr->artist) : "");
+    artists_of(t, st->artist, sizeof(st->artist));
     if (tr->album != LIB_NONE)
         snprintf(st->album, sizeof(st->album), "%s", lib_value(lib_album(tr->album)->name));
     int n = 0;
@@ -571,11 +583,11 @@ static bool top_next_column(int x, uint32_t t)
     uint32_t nt = queue_track(np);
     bool own = app.has_thumb && app.thumb_track == nt;
     gfx_blit(T, x + 8, 44, 32, 32, own ? app.thumb : default_thumb);
-    char title[200];
+    char title[200], artists[200];
     track_title(nt, title, sizeof(title));
-    const LibTrack *tr = lib_track(nt);
+    artists_of(nt, artists, sizeof(artists));
     bool anim = marquee1(T, x, 80, w, title, C_TEXT, t, true);
-    anim |= marquee1(T, x, 96, w, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
+    anim |= marquee1(T, x, 96, w, artists, C_DIM, t, true);
     return anim;
 }
 
@@ -617,12 +629,12 @@ static void next_texts(int x, uint32_t track, uint32_t t, int alpha)
         font_set_alpha(256);
         return;
     }
-    char title[200];
+    char title[200], artists[200];
     track_title(track, title, sizeof(title));
-    const LibTrack *tr = lib_track(track);
+    artists_of(track, artists, sizeof(artists));
     font_set_alpha(alpha);
     marquee1(T, x, 80, 48, title, C_TEXT, t, true);
-    marquee1(T, x, 96, 48, tr->artist != LIB_NONE ? lib_value(tr->artist) : "", C_DIM, t, true);
+    marquee1(T, x, 96, 48, artists, C_DIM, t, true);
     font_set_alpha(256);
 }
 
@@ -1167,7 +1179,7 @@ static bool item_playing(const Item *it)
     {
     case ITEM_TRACK: return it->id == cur;
     case ITEM_ALBUM: return lib_track(cur)->album == it->id;
-    case ITEM_ARTIST: return lib_track_group(cur) == (int)it->id;
+    case ITEM_ARTIST: return lib_track_in_group(cur, (int)it->id);
     default: return false;
     }
 }
@@ -1565,16 +1577,18 @@ static void big_next(int cx, int cy, uint16_t c, bool flip)
     gfx_fill(B, s > 0 ? bx : bx - 2, cy - 9, 3, 19, c);
 }
 
-// Is (x, y) on the artist's name in the player's top line, where it is
-// drawn right now (the line scrolls)? Same layout as draw_player_area.
-bool ui_player_artist_at(int x, int y)
+// Which of the artists' names in the player's top line is at (x, y), where
+// it is drawn right now (the line scrolls)? -1: none. Same layout as
+// draw_player_area; the names are the artist tag's values in order.
+int ui_player_artist_at(int x, int y)
 {
     if (y < 2 || y >= 28 || player_path() == NULL)
-        return false;
+        return -1;
+    uint32_t cur = app_current_track();
     SongText st;
-    song_text(app_current_track(), &st);
+    song_text(cur, &st);
     if (!st.artist[0])
-        return false;
+        return -1;
     const char *segs[3] = { st.artist, " – ", st.title };
     char all[600];
     snprintf(all, sizeof(all), "%s%s%s", segs[0], segs[1], segs[2]);
@@ -1585,6 +1599,27 @@ bool ui_player_artist_at(int x, int y)
         if (i == 0)
             aw = w;
         tw += w;
+    }
+    // where each name starts and ends inside the artists' part
+    uint32_t ids[16];
+    int n_names = cur != LIB_NONE ? lib_tag_ids(cur, "artist", ids, 16) : 0;
+    int from[16], to[16];
+    if (n_names <= 1)
+    {
+        n_names = 1;
+        from[0] = 0;
+        to[0] = aw;
+    }
+    else
+    {
+        int sep = font_draw_ex(B, SCREEN_W, -100, 0, 0, ARTIST_SEP, 0, jp, 1), p = 0;
+        for (int i = 0; i < n_names; i++)
+        {
+            from[i] = p;
+            p += font_draw_ex(B, SCREEN_W, -100, 0, 0, lib_value(ids[i]), 0, jp, 1);
+            to[i] = p;
+            p += sep;
+        }
     }
     const int lx = 8, lw = 240;
     int starts[2], n = 0;
@@ -1599,11 +1634,26 @@ bool ui_player_artist_at(int x, int y)
         starts[n++] = lx - off + period;
     }
     if (x < lx || x >= lx + lw)
-        return false;
+        return -1;
     for (int i = 0; i < n; i++)
-        if (x >= starts[i] - 4 && x < starts[i] + aw + 4)
-            return true;
-    return false;
+    {
+        if (x < starts[i] - 4 || x >= starts[i] + aw + 4)
+            continue;
+        // the nearest name (a tap on ", " goes to the closer one)
+        int best = 0, bd = 1 << 30;
+        for (int k = 0; k < n_names; k++)
+        {
+            int a = starts[i] + from[k], b = starts[i] + to[k];
+            int d = x < a ? a - x : (x >= b ? x - b + 1 : 0);
+            if (d < bd)
+            {
+                bd = d;
+                best = k;
+            }
+        }
+        return best;
+    }
+    return -1;
 }
 
 static bool draw_player_area(void)
@@ -1683,7 +1733,8 @@ static bool draw_info(void)
     if (tr->year)
         snprintf(year, sizeof(year), "%d", tr->year);
     snprintf(plays, sizeof(plays), "%lu", (unsigned long)app_song_plays(t));
-    const char *genre = lib_tag(t, "genre");
+    char genre[160];
+    lib_tag_joined(t, "genre", ", ", genre, sizeof(genre));
     const char *codec = lib_tag(t, "~codec");
     const DsaHeader *h = player_header();
     unsigned rate = h ? h->sound_clock_hz / h->timer_divider : 32728;
@@ -1691,7 +1742,7 @@ static bool draw_info(void)
              rate / 1000, (rate % 1000) / 100);
     const char *labels[9] = { "Title", "Artist", "Album", "Track", "Year", "Genre", "Rating", "Plays", "Format" };
     const char *vals[9] = { st.title, st.artist[0] ? st.artist : "–", st.album[0] ? st.album : "–",
-                            track, year, genre ? genre : "–", "", plays, format };
+                            track, year, genre[0] ? genre : "–", "", plays, format };
     bool anim = false;
     for (int i = 0; i < 9; i++)
     {

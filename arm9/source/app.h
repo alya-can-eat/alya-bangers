@@ -204,7 +204,7 @@ int ui_rowmenu_y(int row_y);
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
 int ui_set_count(int page);
-bool ui_player_artist_at(int x, int y);
+int ui_player_artist_at(int x, int y);     // which artist name, -1: none
 int ui_cover_bg_contrast(const uint16_t *cover);    // for the tests
 const SetItem *ui_set_item(int page, int i);
 int app_song_rating(uint32_t t);        // stars shown: given on the DS, else from the tags, else 0
