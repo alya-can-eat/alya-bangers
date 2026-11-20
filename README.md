@@ -1,5 +1,5 @@
 # alya-bangers
-Music player for the Nintendo DS. I made it for my DS Lite with a DSpico. :-)
+Music player for the Nintendo DS, made for the DS Lite with a DSpico. :-)
 
 Version 1.0 (in the making), the DS Edition.
 
@@ -194,7 +194,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 - Menus slide up when they open and down when they close, buttons light up when tapped, and play and pause morph into each other.
 
 > [!NOTE]
-> If the SD card is ever too slow, a red "drops: N" shows up at the top. If you see that on a real DS, please tell me!
+> If the SD card is ever too slow, a red "drops: N" shows up at the top. If you see that on a real DS, please open an issue!
 
 ## SD card:
 
