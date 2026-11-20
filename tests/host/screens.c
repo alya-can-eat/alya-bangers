@@ -502,6 +502,7 @@ static int demo(void)
 
 int main(int argc, char **argv)
 {
+    setvbuf(stdout, NULL, _IOLBF, 0);   // a crash keeps the lines printed so far
     if (argc < 3)
     {
         fprintf(stderr, "usage: %s card/music out_dir\n", argv[0]);
@@ -1427,14 +1428,17 @@ int main(int argc, char **argv)
         hold(ox, oy2, ACC_TICKS + 2);
         check(app.acc_sel == 0, "held still: the first form (ö) is chosen");
         shot("33_search_accents");
-        int bx, by, bw;
-        kb_forms_box(&kb_keys[app.acc_key], forms_count(&kb_keys[app.acc_key]), &bx, &by, &bw);
-        int fy = KB_Y + by + 14;
-        drag_to(bx + 2 + 3 * 25 + 12, fy, 6);         // over ô
-        hold(bx + 2 + 3 * 25 + 12, fy, 10);
-        check(app.acc_sel == 3 && app.acc_vis == bx + 2 + 3 * 25, "the highlight glides to ô");
-        drag_to(bx + 2 + 12, fy, 6);                  // back to ö
-        hold(bx + 2 + 12, fy, 10);
+        if (app.acc_key >= 0)
+        {
+            int bx, by, bw;
+            kb_forms_box(&kb_keys[app.acc_key], forms_count(&kb_keys[app.acc_key]), &bx, &by, &bw);
+            int fy = KB_Y + by + 14;
+            drag_to(bx + 2 + 3 * 25 + 12, fy, 6);     // over ô
+            hold(bx + 2 + 3 * 25 + 12, fy, 10);
+            check(app.acc_sel == 3 && app.acc_vis == bx + 2 + 3 * 25, "the highlight glides to ô");
+            drag_to(bx + 2 + 12, fy, 6);              // back to ö
+            hold(bx + 2 + 12, fy, 10);
+        }
         release();
         check(strcmp(app.query, "gö") == 0 && app.acc_key < 0, "slid back to ö and let go: \"gö\"");
         run(10);

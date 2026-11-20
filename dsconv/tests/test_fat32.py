@@ -22,7 +22,7 @@ def test_folder_names_cannot_end_in_dot_or_space():
 
 def test_control_characters_dropped_and_nfc():
     assert safe_component("a\x01b\x7fc", "") == "abc"
-    assert safe_component("Lúa", "") == "Lúa"
+    assert safe_component("Lu\u0301a", "") == "Lúa"     # decomposed (NFD) in, composed out
 
 
 def test_reserved_device_names():

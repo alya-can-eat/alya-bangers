@@ -273,12 +273,15 @@ short never loses the old one.
 simulated ARM7 that "plays" the ring buffers:
 
 ```sh
+python3 tests/card/make_test_card.py /tmp/testcard   # the test library, made up
 cd tests/host
-make test FILES="/tmp/dscard/music/some/song.dsa"   # checks the audio sample by sample
-make screens-run CARD=/tmp/dscard/music             # clicks through the UI, checks it, screenshots in shots/
+make test_player && ./test_player "/tmp/testcard/card/music/CD/Track 01.dsa"   # checks the audio sample by sample
+make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks it, screenshots in shots/
 ```
 
-They need a gcc that can build 32-bit programs (`-m32`), e.g.
+The screen test expects exactly this library (its artists, albums and
+counts). `make_test_card.py` needs ffmpeg and dsconv's Python dependencies;
+the tests need a gcc that can build 32-bit programs (`-m32`), e.g.
 `nix-shell -p gcc_multi`.
 
 The screen test also draws every screen in German and checks that every

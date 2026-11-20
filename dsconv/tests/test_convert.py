@@ -217,7 +217,7 @@ def test_font_covers_library_text(converted):
     font = read_font((dst / ".dsmusic" / "font.bin").read_bytes())
     for ch in "またね星之河林星月🎵ơú：＊Aa0":
         assert (ord(ch), 0) in font, ch
-    assert font[(ord("三"), 0)]["width"] == 16 and font[(ord("A"), 0)]["width"] == 8
+    assert font[(ord("星"), 0)]["width"] == 16 and font[(ord("A"), 0)]["width"] == 8
     assert (ord("春"), 1) in font            # Japanese variant: 春 appears next to kana
 
 
