@@ -75,7 +75,7 @@
 #define LID_OUT     6               // lid closing: fade to black first
 #define LID_IN      18              // lid opening: fade in from black
 #define KB_TICKS    18              // the keyboard up or down (the results move with it), 0.3 s
-#define SHEET_TICKS 12              // results come up on the top screen while typing, 0.2 s
+#define SHEET_TICKS 18              // results come up on the top screen while typing, 0.3 s
 #define IM_TICKS    18              // another input method pushes the keyboard out, 0.3 s
 #define ACC_TICKS   8               // a held letter's other forms pop up
 
@@ -110,7 +110,7 @@ typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL, PAGE_ABOUT,
        PAGE_COUNT };
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
-       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD };
+       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY };
 enum { SI_TOGGLE, SI_VALUE, SI_PAGE };      // switch, value (tap: the next one), › another page
 typedef struct {
     uint16_t label;         // S_... (i18n.h)
@@ -215,6 +215,7 @@ typedef struct {
     bool sel_on;                // the D-pad highlight shows in the results while typing
     int key_down;               // the key under the stylus, -1: none
     uint32_t key_since;         // since when (holding: other forms, ⌫ repeats)
+    uint32_t text_t0;           // the song's texts scroll from here (frames): set when a song starts
     int key_flash;              // a typed key lights up until key_flash_until (frames)
     uint32_t key_flash_until;
     int im_from, im_t;          // input switch: the old layout leaves to the left (im_t counts down)

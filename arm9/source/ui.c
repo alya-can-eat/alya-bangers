@@ -1041,7 +1041,7 @@ bool ui_draw_top(void)
 
 static bool ui_draw_top_screen(void)
 {
-    uint32_t t = app.frame;
+    uint32_t t = app.frame - app.text_t0;      // the song's texts start scrolling from their start
     int p = app_slide_p256();
     int p1 = smooth256(p * 256 / 154);
     int p2 = smooth256((p - 102) * 256 / 154);
@@ -1059,18 +1059,17 @@ static bool ui_draw_top_screen(void)
 
     if (SA_PLAYER(app.sa_kind) && p2 >= 256)
     {
-        if (playing)
-            viz_update();
+        viz_update(playing);
         draw_viz(256);
         draw_song_change(t);
         return true;
     }
     if (p2 > 0)
     {
-        if (playing)
-            viz_update();
+        // paused or stopped: the bars fall back down
+        bool falling = viz_update(playing);
         draw_viz(p2);
-        if (playing || app.vinyl_speed > 0)
+        if (playing || app.vinyl_speed > 0 || falling)
             anim = true;
         // rolls out (turning with the distance) when the player slides in
         int travel = 40 * (256 - p2) / 256;
@@ -1591,7 +1590,7 @@ static void round_box(Canvas *c, int x, int y, int w, int h, int r, uint16_t fil
 static int sheet_y(void)
 {
     int kp = app.tab == TAB_SEARCH ? ease_io(app.kb_t * 256 / KB_TICKS) : 256;
-    int up = SCREEN_H - (SCREEN_H - SHEET_Y) * ease_out(clamp256(app.sheet_t * 256 / SHEET_TICKS)) / 256;
+    int up = SCREEN_H - (SCREEN_H - SHEET_Y) * ease_io(app.sheet_t * 256 / SHEET_TICKS) / 256;
     int down = SCREEN_H + HINGE + SEARCH_LIST_Y;
     return down + (up - down) * kp / 256;
 }
@@ -1955,12 +1954,15 @@ static bool search_layers(int oy)
         return false;
     int kb_y = SCREEN_H - (SCREEN_H - KB_Y) * ease_io(app.kb_t * 256 / KB_TICKS) / 256;
     bool anim = false;
-    if (app.kb_t < KB_TICKS)
+    if (app.kb_t < KB_TICKS && app.n_items > 0)
     {
+        // results on their way between the screens: over the query and the
+        // filters, under the tabs (they stay put), the bar and the keyboard
         int sy = sheet_y() - (SCREEN_H + HINGE);
-        draw_sheet(B, sy, 0, kb_y < BAR_Y ? kb_y : BAR_Y, 240, !app.kb_up || app.sel_on);
-        anim = true;
+        draw_sheet(B, sy, TAB_H, kb_y < BAR_Y ? kb_y : BAR_Y, 240, !app.kb_up || app.sel_on);
     }
+    if (app.kb_t < KB_TICKS)
+        anim = true;
     gfx_clip(B, 0, kb_y, SCREEN_W, SCREEN_H);
     gfx_fill(B, 0, kb_y, SCREEN_W, SCREEN_H - kb_y, C_BG);
     if (app.im_t > 0)
@@ -2433,6 +2435,7 @@ static const SetItem items_top[] = {
 };
 static const SetItem items_playback[] = {
     { S_REPLAYGAIN, SI_VALUE, SET_RG, 0 },
+    { S_PLAY_AT_START, SI_TOGGLE, SET_AUTOPLAY, 0 },
     { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID, 0 },
     { S_LR_LID, SI_TOGGLE, SET_LR_LID, 0 },
 };
@@ -2494,6 +2497,7 @@ static bool set_on(int id)
     case SET_LR_LID: return app.set.lr_skip_lid;
     case SET_COVER_BG: return !app.set.plain_bg;
     case SET_SHUFFLE_W: return app.set.shuffle_weighted;
+    case SET_AUTOPLAY: return app.set.play_at_start;
     default: return false;
     }
 }

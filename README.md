@@ -69,7 +69,9 @@ edit, ratings and plays, themes, in English or German.
   back; A or Right open one). Every page has an icon, so the language can be
   found without reading it: the globe (🌐) leads to Regional, then to
   Language, whose value is the language's own name (English, Deutsch):
-  - *Playback:* ReplayGain, pause when the lid closes, L/R skip with the lid closed
+  - *Playback:* ReplayGain, play on launch (go on playing where you
+    stopped, instead of waiting paused), pause when the lid closes, L/R skip
+    with the lid closed
   - *Browsing:* case-sensitive names, scroll all long rows
   - *Player:* time on the right (length or time left), cover background,
     shuffle by rating

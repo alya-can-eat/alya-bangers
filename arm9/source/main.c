@@ -393,6 +393,7 @@ static bool open_pos(int pos, uint32_t start_ms, bool play, SongAnim anim)
             sa_start(anim);
             touch_state();
             song_starts++;
+            app.text_t0 = app.frame;        // its texts scroll from the start
             redraw = true;
             return true;
         }
@@ -437,6 +438,7 @@ static void previous_song(void)
     {
         player_restart();
         song_starts++;
+        app.text_t0 = app.frame;
         redraw = true;
         return;
     }
@@ -677,7 +679,11 @@ static int search_first_row(void)
 // until the D-pad asks for it.
 static void search_refresh(void)
 {
+    // searching takes a few frames on the DS: animations go on from where they
+    // were instead of jumping over that time
+    uint32_t before = vblank_count;
     rebuild_list();
+    last_vblank += vblank_count - before;
     app.scroll = 0;
     app.sel = search_first_row();
     app.sel_frame = app.frame;
@@ -1155,6 +1161,7 @@ static void set_change(int id)
         select_index(0);
         break;
     case SET_PAUSE_LID: app.set.pause_on_lid ^= 1; break;
+    case SET_AUTOPLAY: app.set.play_at_start ^= 1; break;
     case SET_LR_LID: app.set.lr_skip_lid ^= 1; break;
     case SET_RG:
         app.set.rg_mode = (app.set.rg_mode + 1) % RG_MODES;
@@ -1969,14 +1976,16 @@ static void restore(void)
     uint32_t t = lib_find_path(r.path);
     if (t == LIB_NONE)
         return;
-    // on launch: the last song at the same position, paused
+    // on launch: the last song at the same position, paused (or playing:
+    // Settings › Playback › Play on launch)
+    bool play = app.set.play_at_start;
     if (queue_pos() >= 0 && queue_track(queue_pos()) == t)
     {
-        open_pos(queue_pos(), r.pos_ms, false, SA_NONE);
+        open_pos(queue_pos(), r.pos_ms, play, SA_NONE);
         return;
     }
     queue_set(&t, 1, 0);
-    open_pos(0, r.pos_ms, false, SA_NONE);
+    open_pos(0, r.pos_ms, play, SA_NONE);
 }
 
 // ------------------------------------------------------------------ setup

@@ -62,11 +62,12 @@ static int log2_8(uint64_t v)
     return e * 8 + (int)frac;
 }
 
-void viz_update(void)
+bool viz_update(bool playing)
 {
     viz_init();
     static int16_t x[N];
-    bool live = player_peek(x, N);
+    bool live = playing && player_peek(x, N);
+    bool up = false;
     for (int b = 0; b < VIZ_BANDS; b++)
     {
         int target = 0;
@@ -82,7 +83,9 @@ void viz_update(void)
             levels[b] = target;
         else
             levels[b] = levels[b] > FALL ? levels[b] - FALL : 0;
+        up |= levels[b] > 0;
     }
+    return up;
 }
 
 int viz_level(int band)

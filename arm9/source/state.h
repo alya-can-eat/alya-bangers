@@ -28,9 +28,12 @@ typedef struct {
     uint8_t shuffle_weighted; // shuffle: higher rated songs come up more often
     uint8_t lang;             // LANG_EN, LANG_DE (i18n.h)
     uint8_t keyboard;         // search keyboard: KB_QWERTY, KB_QWERTZ
+    // state file version 3 from here (older files: 0)
+    uint8_t play_at_start;    // launching the app goes on playing where it stopped
+    uint8_t reserved[15];     // room for more settings without a new file version
 } Settings;
 
-_Static_assert(sizeof(Settings) == 16, "settings are 16 bytes in the file");
+_Static_assert(sizeof(Settings) == 32, "settings are 32 bytes in the file");
 
 typedef struct {
     char path[512];           // current song, relative to the music root

@@ -10,6 +10,7 @@
 
 #define DSPLAYER_NO_MAIN
 #include "../../arm9/source/main.c"
+#include "../../arm9/source/viz.h"
 
 #include "hostsim.h"
 
@@ -175,6 +176,14 @@ static void tap_row(const char *label)
     if (app.n_items > ROWS && app.scroll > app.n_items - ROWS)
         app.scroll = app.n_items - ROWS;
     tap(100, LIST_Y + (i - app.scroll) * ROW_H + 8);
+}
+
+// The bottom screen's rows y0..y1 as they are drawn right now.
+static void bottom_rows(uint16_t *out, int y0, int y1)
+{
+    ui_draw_bottom();
+    Canvas *c = gfx_canvas(SCREEN_BOTTOM);
+    memcpy(out, c->px + y0 * SCREEN_W, (size_t)(y1 - y0) * SCREEN_W * 2);
 }
 
 // Tap a key of the search keyboard: a character, or a key kind (K_BACK, ...).
@@ -756,6 +765,15 @@ int main(int argc, char **argv)
     check(player_state() == PLAYER_PAUSED && app_current_track() == saved_track
           && (saved_pos > player_position_ms() ? saved_pos - player_position_ms() : player_position_ms() - saved_pos) <= 125,
           "launch resumes paused at the same song and position");
+    app.set.play_at_start = 1;
+    save_now();
+    player_stop();
+    queue_clear();
+    restore();
+    check(player_state() == PLAYER_PLAYING && app_current_track() == saved_track,
+          "Play on launch: launch goes on playing");
+    player_toggle_pause();
+    app.set.play_at_start = 0;
     save_now();
     Settings s2;
     Resume r2;
@@ -773,25 +791,37 @@ int main(int argc, char **argv)
         Resume r3;
         check(state_load(&s3, &t3, &r3) && t3.bg == mine.bg && t3.text == mine.text && t3.acc == mine.acc,
               "the theme is saved");
-        FILE *f = fopen(state, "rb");
-        static uint8_t buf[1 << 20];
-        size_t n = fread(buf, 1, sizeof(buf), f);
-        fclose(f);
-        uint16_t hs;
-        memcpy(&hs, buf + 6, 2);
-        size_t v1 = hs - 8, entries = n - hs - 4;      // version 1: the header without the theme
-        uint16_t one = 1, v1s = (uint16_t)v1;
-        memcpy(buf + 4, &one, 2);
-        memcpy(buf + 6, &v1s, 2);
-        memmove(buf + v1, buf + hs, entries);
-        uint32_t crc = crc32(buf, v1) ^ crc32(buf + v1, entries);
-        memcpy(buf + v1 + entries, &crc, 4);
-        f = fopen(state, "wb");
-        fwrite(buf, 1, v1 + entries + 4, f);
-        fclose(f);
-        bool ok = state_load(&s3, &t3, &r3);
-        check(ok && t3.bg == theme_default.bg && t3.acc == theme_default.acc && s3.brightness == app.set.brightness
-              && r3.path[0], "a state file from before themes: everything loads, the default theme");
+        // older files from this one: version 2 has 16 bytes of settings, version 1 also no theme
+        for (int version = 2; version >= 1; version--)
+        {
+            save_now();
+            FILE *f = fopen(state, "rb");
+            static uint8_t buf[1 << 20], out[1 << 20];
+            size_t n = fread(buf, 1, sizeof(buf), f);
+            fclose(f);
+            uint16_t hs;
+            memcpy(&hs, buf + 6, 2);
+            size_t entries = n - hs - 4;
+            size_t old = hs - 16 - (version == 1 ? 8 : 0);
+            memcpy(out, buf, 8 + 16);                               // up to the old settings' end
+            memcpy(out + 24, buf + 40, old - 24);                   // the rest after today's settings
+            uint16_t v = (uint16_t)version, os = (uint16_t)old;
+            memcpy(out + 4, &v, 2);
+            memcpy(out + 6, &os, 2);
+            memcpy(out + old, buf + hs, entries);
+            uint32_t crc = crc32(out, old) ^ crc32(out + old, entries);
+            memcpy(out + old + entries, &crc, 4);
+            f = fopen(state, "wb");
+            fwrite(out, 1, old + entries + 4, f);
+            fclose(f);
+            bool ok = state_load(&s3, &t3, &r3);
+            if (version == 2)
+                check(ok && t3.bg == mine.bg && s3.brightness == app.set.brightness && s3.lang == app.set.lang
+                      && s3.play_at_start == 0 && r3.path[0], "a version 2 state file: settings, theme, position");
+            else
+                check(ok && t3.bg == theme_default.bg && t3.acc == theme_default.acc && s3.brightness == app.set.brightness
+                      && r3.path[0], "a state file from before themes: everything loads, the default theme");
+        }
         app.theme = kept;
         save_now();
     }
@@ -931,6 +961,34 @@ int main(int argc, char **argv)
         run(10);
     }
 
+    // ---- player: the bars fall after pausing; a new song's texts scroll from their start
+    {
+        slide_to(true);
+        run(40);
+        if (player_state() != PLAYER_PLAYING)
+            player_toggle_pause();
+        run(30);
+        int top = 0;
+        for (int b = 0; b < VIZ_BANDS; b++)
+            top = viz_level(b) > top ? viz_level(b) : top;
+        player_toggle_pause();
+        run(4);
+        int mid = 0;
+        for (int b = 0; b < VIZ_BANDS; b++)
+            mid = viz_level(b) > mid ? viz_level(b) : mid;
+        run(80);
+        int end = 0;
+        for (int b = 0; b < VIZ_BANDS; b++)
+            end = viz_level(b) > end ? viz_level(b) : end;
+        check(top > 0 && mid > 0 && mid < top && end == 0, "paused: the equalizer bars fall back down");
+        uint32_t f0 = app.frame;
+        next_song(false);
+        check(app.text_t0 >= f0, "a new song: its texts scroll from the start");
+        run(40);
+        slide_to(false);
+        run(40);
+    }
+
     // ---- search (🔍): the engine first, then typing with the stylus
     {
         slide_to(false);
@@ -1006,13 +1064,31 @@ int main(int argc, char **argv)
         check(kana_mod(0x304B, KANA_DAKU) == 0x304C && kana_mod(0x306F, KANA_HANDAKU) == 0x3071
               && kana_mod(0x3064, KANA_SMALL) == 0x3063 && kana_mod(0x3063, KANA_SMALL) == 0x3064, "か゛ = が, は゜ = ぱ, つ 小 = っ");
 
-        // the 🔍 tab: the search page slides in, then the keyboard comes up
+        // the 🔍 tab: the search page slides in, then the keyboard comes up;
+        // the tabs and the filters stay as they are meanwhile
         tap(240, 10);
         check(app.tab == TAB_SEARCH && app.kb_up && app.kb_t == 0, "🔍: search, the keyboard on its way");
-        run(TAB_TICKS + KB_TICKS + 4);
+        static uint16_t tabs_mid[TAB_H * SCREEN_W], tabs_end[TAB_H * SCREEN_W];
+        static uint16_t chips_mid[18 * SCREEN_W], chips_end[18 * SCREEN_W];
+        run(TAB_TICKS + 2 + KB_TICKS / 2);
+        check(app.kb_t > 0 && app.kb_t < KB_TICKS, "halfway up");
+        bottom_rows(tabs_mid, 0, TAB_H);
+        bottom_rows(chips_mid, CHIPS_Y, CHIPS_Y + 18);
+        run(KB_TICKS);
         check(app.kb_t == KB_TICKS, "keyboard up");
+        bottom_rows(tabs_end, 0, TAB_H);
+        bottom_rows(chips_end, CHIPS_Y, CHIPS_Y + 18);
+        check(memcmp(tabs_mid, tabs_end, sizeof(tabs_mid)) == 0 && memcmp(chips_mid, chips_end, sizeof(chips_mid)) == 0,
+              "while the keyboard comes up, the tabs and the filters don't flash");
         shot("30_search_open");
-        type_text("kiva");
+        type_text("k");
+        int sh_a = app.sheet_t;
+        run(SHEET_TICKS / 3);
+        int sh_b = app.sheet_t;
+        run(SHEET_TICKS / 3);
+        int sh_c = app.sheet_t;
+        check(sh_a < sh_b && sh_b < sh_c && sh_c < SHEET_TICKS, "the first letter: the results rise onto the top screen");
+        type_text("iva");
         check(strcmp(app.query, "kiva") == 0, "typed \"kiva\" on the keys");
         run(SHEET_TICKS + 2);
         check(app.sheet_t == SHEET_TICKS && section_count(SEC_ARTISTS) >= 3, "the results are on the top screen");

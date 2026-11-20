@@ -12,7 +12,7 @@
 
 #include <stddef.h>
 
-#define STATE_VERSION 2     // 2: the theme at the end of the header
+#define STATE_VERSION 3     // 2: the theme at the end of the header; 3: 32 bytes of settings
 #define MAX_SAVED 65536
 
 typedef struct {
@@ -25,11 +25,28 @@ typedef struct {
     uint32_t queue_count;
     uint8_t shuffle, repeat, album_queue, reserved;
     char path[512];
-    uint16_t theme[3];          // background, text, accent (version 2)
+    uint16_t theme[3];          // background, text, accent
     uint16_t reserved2;
 } StateHeader;
 
-#define HEADER_V1 offsetof(StateHeader, theme)
+// Versions 1 and 2: 16 bytes of settings (the start of today's); version 1
+// ends before the theme.
+typedef struct {
+    char magic[4];
+    uint16_t version, header_size;
+    uint8_t settings[16];
+    uint32_t fingerprint;
+    uint32_t pos_ms;
+    int32_t queue_pos;
+    uint32_t queue_count;
+    uint8_t shuffle, repeat, album_queue, reserved;
+    char path[512];
+    uint16_t theme[3];
+    uint16_t reserved2;
+} StateHeaderV2;
+
+#define HEADER_V1 offsetof(StateHeaderV2, theme)
+#define HEADER_V2 sizeof(StateHeaderV2)
 
 #define DEFAULT_FILE "/_nds/alya-bangers/state.bin"
 #define OLD_FILE     "/_nds/dsplayer/state.bin"     // before the app had its name
@@ -58,15 +75,39 @@ bool state_load(Settings *s, Theme *t, Resume *r)
         f = fopen(OLD_FILE, "rb");      // saved under the old name: read it, save under the new
     if (f == NULL)
         return false;
-    // version 1 is version 2 without the theme at the end
+    // the header as stored, whichever version
+    static union { StateHeader v3; StateHeaderV2 v2; } raw;
+    memset(&raw, 0, sizeof(raw));
+    const size_t head = offsetof(StateHeader, settings);
+    StateHeader *rh = &raw.v3;
+    bool ok = fread(&raw, 1, head, f) == head && memcmp(rh->magic, "DSPS", 4) == 0
+              && ((rh->version == STATE_VERSION && rh->header_size == sizeof(StateHeader))
+                  || (rh->version == 2 && rh->header_size == HEADER_V2)
+                  || (rh->version == 1 && rh->header_size == HEADER_V1));
+    ok = ok && fread((char *)&raw + head, 1, rh->header_size - head, f) == rh->header_size - head;
+    // in today's layout: older settings are the start of today's, the rest 0
     StateHeader h;
     memset(&h, 0, sizeof(h));
-    const size_t head = offsetof(StateHeader, settings);
-    bool ok = fread(&h, 1, head, f) == head && memcmp(h.magic, "DSPS", 4) == 0
-              && ((h.version == STATE_VERSION && h.header_size == sizeof(h))
-                  || (h.version == 1 && h.header_size == HEADER_V1));
-    ok = ok && fread((char *)&h + head, 1, h.header_size - head, f) == h.header_size - head
-         && h.queue_count <= MAX_SAVED;
+    if (ok && rh->version == STATE_VERSION)
+        h = raw.v3;
+    else if (ok)
+    {
+        const StateHeaderV2 *o = &raw.v2;
+        memcpy(h.magic, o->magic, 4);
+        h.version = o->version;
+        h.header_size = o->header_size;
+        memcpy(&h.settings, o->settings, sizeof(o->settings));
+        h.fingerprint = o->fingerprint;
+        h.pos_ms = o->pos_ms;
+        h.queue_pos = o->queue_pos;
+        h.queue_count = o->queue_count;
+        h.shuffle = o->shuffle;
+        h.repeat = o->repeat;
+        h.album_queue = o->album_queue;
+        memcpy(h.path, o->path, sizeof(h.path));
+        memcpy(h.theme, o->theme, sizeof(h.theme));
+    }
+    ok = ok && h.queue_count <= MAX_SAVED;
     QueueEntry *e = NULL;
     if (ok && h.queue_count)
     {
@@ -77,7 +118,7 @@ bool state_load(Settings *s, Theme *t, Resume *r)
     if (ok)
     {
         ok = fread(&crc, 1, 4, f) == 4;
-        uint32_t c = crc32(&h, h.header_size);
+        uint32_t c = crc32(&raw, h.header_size);
         if (h.queue_count)
             c ^= crc32(e, h.queue_count * sizeof(QueueEntry));
         ok = ok && c == crc;
@@ -104,6 +145,7 @@ bool state_load(Settings *s, Theme *t, Resume *r)
         s->lang = LANG_EN;
     if (s->keyboard >= KB_LAYOUTS)
         s->keyboard = KB_QWERTY;
+    s->play_at_start = s->play_at_start != 0;
     h.path[sizeof(h.path) - 1] = 0;
     memcpy(r->path, h.path, sizeof(r->path));
     r->pos_ms = h.pos_ms;
