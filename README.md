@@ -4,8 +4,9 @@ A music player for the Nintendo DS (made for the DS Lite with a DSpico). It
 plays the `.dsa` files written by [dsconv](../dsconv) from the `/music` folder
 of the SD card.
 
-Version 0.2: the interface from the mockup. Browse by artist, album, title
-or folder, a player screen with a turning record, a queue you can edit.
+Version 1.0 (in the making). Browse by artist, album, title or folder, a
+player screen with a turning record, a queue you can edit, ratings and
+plays, themes.
 
 ## What it does
 

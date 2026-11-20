@@ -51,7 +51,7 @@
 #define INFO_STAR_W 18              // a star and the gap after it
 
 #define APP_NAME    "alya-bangers"
-#define APP_VERSION "0.2"
+#define APP_VERSION "1.0"
 #define APP_URL     "github.com/alya-can-eat"
 // Animations run on real time (vblanks, 60 per second), so they take as long
 // on the DS as planned even when it draws fewer frames.
