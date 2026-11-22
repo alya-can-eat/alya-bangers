@@ -2,6 +2,7 @@ build/
 *.nds
 *.elf
 tests/host/test_player
+tests/host/test_eq
 tests/host/screens
 tests/host/shots/
 sdroot/

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "eq.h"
 #include "hostsim.h"
 #include "player.h"
 
@@ -116,6 +117,62 @@ static void test_straight(const char *path, const Song *s)
           (unsigned long)s->h.duration_ms);
 }
 
+// With the equalizer on, what's heard is the song run through it in one
+// go; switched off, the plain song is back within the equalizer's lead.
+static void test_eq(const char *path, const Song *s)
+{
+    char err[64];
+    size_t n = (size_t)s->h.block_count * BF;
+    int16_t *l = malloc(n * 2), *r = malloc(n * 2);
+    memcpy(l, s->left, n * 2);
+    memcpy(r, s->right, n * 2);
+    const int8_t g[EQ_BANDS] = { 6, -3, 4 };
+    eq_set(g);
+    EqState st;
+    eq_state_reset(&st);
+    for (uint32_t b = 0; b < s->h.block_count; b++)
+    {
+        eq_run(&st, l + (size_t)b * BF, BF, 0);
+        if (s->h.channels == 2)
+            eq_run(&st, r + (size_t)b * BF, BF, 1);
+        else
+            memcpy(r + (size_t)b * BF, l + (size_t)b * BF, BF * 2);
+    }
+    CHECK(player_play(path, err, sizeof(err)), "play: %s", err);
+    uint32_t b = 0;
+    int off_at = -1;
+    for (; b < s->h.block_count && player_state() == PLAYER_PLAYING; b++)
+    {
+        player_service();
+        if (player_state() != PLAYER_PLAYING || !sim_play_block(heard_l, heard_r))
+            break;
+        bool eq_ok = memcmp(heard_l, l + (size_t)b * BF, BF * 2) == 0 && memcmp(heard_r, r + (size_t)b * BF, BF * 2) == 0;
+        bool plain = memcmp(heard_l, s->left + (size_t)b * BF, BF * 2) == 0
+                     && memcmp(heard_r, s->right + (size_t)b * BF, BF * 2) == 0;
+        if (off_at < 0)
+        {
+            CHECK(eq_ok, "equalized block %lu as run in one go", (unsigned long)b);
+            if (!eq_ok)
+                break;
+            if (b == 10)
+            {
+                const int8_t flat[EQ_BANDS] = { 0, 0, 0 };
+                eq_set(flat);
+                off_at = (int)b;
+            }
+        }
+        else if ((int)b > off_at + 1 + 4)
+            CHECK(plain, "block %lu: plain again after switching it off", (unsigned long)b);
+    }
+    CHECK(off_at >= 0 || s->h.block_count <= 10, "the equalizer was switched off during the song");
+    CHECK(player_underruns() == 0, "%lu dropouts with the equalizer", (unsigned long)player_underruns());
+    player_stop();
+    const int8_t flat[EQ_BANDS] = { 0, 0, 0 };
+    eq_set(flat);
+    free(l);
+    free(r);
+}
+
 static void test_pause_seek(const char *path, const Song *s)
 {
     char err[64];
@@ -218,6 +275,7 @@ int main(int argc, char **argv)
         }
         int before = failures;
         test_straight(argv[i], &s);
+        test_eq(argv[i], &s);
         test_pause_seek(argv[i], &s);
         printf("  %s (%lu blocks, %u ch)\n", failures == before ? "ok" : "FAILED",
                (unsigned long)s.h.block_count, s.h.channels);

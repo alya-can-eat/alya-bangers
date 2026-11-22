@@ -351,6 +351,23 @@ static int demo(void)
     shot("queue");
     tap(240, 8);
     run(OV_TICKS + 4);
+    // the equalizer: two saved profiles, one chosen, its Treble being dragged
+    {
+        const int8_t hp[EQ_BANDS] = { 4, 0, 2 }, nb[EQ_BANDS] = { -3, 1, -4 };
+        eqp_add("Headphones", hp);
+        eqp_add("Night bus", nb);
+        tap(48, 148);
+        run(OV_TICKS + 6);
+        tap(40, EQ_OWN_Y + 8);
+        hold(EQ_BAND_X(2), EQ_ZERO_Y - 2 * EQ_DB_PX, 2);
+        drag_to(EQ_BAND_X(2), EQ_ZERO_Y - 5 * EQ_DB_PX, 4);
+        run(4);
+        shot("eq");
+        release();
+        eq_choose(0);
+        tap(240, 8);
+        run(OV_TICKS + 4);
+    }
     uint32_t two = demo_track("Singles/Nightglass, Mira Kestrel - Two Lights.dsa");
     play_tracks(&two, 1, 0, false, SA_JUMP);
     run(90);
@@ -520,6 +537,12 @@ int main(int argc, char **argv)
     remove(stats_file);
     remove(stats_new);
     stats_set_file(stats_file);
+    char eq_file[600], eq_new[600];
+    snprintf(eq_file, sizeof(eq_file), "%s/eq.bin", out_dir);
+    snprintf(eq_new, sizeof(eq_new), "%s/eq.new", out_dir);
+    remove(eq_file);
+    remove(eq_new);
+    eqp_set_file(eq_file);
 
     gfx_init();
     player_init();
@@ -686,6 +709,147 @@ int main(int argc, char **argv)
     press(KEY_DOWN);
     check(app.q_sel >= app.q_scroll && app.q_sel < app.q_scroll + ROWS, "then Down shows the selection again");
     tap(240, 8);
+
+    // ---- the equalizer: its button next to ⓘ, profiles, sliders, saving, moving, deleting
+    {
+        tap(48, 148);
+        check(app.overlay == OV_EQ, "the equalizer opens from the button next to ⓘ");
+        run(OV_TICKS + 2);
+        check(app.set.eq_profile == 0 && !eq_active() && !app_eq_edited(), "Flat at first, nothing changed");
+        shot("06c_eq");
+        hold(EQ_BAND_X(0), EQ_ZERO_Y, 2);
+        drag_to(EQ_BAND_X(0), EQ_ZERO_Y - 6 * EQ_DB_PX, 4);
+        check(app.set.eq_gain[0] == 6 && app.eq_drag_band == 0 && eq_active(), "dragging Bass to +6 dB, heard at once");
+        shot("06d_eq_drag");
+        release();
+        check(app_eq_edited() && app.eq_drag_band < 0, "Flat changed: edited");
+        tap(EQ_BAND_X(2), EQ_ZERO_Y - 2 * EQ_DB_PX);
+        check(app.set.eq_gain[2] == 2, "a tap on a slider puts it there: Treble +2");
+        check(eq_pregain() < 32768, "boosted: the input is turned down first");
+        int sx, sw, dx, dw;
+        ui_eq_buttons(&sx, &sw, &dx, &dw);
+        tap(sx + sw / 2, EQ_BTN_Y + 8);
+        check(app.overlay == OV_EQ_NAME, "Save on Flat: a name first");
+        run(OV_TICKS + 2);
+        tap_key(0, K_DONE);
+        check(app.overlay == OV_EQ_NAME && eqp_count() == 0, "no name: OK does nothing");
+        tap_key(0, K_SHIFT);
+        type_text("Bus");
+        tap_key(0, K_SPACE);
+        type_text("ride");
+        check(strcmp(app.eq_name, "Bus ride") == 0 && strcmp(app.query, "") == 0, "typing goes into the name, not the search");
+        shot("06e_eq_name");
+        app.set.lang = i18n_lang = LANG_DE;
+        shot("20_de_eq_name");
+        app.set.lang = i18n_lang = LANG_EN;
+        tap_key(0, K_DONE);
+        check(app.overlay == OV_EQ && eqp_count() == 1 && app.set.eq_profile == 1 && !app_eq_edited()
+              && strcmp(eqp_get(0)->name, "Bus ride") == 0, "OK: saved as a profile, and chosen");
+        char eqf[600];
+        snprintf(eqf, sizeof(eqf), "%s/eq.bin", out_dir);
+        FILE *ef = fopen(eqf, "rb");
+        check(ef != NULL, "eq.bin written");
+        if (ef)
+            fclose(ef);
+        run(OV_TICKS + 2);
+
+        // D-pad: Up to Flat, X to the sliders, a second profile
+        press(KEY_UP);
+        check(app.set.eq_profile == 0 && !eq_active(), "Up: Flat again, the sound plain");
+        press(KEY_X);
+        check(app.eq_sliders && app.eq_band == 0, "X: the sliders");
+        for (int i = 0; i < 3; i++)
+            press(KEY_DOWN);
+        press(KEY_RIGHT);
+        press(KEY_RIGHT);
+        press(KEY_UP);
+        check(app.set.eq_gain[0] == -3 && app.set.eq_gain[1] == 0 && app.set.eq_gain[2] == 1,
+              "Down x3 on Bass, Right x2, Up: -3, 0, +1");
+        press(KEY_A);
+        check(app.overlay == OV_EQ_NAME, "A saves: a name first");
+        run(OV_TICKS + 2);
+        type_text("night");
+        press(KEY_A);
+        check(eqp_count() == 2 && app.set.eq_profile == 2 && strcmp(eqp_get(1)->name, "night") == 0,
+              "A: the second profile");
+        run(OV_TICKS + 2);
+        check(!app.eq_sliders, "back on the profiles");
+
+        // choose one, change it, Save writes over it
+        tap(40, EQ_OWN_Y + 8);
+        check(app.set.eq_profile == 1 && app.set.eq_gain[0] == 6 && app.set.eq_gain[2] == 2, "tap: Bus ride");
+        tap(EQ_BAND_X(1), EQ_ZERO_Y - 3 * EQ_DB_PX);
+        check(app_eq_edited(), "Mid +3: edited");
+        shot("06f_eq_edited");
+        tap(sx + sw / 2, EQ_BTN_Y + 8);
+        check(app.overlay == OV_EQ && !app_eq_edited() && eqp_get(0)->gain[1] == 3, "Save: Bus ride now with Mid +3");
+
+        // hold and drag: night above Bus ride; Flat stays where it is
+        hold(40, EQ_OWN_Y + ROW_H + 8, HOLD_TICKS + 2);
+        check(app.eq_drag_from == 1, "holding a profile lifts it");
+        drag_to(40, 22, 4);
+        check(app.eq_drag_to == 0, "it can't go above Flat");
+        shot("06g_eq_move");
+        release();
+        check(strcmp(eqp_get(0)->name, "night") == 0 && strcmp(eqp_get(1)->name, "Bus ride") == 0
+              && app.set.eq_profile == 2, "moved; Bus ride still chosen");
+        hold(40, 28, HOLD_TICKS + 2);
+        check(app.eq_drag_from < 0, "Flat can't be moved");
+        release();
+        check(app.set.eq_profile == 2, "holding Flat doesn't choose it");
+
+        // Delete asks first
+        tap(dx + dw / 2, EQ_BTN_Y + 8);
+        check(app.eq_ask, "Delete asks first");
+        shot("06h_eq_delete");
+        app.set.lang = i18n_lang = LANG_DE;
+        shot("20_de_eq_delete");
+        app.set.lang = i18n_lang = LANG_EN;
+        tap(EQ_ASK_X + 40, EQ_ASK_Y + 20 + ROW_H + 8);
+        check(!app.eq_ask && eqp_count() == 2, "Keep: still there");
+        press(KEY_Y);
+        check(app.eq_ask, "Y asks too");
+        press(KEY_A);
+        check(eqp_count() == 1 && app.set.eq_profile == 0 && !eq_active(), "A: deleted, back to Flat");
+        tap(dx + dw / 2, EQ_BTN_Y + 8);
+        check(!app.eq_ask, "Flat can't be deleted");
+
+        // full: seven saved, an eighth isn't
+        const int8_t g1[EQ_BANDS] = { 1, 1, 1 };
+        while (eqp_count() < EQP_MAX)
+            eqp_add("more", g1);
+        tap(EQ_BAND_X(0), EQ_ZERO_Y - 4 * EQ_DB_PX);
+        tap(sx + sw / 2, EQ_BTN_Y + 8);
+        check(app.overlay == OV_EQ && strcmp(app.toast, txt(S_EQ_FULL)) == 0, "seven saved: no room for another");
+        while (eqp_count() > 1)
+            eqp_remove(1);
+        eqp_save();
+
+        // from the file again, and the choice in state.bin
+        tap(40, EQ_OWN_Y + 8);
+        eqp_load();
+        check(eqp_count() == 1 && strcmp(eqp_get(0)->name, "night") == 0 && eqp_get(0)->gain[0] == -3,
+              "eq.bin read back");
+        save_now();
+        {
+            Settings se;
+            Theme te;
+            Resume re;
+            state_defaults(&se);
+            check(state_load(&se, &te, &re) && se.eq_profile == 1 && se.eq_gain[0] == -3 && se.eq_gain[2] == 1,
+                  "the chosen profile is kept in state.bin");
+        }
+        app.set.lang = i18n_lang = LANG_DE;
+        shot("20_de_eq");
+        app.set.lang = i18n_lang = LANG_EN;
+        press(KEY_B);
+        check(app.overlay == OV_NONE, "B closes the equalizer");
+        run(OV_TICKS + 2);
+        shot("06i_eq_button_lit");
+        // the rest of the tests with the plain sound
+        eq_choose(0);
+        run(4);
+    }
 
     // seek by dragging the bar
     hold(16 + 112, 42, 2);
@@ -1588,6 +1752,23 @@ int main(int argc, char **argv)
                    && font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
             for (int i = S_LIB_MISSING; i <= S_RUN_DSCONV; i++)
                 fit &= font_text_width(txt(i)) <= SCREEN_W - 16;
+            // equalizer: the header with "· edited", the bands under their sliders,
+            // Flat in the list, the buttons side by side, the question's answers, OK on its key
+            fit &= 8 + font_text_width(txt(S_EQ)) + font_text_width(" · ") + font_text_width(txt(S_EQ_EDITED)) <= 224
+                   && font_text_width(txt(S_EQ_NEW)) <= 224 && font_text_width(txt(S_EQ_FLAT)) <= EQ_LIST_W - 10;
+            for (int i = 0, right = EQ_LIST_W + 1; i < EQ_BANDS; i++)
+            {
+                int w = font_text_width(txt(S_EQ_BASS + i)), x0 = EQ_BAND_X(i) - w / 2;
+                fit &= x0 >= right && x0 + w <= SCREEN_W;     // apart, inside the panel
+                right = x0 + w + 2;
+            }
+            {
+                int sx, sw, dx, dw;
+                ui_eq_buttons(&sx, &sw, &dx, &dw);
+                fit &= dx + dw <= SCREEN_W - 4;
+            }
+            fit &= font_text_width(txt(S_EQ_DELETE)) + 16 <= EQ_ASK_W - 12 && font_text_width(txt(S_EQ_KEEP)) + 16 <= EQ_ASK_W - 12
+                   && font_text_width(txt(S_EQ_OK)) <= 46;
         }
         i18n_lang = app.set.lang;
         check(fit, "the texts fit their places, in both languages");

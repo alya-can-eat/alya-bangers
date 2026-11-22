@@ -30,7 +30,9 @@ typedef struct {
     uint8_t keyboard;         // search keyboard: KB_QWERTY, KB_QWERTZ
     // state file version 3 from here (older files: 0)
     uint8_t play_at_start;    // launching the app goes on playing where it stopped
-    uint8_t reserved[15];     // room for more settings without a new file version
+    uint8_t eq_profile;       // 0: Flat, n: the n-th saved profile (eqprof.h)
+    int8_t eq_gain[3];        // what the equalizer plays with (dB), maybe changed since
+    uint8_t reserved[11];     // room for more settings without a new file version
 } Settings;
 
 _Static_assert(sizeof(Settings) == 32, "settings are 32 bytes in the file");

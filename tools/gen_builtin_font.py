@@ -19,6 +19,7 @@ UI = (
     "äöüÄÖÜ"            # the German interface
     "\U0001f50a\U0001f3a8\U0001f310\U0001f5ae"   # 🔊 🎨 🌐 🖮 settings icons (with ⓘ, U+E005, U+E006)
     "⇧⌫拼音小゛゜ー"       # search keyboards
+    "−“”«»"             # equalizer: minus (dB), the quotes of "Delete …?"
 )
 # the keyboards' letters, whatever the library has: hiragana, Cyrillic, held letters' forms
 FORMS = "äàáâãåāæéèêëēíìîïöóòôõøōœüúùûūçčñšßžýÿ"
@@ -59,7 +60,8 @@ SUNS = [
     ],
 ]
 
-# U+E005: the Browsing settings (a list); U+E006: the Player settings (a record)
+# U+E005: the Browsing settings (a list); U+E006: the Player settings (a record);
+# U+E007 (below): the equalizer
 LIST = [
     "................", "................", "................", ".##..##########.",
     ".##..##########.", "................", "................", ".##..##########.",
@@ -71,6 +73,13 @@ RECORD = [
     ".##.##....#####.", ".#.##.####.####.", "##.#.######.####", "####.##..##.####",
     "####.##..##.####", "####.######.####", ".####.####.####.", ".#####....#####.",
     "..############..", "..############..", "....########....", "......####......",
+]
+
+EQUALIZER = [  # U+E007: the equalizer button (three sliders)
+    "................", "................", "...#....#....#..", "...#..#####..#..",
+    "...#..#####..#..", "...#..#####..#..", "...#....#..#####", "...#....#..#####",
+    ".#####..#..#####", ".#####..#....#..", ".#####..#....#..", "...#....#....#..",
+    "...#....#....#..", "...#....#....#..", "................", "................",
 ]
 
 base, _jp, _comb = _load_font_data()
@@ -85,7 +94,7 @@ rows.append((0xE000, 16, qa))
 for k, bitmap in enumerate(SUNS):
     b = b"".join(int(r.replace("#", "1").replace(".", "0"), 2).to_bytes(2, "big") for r in bitmap)
     rows.append((0xE001 + k, 16, b))
-for k, bitmap in enumerate((LIST, RECORD)):
+for k, bitmap in enumerate((LIST, RECORD, EQUALIZER)):
     b = b"".join(int(r.replace("#", "1").replace(".", "0"), 2).to_bytes(2, "big") for r in bitmap)
     rows.append((0xE005 + k, 16, b))
 rows.sort()

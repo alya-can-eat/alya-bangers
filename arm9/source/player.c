@@ -6,12 +6,18 @@
 //
 // A .dsa block stores all left samples, then all right samples, so each half
 // is read straight from the card into its ring with no copying.
+//
+// The equalizer runs over the samples in the ring, in place, at most
+// EQ_LEAD blocks ahead of the one playing: reading stays up to 8 blocks
+// ahead, but a change of the equalizer is heard within half a second.
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <nds.h>
 
+#include "eq.h"
 #include "ipc.h"
 #include "player.h"
 #include "i18n.h"
@@ -21,6 +27,9 @@
 #define BLOCK_FRAMES    4096
 #define BLOCK_BYTES     (BLOCK_FRAMES * 2)      // per channel
 #define RING_BYTES      (RING_BLOCKS * BLOCK_BYTES)
+#define EQ_LEAD         4                       // blocks equalized ahead of the one playing
+#define EQ_URGENT       2                       // fewer ready: all that's missing at once
+#define EQ_STEP         1024                    // frames per call otherwise
 
 static int16_t ring_l[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
 static int16_t ring_r[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
@@ -44,6 +53,9 @@ static long file_pos = -1;
 static uint32_t underruns;
 static uint8_t volume = 127;
 static uint32_t tick_played, tick_frames;   // last report seen, frames since: player_peek, smooth position
+static EqState eq_st;
+static uint32_t eq_blk, eq_off;     // the next frame to equalize: block since start, frame in it
+static bool eq_was_on;
 
 static void event_handler(u32 value, void *userdata)
 {
@@ -116,6 +128,58 @@ static void load_block(uint32_t rel)
         DC_FlushRange(r, BLOCK_BYTES);
 }
 
+// Equalize n frames of a loaded block, both channels.
+static void eq_part(uint32_t rel, uint32_t off, int n)
+{
+    int slot = rel % RING_BLOCKS;
+    int16_t *l = ring_l + slot * BLOCK_FRAMES + off;
+    eq_run(&eq_st, l, n, 0);
+    DC_FlushRange(l, n * 2);
+    if (hdr.channels == 2)
+    {
+        int16_t *r = ring_r + slot * BLOCK_FRAMES + off;
+        eq_run(&eq_st, r, n, 1);
+        DC_FlushRange(r, n * 2);
+    }
+}
+
+// Keep the equalizer ahead of playback, over what's loaded. The block playing
+// isn't touched: if the equalizer fell behind it, it goes on after it.
+static void eq_ahead(void)
+{
+    uint32_t p = played;
+    if (!eq_active())
+    {
+        eq_was_on = false;
+        eq_blk = p + 1;
+        eq_off = 0;
+        return;
+    }
+    if (!eq_was_on || eq_blk < p + 1)
+    {
+        eq_state_reset(&eq_st);
+        eq_blk = p + 1;
+        eq_off = 0;
+        eq_was_on = true;
+    }
+    uint32_t target = p + 1 + EQ_LEAD < loaded ? p + 1 + EQ_LEAD : loaded;
+    int budget = eq_blk < p + 1 + EQ_URGENT ? INT_MAX : EQ_STEP;
+    while (eq_blk < target && budget > 0)
+    {
+        int n = BLOCK_FRAMES - eq_off;
+        if (n > EQ_STEP)
+            n = EQ_STEP;
+        eq_part(eq_blk, eq_off, n);
+        budget -= n;
+        eq_off += n;
+        if (eq_off == BLOCK_FRAMES)
+        {
+            eq_blk++;
+            eq_off = 0;
+        }
+    }
+}
+
 static void hw_start(uint32_t block)
 {
     hw_stop();
@@ -129,6 +193,13 @@ static void hw_start(uint32_t block)
 
     while (loaded < START_BLOCKS)
         load_block(loaded++);
+    // the first blocks equalized before the hardware starts on them
+    eq_state_reset(&eq_st);
+    eq_blk = eq_off = 0;
+    eq_was_on = eq_active();
+    if (eq_was_on)
+        for (; eq_blk < EQ_URGENT; eq_blk++)
+            eq_part(eq_blk, 0, BLOCK_FRAMES);
 
     StreamCmd c = { 0 };
     c.cmd = STREAM_CMD_START;
@@ -239,6 +310,7 @@ void player_service(void)
         if (loaded >= p + 4)
             break;
     }
+    eq_ahead();
 }
 
 static uint32_t current_block(void)

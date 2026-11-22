@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "colorpick.h"
+#include "eqprof.h"
 #include "gfx.h"
 #include "i18n.h"
 #include "library.h"
@@ -54,6 +55,19 @@
 #define INFO_RATING_ROW 6           // the stars
 #define INFO_STARS_X 72             // values (and the stars) start here at least (ui_info_value_x)
 #define INFO_STAR_W 18              // a star and the gap after it
+// equalizer panel: the profiles left (Flat, a line, the saved ones), the
+// sliders right (4 px per dB), Save and Delete under them
+#define EQ_LIST_W   112
+#define EQ_OWN_Y    37              // first saved profile
+#define EQ_ZERO_Y   86              // 0 dB; +12 at 38, -12 at 134
+#define EQ_DB_PX    4
+#define EQ_BAND_X(b) (132 + 50 * (b))   // centre of a slider
+#define EQ_LINE_Y   151             // the line over the buttons
+#define EQ_BTN_Y    153
+#define EQ_BTN_H    18
+#define EQ_ASK_X    40              // "Delete …?" box
+#define EQ_ASK_Y    48
+#define EQ_ASK_W    176
 // search tab (🔍): the query, the filters, then the results (keyboard down)
 // or the keyboard (typing; the results are on the top screen then)
 #define FIELD_Y     22
@@ -104,10 +118,12 @@ typedef enum { SA_NONE, SA_FORWARD, SA_BACK, SA_JUMP, SA_PUT, SA_LIFT } SongAnim
 
 // Buttons that light up when tapped.
 enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BTN_SETTINGS,
-       BTN_SHUFFLE, BTN_PREV, BTN_PPLAY, BTN_PNEXT, BTN_REPEAT, BTN_INFO, BTN_UP, BTN_QUEUE };
+       BTN_SHUFFLE, BTN_PREV, BTN_PPLAY, BTN_PNEXT, BTN_REPEAT, BTN_INFO, BTN_UP, BTN_QUEUE, BTN_EQ,
+       BTN_EQ_SAVE, BTN_EQ_DELETE };
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
-typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM } Overlay;
+typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM, OV_EQ,
+               OV_EQ_NAME } Overlay;
 
 // Settings: a top page leading to pages of settings.
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL, PAGE_ABOUT,
@@ -128,6 +144,7 @@ typedef struct {
 #define ICON_REGIONAL 0x1F310       // 🌐, also Language
 #define ICON_ABOUT    0x24D8        // ⓘ
 #define ICON_KEYBOARD 0x1F5AE       // 🖮
+#define ICON_EQ       0xE007        // three sliders (builtin_font.c)
 
 extern const int tab_x[TAB_COUNT + 1];
 
@@ -162,6 +179,15 @@ typedef struct {
     // queue panel
     int q_scroll, q_sel;
     int q_drag_from, q_drag_to; // -1 = not dragging
+
+    // equalizer panel (the gains and the profile are in set: eq_gain, eq_profile)
+    bool eq_sliders;            // the D-pad moves the sliders, not the profiles (X switches)
+    int eq_band;                // the slider the D-pad moves
+    int eq_drag_band;           // the slider under the stylus, -1: none
+    int eq_drag_from, eq_drag_to;   // a saved profile being moved (its place), -1: none
+    bool eq_ask;                // "Delete …?" is open
+    int eq_ask_sel;             // its highlighted answer: 0 delete, 1 keep
+    char eq_name[EQP_NAME];     // a new profile's name, being typed
 
     // stylus drags
     bool scroll_drag;           // dragging the list scroll bar
@@ -289,5 +315,10 @@ int ui_chip_full_w(int kind);   // its width when it's in
 #define FMENU_ROWS  6
 // the input methods menu
 int ui_im_menu_y(void);
+// equalizer: a profile's gains (0: Flat), whether the sliders differ from the
+// chosen profile's, where Save and Delete are
+const int8_t *app_eq_profile_gain(int p);
+bool app_eq_edited(void);
+void ui_eq_buttons(int *save_x, int *save_w, int *del_x, int *del_w);
 
 #endif

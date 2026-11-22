@@ -7,16 +7,19 @@ CC      ?= gcc
 SRC     := ../../arm9/source
 CFLAGS  := -m32 -std=gnu2x -O1 -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-function \
            -fsanitize=address,undefined -Imock -I../../common/include -I$(SRC)
-CORE    := hostsim.c $(SRC)/player.c $(SRC)/dsa.c $(SRC)/util.c $(SRC)/i18n.c
+CORE    := hostsim.c $(SRC)/player.c $(SRC)/eq.c $(SRC)/dsa.c $(SRC)/util.c $(SRC)/i18n.c
 HDRS    := $(wildcard $(SRC)/*.h ../../common/include/*.h mock/*.h mock/nds/*.h) hostsim.h
 
-all: test_player screens
+all: test_player test_eq screens
+
+test_eq: test_eq.c $(SRC)/eq.c $(HDRS)
+	$(CC) $(CFLAGS) -o $@ test_eq.c $(SRC)/eq.c -lm
 
 test_player: test_player.c $(CORE) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ test_player.c $(CORE)
 
 APP     := $(SRC)/search.c $(SRC)/keyboard.c $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
-           $(SRC)/colorpick.c $(SRC)/palette.c $(SRC)/state.c $(SRC)/stats.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
+           $(SRC)/colorpick.c $(SRC)/palette.c $(SRC)/state.c $(SRC)/stats.c $(SRC)/eqprof.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
 
 screens: screens.c $(CORE) $(APP) $(SRC)/main.c $(HDRS)
 	$(CC) $(CFLAGS) -o $@ screens.c $(CORE) $(APP) -lm
@@ -28,6 +31,6 @@ screens-run: screens
 	mkdir -p shots && ./screens $(CARD) shots
 
 clean:
-	rm -rf test_player screens shots
+	rm -rf test_player test_eq screens shots
 
 .PHONY: all test screens-run clean

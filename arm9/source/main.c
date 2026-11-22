@@ -16,6 +16,8 @@
 
 #include "app.h"
 #include "default_cover.h"
+#include "eq.h"
+#include "eqprof.h"
 #include "font.h"
 #include "keyboard.h"
 #include "player.h"
@@ -752,10 +754,32 @@ static int utf8_encode(uint32_t c, char *out)
     return 4;
 }
 
-// The last character of the query and where it starts.
+// What the keys type into: the search, or the name of a new equalizer profile.
+static char *kb_text(size_t *cap)
+{
+    if (app.overlay == OV_EQ_NAME)
+    {
+        *cap = sizeof(app.eq_name);
+        return app.eq_name;
+    }
+    *cap = sizeof(app.query);
+    return app.query;
+}
+
+static void kb_changed(void)
+{
+    if (app.overlay == OV_EQ_NAME)
+        redraw = true;
+    else
+        search_refresh();
+}
+
+// The last character typed and where it starts.
 static uint32_t query_last(int *at)
 {
-    int n = (int)strlen(app.query), i = n;
+    size_t cap;
+    char *q = kb_text(&cap);
+    int n = (int)strlen(q), i = n;
     if (n == 0)
     {
         *at = 0;
@@ -763,9 +787,9 @@ static uint32_t query_last(int *at)
     }
     do
         i--;
-    while (i > 0 && (app.query[i] & 0xC0) == 0x80);
+    while (i > 0 && (q[i] & 0xC0) == 0x80);
     *at = i;
-    const char *p = app.query + i;
+    const char *p = q + i;
     return utf8_next(&p);
 }
 
@@ -773,12 +797,14 @@ static void query_put(uint32_t c)
 {
     char u[4];
     int l = utf8_encode(c, u);
-    size_t n = strlen(app.query);
-    if (n + l >= sizeof(app.query))
+    size_t cap;
+    char *q = kb_text(&cap);
+    size_t n = strlen(q);
+    if (n + l >= cap)
         return;
-    memcpy(app.query + n, u, l);
-    app.query[n + l] = 0;
-    search_refresh();
+    memcpy(q + n, u, l);
+    q[n + l] = 0;
+    kb_changed();
 }
 
 static void query_back(void)
@@ -786,14 +812,16 @@ static void query_back(void)
     int at;
     if (query_last(&at) == 0)
         return;
-    app.query[at] = 0;
-    search_refresh();
+    size_t cap;
+    kb_text(&cap)[at] = 0;
+    kb_changed();
 }
 
 static void query_clear(void)
 {
-    app.query[0] = 0;
-    search_refresh();
+    size_t cap;
+    kb_text(&cap)[0] = 0;
+    kb_changed();
 }
 
 // ゛ ゜ 小: change the last kana.
@@ -803,7 +831,8 @@ static void query_kana(int mod)
     uint32_t c = kana_mod(query_last(&at), mod);
     if (c == 0)
         return;
-    app.query[at] = 0;
+    size_t cap;
+    kb_text(&cap)[at] = 0;
     query_put(c);
 }
 
@@ -815,7 +844,7 @@ static void im_switch(int im)
     app.im = im;
     app.im_t = IM_TICKS;
     app.kb_num = app.shift = false;
-    search_refresh();               // pinyin readings count only with pinyin
+    kb_changed();                   // pinyin readings count only with pinyin
 }
 
 static Key kb_keys[KB_MAX_KEYS];
@@ -835,6 +864,8 @@ static void kb_flash(int k)
     app.key_flash_until = app.frame + 5;
 }
 
+static void eq_name_done(void);
+
 static void key_act(const Key *k)
 {
     switch (k->kind)
@@ -848,7 +879,12 @@ static void key_act(const Key *k)
     case K_BACK: query_back(); break;
     case K_NUM: app.kb_num = !app.kb_num; app.shift = false; break;
     case K_IM: im_switch((app.im + 1) % IM_COUNT); break;
-    case K_DONE: kb_lower(); break;
+    case K_DONE:
+        if (app.overlay == OV_EQ_NAME)
+            eq_name_done();
+        else
+            kb_lower();
+        break;
     case K_KANA: query_kana((int)k->cp); break;
     default: break;
     }
@@ -877,6 +913,8 @@ static int forms_count(const Key *k)
 
 static bool kb_ready(void)
 {
+    if (app.overlay == OV_EQ_NAME)
+        return app.ov_t == OV_TICKS;
     return app.tab == TAB_SEARCH && app.kb_up && app.kb_t == KB_TICKS && app.overlay == OV_NONE
            && app_panel_offset() == 0;
 }
@@ -941,7 +979,7 @@ static void kb_touch_move(int x, int y)
         kb_flash(k);
         kb_repeat_at = ticks + 4;
     }
-    else if (key->kind == K_IM && held >= HOLD_TICKS)
+    else if (key->kind == K_IM && held >= HOLD_TICKS && app.overlay != OV_EQ_NAME)
     {
         // held: the list of input methods
         app.overlay = OV_IM;
@@ -1463,6 +1501,212 @@ static void browse_artist_of(uint32_t t, int k)
     redraw = true;
 }
 
+// ------------------------------------------------------------------ equalizer
+
+static void eq_apply(void)
+{
+    eq_set(app.set.eq_gain);
+    touch_state();
+    redraw = true;
+}
+
+// A profile (0: Flat): its gains are heard within half a second.
+static void eq_choose(int p)
+{
+    if (p < 0 || p > eqp_count())
+        return;
+    app.set.eq_profile = (uint8_t)p;
+    memcpy(app.set.eq_gain, app_eq_profile_gain(p), EQ_BANDS);
+    eq_apply();
+}
+
+static void eq_band_to(int b, int v)
+{
+    v = v < EQ_MIN ? EQ_MIN : (v > EQ_MAX ? EQ_MAX : v);
+    if (app.set.eq_gain[b] == v)
+        return;
+    app.set.eq_gain[b] = (int8_t)v;
+    eq_apply();
+}
+
+static int eq_db_at(int y)
+{
+    int d = EQ_ZERO_Y - y;
+    return (d >= 0 ? d + EQ_DB_PX / 2 : d - EQ_DB_PX / 2) / EQ_DB_PX;
+}
+
+static int eq_band_at(int x)
+{
+    if (x < (EQ_BAND_X(0) + EQ_BAND_X(1)) / 2)
+        return 0;
+    return x < (EQ_BAND_X(1) + EQ_BAND_X(2)) / 2 ? 1 : 2;
+}
+
+static void eq_open(void)
+{
+    app.overlay = OV_EQ;
+    app.eq_sliders = false;
+    app.eq_drag_band = app.eq_drag_from = app.eq_drag_to = -1;
+    app.eq_ask = false;
+}
+
+// Save: over the chosen profile; Flat changed: a new one, named first.
+static void eq_save(void)
+{
+    if (!app_eq_edited())
+        return;
+    if (app.set.eq_profile > 0)
+    {
+        eqp_set_gain(app.set.eq_profile - 1, app.set.eq_gain);
+        eqp_save();
+        redraw = true;
+        return;
+    }
+    if (eqp_count() >= EQP_MAX)
+    {
+        toast("%s", txt(S_EQ_FULL));
+        return;
+    }
+    app.eq_name[0] = 0;
+    app.key_down = app.acc_key = -1;
+    app.shift = app.kb_num = false;
+    app.overlay = OV_EQ_NAME;
+}
+
+static void eq_name_done(void)
+{
+    if (!app.eq_name[0])
+        return;
+    int i = eqp_add(app.eq_name, app.set.eq_gain);
+    if (i >= 0)
+    {
+        eqp_save();
+        app.set.eq_profile = (uint8_t)(i + 1);
+        touch_state();
+    }
+    eq_open();                      // back to the panel
+}
+
+static void eq_ask(void)
+{
+    if (app.set.eq_profile == 0)
+        return;
+    app.eq_ask = true;
+    app.eq_ask_sel = 0;
+}
+
+static void eq_delete(void)
+{
+    eqp_remove(app.set.eq_profile - 1);
+    eqp_save();
+    app.eq_ask = false;
+    eq_choose(0);
+}
+
+// A saved profile put in another place: the chosen one stays chosen.
+static void eq_move(int from, int to)
+{
+    if (from == to)
+        return;
+    eqp_move(from, to);
+    eqp_save();
+    int c = app.set.eq_profile - 1;
+    if (c == from)
+        c = to;
+    else if (c >= 0 && from < c && to >= c)
+        c--;
+    else if (c >= 0 && from > c && to <= c)
+        c++;
+    app.set.eq_profile = (uint8_t)(c + 1);
+    touch_state();
+}
+
+static void tap_eq(int x, int y)
+{
+    redraw = true;
+    if (app.eq_ask)
+    {
+        int ry = y - (EQ_ASK_Y + 20);
+        if (x >= EQ_ASK_X && x < EQ_ASK_X + EQ_ASK_W && ry >= 0 && ry < ROW_H)
+            eq_delete();
+        else
+            app.eq_ask = false;     // Keep, or beside the question
+        return;
+    }
+    if (y < 20)
+    {
+        if (x >= 224)
+            app.overlay = OV_NONE;
+    }
+    else if (x < EQ_LIST_W && y < EQ_LINE_Y)
+    {
+        if (y < EQ_OWN_Y - 1)
+            eq_choose(0);
+        else if (y >= EQ_OWN_Y && (y - EQ_OWN_Y) / ROW_H < eqp_count())
+            eq_choose((y - EQ_OWN_Y) / ROW_H + 1);
+    }
+    else if (y >= EQ_LINE_Y)
+    {
+        int sx, sw, dx, dw;
+        ui_eq_buttons(&sx, &sw, &dx, &dw);
+        if (x >= sx && x < sx + sw)
+            eq_save();
+        else if (x >= dx && x < dx + dw)
+            eq_ask();
+    }
+}
+
+static void tap_eq_name(int x, int y)
+{
+    if (y < 20 && x >= 224)
+        eq_open();                  // ×: not saved, back to the panel
+    else if (y >= FIELD_Y && y < FIELD_Y + 20 && x >= 228)
+        app.eq_name[0] = 0;
+    redraw = true;
+}
+
+// D-pad: X switches between the profiles (Up / Down) and the sliders (Left /
+// Right: which, Up / Down: 1 dB); A saves, Y deletes (asks first), B closes.
+static void eq_keys(uint32_t down, uint32_t rep)
+{
+    if (app.eq_ask)
+    {
+        if (rep & (KEY_UP | KEY_DOWN))
+            app.eq_ask_sel ^= 1;
+        if (down & KEY_A)
+        {
+            if (app.eq_ask_sel == 0)
+                eq_delete();
+            else
+                app.eq_ask = false;
+        }
+        if (down & KEY_B)
+            app.eq_ask = false;
+        return;
+    }
+    if (down & KEY_X)
+        app.eq_sliders = !app.eq_sliders;
+    if (app.eq_sliders)
+    {
+        if ((rep & KEY_LEFT) && app.eq_band > 0)
+            app.eq_band--;
+        if ((rep & KEY_RIGHT) && app.eq_band < EQ_BANDS - 1)
+            app.eq_band++;
+        if (rep & KEY_UP)
+            eq_band_to(app.eq_band, app.set.eq_gain[app.eq_band] + 1);
+        if (rep & KEY_DOWN)
+            eq_band_to(app.eq_band, app.set.eq_gain[app.eq_band] - 1);
+    }
+    else if (rep & (KEY_UP | KEY_DOWN))
+        eq_choose(app.set.eq_profile + ((rep & KEY_DOWN) ? 1 : -1));
+    if (down & KEY_A)
+        eq_save();
+    if (down & KEY_Y)
+        eq_ask();
+    if (down & KEY_B)
+        app.overlay = OV_NONE;
+}
+
 static void tap_player(int x, int y)
 {
     if (y >= PANEL_DOWN)
@@ -1513,6 +1757,11 @@ static void tap_player(int x, int y)
         redraw = true;
         return;
     }
+    if (app.overlay == OV_EQ)
+    {
+        tap_eq(x, y);
+        return;
+    }
     int who = ui_player_artist_at(x, y);
     if (who >= 0)
     {
@@ -1530,7 +1779,8 @@ static void tap_player(int x, int y)
     }
     else if (y >= 132 && y < 164)
     {
-        if (x < 48) app.overlay = OV_INFO;
+        if (x < 34) app.overlay = OV_INFO;
+        else if (x < 62) eq_open();
         else if (x >= 104 && x < 152) slide_to(false);
         else if (x >= 208) { app.overlay = OV_QUEUE; app.q_sel = -1; app.q_drag_from = -1;
                              app.q_scroll = queue_pos() > 2 ? queue_pos() - 2 : 0; }
@@ -1555,6 +1805,14 @@ static void tap_settings(int x, int y)
 // The button under the stylus, to light it up.
 static int button_at(int x, int y)
 {
+    if (app.overlay == OV_EQ && !app.eq_ask && app_panel_offset() == PANEL_DOWN && y >= EQ_LINE_Y
+        && y < PANEL_DOWN)
+    {
+        int sx, sw, dx, dw;
+        ui_eq_buttons(&sx, &sw, &dx, &dw);
+        if (x >= sx && x < sx + sw) return BTN_EQ_SAVE;
+        if (x >= dx && x < dx + dw) return BTN_EQ_DELETE;
+    }
     if (app.overlay != OV_NONE)
         return BTN_NONE;
     int oy = app_panel_offset();
@@ -1581,7 +1839,8 @@ static int button_at(int x, int y)
         }
         if (y >= 132 && y < 164)
         {
-            if (x < 48) return BTN_INFO;
+            if (x < 34) return BTN_INFO;
+            if (x < 62) return BTN_EQ;
             if (x >= 104 && x < 152) return BTN_UP;
             if (x >= 208) return BTN_QUEUE;
         }
@@ -1634,6 +1893,13 @@ static void touch_down(int x, int y)
     else if (app.overlay == OV_SETTINGS && app.set_page == PAGE_THEME && app.page_t == TAB_TICKS && y >= 20
              && theme_touch(x, y, true))
         tp.held = true;
+    else if (app.overlay == OV_EQ && oy == PANEL_DOWN && !app.eq_ask && x > EQ_LIST_W && y >= 20 && y < EQ_LINE_Y)
+    {
+        // a slider: where the stylus is, then follows it
+        app.eq_drag_band = eq_band_at(x);
+        eq_band_to(app.eq_drag_band, eq_db_at(y));
+        tp.held = true;
+    }
     redraw = true;
 }
 
@@ -1668,6 +1934,13 @@ static void touch_move(int x, int y)
         app.seek_preview_ms = seek_ms_at(x);
     else if (app.theme_drag != CP_NONE)
         theme_touch(x, y, false);
+    else if (app.eq_drag_band >= 0)
+        eq_band_to(app.eq_drag_band, eq_db_at(y));
+    else if (app.eq_drag_from >= 0)
+    {
+        int to = y < EQ_OWN_Y ? 0 : (y - EQ_OWN_Y) / ROW_H;
+        app.eq_drag_to = to >= eqp_count() ? eqp_count() - 1 : to;
+    }
     else if (app.q_drag_from >= 0)
     {
         int to = queue_row_at(y < 20 ? 20 : y);
@@ -1696,6 +1969,9 @@ static void touch_move(int x, int y)
             if (i < queue_count())
                 app.q_drag_from = app.q_drag_to = i;
         }
+        else if (oy == PANEL_DOWN && app.overlay == OV_EQ && !app.eq_ask && tp.x0 < EQ_LIST_W
+                 && tp.y0 >= EQ_OWN_Y && (tp.y0 - EQ_OWN_Y) / ROW_H < eqp_count())
+            app.eq_drag_from = app.eq_drag_to = (tp.y0 - EQ_OWN_Y) / ROW_H;     // Flat stays on top
     }
     redraw = true;
 }
@@ -1729,11 +2005,20 @@ static void touch_up(void)
         app.thumb_track = LIB_NONE;
         touch_state();
     }
+    else if (app.eq_drag_band >= 0)
+        app.eq_drag_band = -1;
+    else if (app.eq_drag_from >= 0)
+    {
+        eq_move(app.eq_drag_from, app.eq_drag_to);
+        app.eq_drag_from = app.eq_drag_to = -1;
+    }
     else if (!tp.held && !tp.moved)
     {
         int oy = app_panel_offset();
         if (app.overlay == OV_SETTINGS)
             tap_settings(tp.x0, tp.y0);
+        else if (app.overlay == OV_EQ_NAME)
+            tap_eq_name(tp.x0, tp.y0);
         else if (oy == 0)
             tap_browser(tp.x0, tp.y0);
         else if (oy == PANEL_DOWN)
@@ -1852,6 +2137,15 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         if (down & (KEY_B | KEY_X)) app.overlay = OV_NONE;
         return;
     }
+    case OV_EQ:
+        eq_keys(down, rep);
+        return;
+    case OV_EQ_NAME:
+        if (down & KEY_B)
+            eq_open();              // not saved
+        if (down & KEY_A)
+            eq_name_done();
+        return;
     case OV_QUEUE:
     {
         int n = queue_count();
@@ -2007,6 +2301,13 @@ static void restore(void)
     state_defaults(&app.set);
     bool ok = state_load(&app.set, &app.theme, &r);
     i18n_lang = app.set.lang;
+    // the equalizer as it was (a profile that's gone: Flat)
+    if (app.set.eq_profile > eqp_count())
+        app.set.eq_profile = 0;
+    for (int b = 0; b < EQ_BANDS; b++)
+        if (app.set.eq_gain[b] < EQ_MIN || app.set.eq_gain[b] > EQ_MAX)
+            app.set.eq_gain[b] = 0;
+    eq_set(app.set.eq_gain);
     palette_make(&app.theme);
     lib_group_artists(app.set.case_sensitive);
     if (!ok || !r.path[0] || !lib_loaded())
@@ -2085,11 +2386,13 @@ static void app_init(void)
     app.artist = -1;
     app.album = LIB_NONE;
     app.q_drag_from = app.q_drag_to = -1;
+    app.eq_drag_band = app.eq_drag_from = app.eq_drag_to = -1;
     app.thumb_track = LIB_NONE;
     app.menu_item = -1;
     app.sa_cover = malloc(128 * 128 * 2);
 
     stats_load();
+    eqp_load();
     ui_init();
     restore();
     apply_weighting();

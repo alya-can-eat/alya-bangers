@@ -31,6 +31,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 - Search in any script (ABC, かな, 拼音, АБВ)
 - Player with a turning record and a visualizer
 - Queue you can edit
+- 3-band equalizer with your own profiles
 - Ratings and plays
 - Themes with your own colours
 - English and German
@@ -81,11 +82,17 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 <tr>
 <td><img src="docs/img/info.png" width="256" alt="Song info with four stars"></td>
 <td><img src="docs/img/queue.png" width="256" alt="The queue with four songs"></td>
-<td><img src="docs/img/two_artists.png" width="256" alt="A song by two artists in the player"></td>
 </tr>
 <tr>
 <td align="center">ⓘ song info: rate it</td>
 <td align="center">☰ the queue</td>
+</tr>
+<tr>
+<td><img src="docs/img/eq.png" width="256" alt="The equalizer: Flat and two saved profiles on the left, Headphones chosen; Bass, Mid and Treble sliders on the right, Treble being dragged to +5; Save lit"></td>
+<td><img src="docs/img/two_artists.png" width="256" alt="A song by two artists in the player"></td>
+</tr>
+<tr>
+<td align="center">the equalizer, Treble being dragged</td>
 <td align="center">two artists, each tappable</td>
 </tr>
 </table>
@@ -96,6 +103,14 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
   - Your rating from the DS wins over the one in the file's tags. Plays add up.
   - Saved in `/_nds/alya-bangers/stats.bin`.
 - Queue (☰): tap a song to jump to it, × removes it, hold and drag to move it.
+- Equalizer (the slider button next to ⓘ, lit while it changes the sound):
+  - 3 bands, each −12 to +12 dB: Bass (shelf at 120 Hz), Mid (peak at 1 kHz), Treble (shelf at 5 kHz)
+  - Drag a slider or tap where it should go. You hear it within half a second.
+  - Tap a profile to use it. *Flat* is always on top and changes nothing.
+  - Save: on one of your profiles it saves over it, on Flat it asks for a name (the search keyboard). Up to 7 profiles.
+  - Hold a profile and drag it to move it. Delete asks first.
+  - Boosting turns everything down by the same amount first, so nothing clips.
+  - Saved in `/_nds/alya-bangers/eq.bin`, the chosen one in `state.bin`.
 - Shuffle by rating (Settings › Player):
   - Every star doubles the chance of a song coming next (unrated counts as 3 stars). So 5 stars come up 4× as often as unrated ones.
   - A short queue still plays every song once per round, the good ones just come earlier.
@@ -201,6 +216,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 | L / R | previous / next song (L restarts the song after 3 s) | same |
 
 - In menus: Up/Down, A chooses, B closes.
+- In the equalizer: X switches between the profiles (Up/Down) and the sliders (Left/Right: which one, Up/Down: 1 dB). A saves, Y deletes, B closes.
 - Menus slide up when they open and down when they close, buttons light up when tapped, and play and pause morph into each other.
 
 > [!NOTE]
@@ -214,6 +230,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 /music/.dsmusic/library.idx
 /_nds/alya-bangers/state.bin <- written by the player
 /_nds/alya-bangers/stats.bin <- ratings and plays from the DS
+/_nds/alya-bangers/eq.bin    <- your equalizer profiles
 /alya-bangers.nds            <- anywhere, start it from Pico Launcher
 ```
 
@@ -261,6 +278,11 @@ Technical stuff, in case you're curious :-D
   - When fewer are ready, it reads everything that's missing at once.
   - The ARM7 (and with it the sound hardware) has priority on main RAM, so copying whole screens can't make the sound wait.
 - Pause and seek restart the stream at a block boundary (0.125 s steps).
+- Equalizer:
+  - Runs on the samples in the ring, in place, at most 4 blocks (0.5 s) ahead of the one playing. The reading stays up to 8 blocks ahead, so a change is heard within half a second without reading anything again.
+  - Biquads (RBJ Audio EQ Cookbook) with 32-bit coefficients from `arm9/source/eq_tables.h`, samples carried with 12 extra bits, 64-bit sums.
+  - The inner loop runs from ITCM in ARM mode, on a buffer in DTCM. Bands at 0 dB are skipped, so Flat costs nothing. All 3 bands take about 12 % of the ARM9 (counted from the compiled loop, not measured on the DS yet).
+  - The loudest point of the curve (+0.25 dB) is worked out when a slider moves, and the input is turned down by that much.
 
 ### stats.bin:
 
@@ -281,6 +303,7 @@ Technical stuff, in case you're curious :-D
 python3 tests/card/make_test_card.py /tmp/testcard   # the test library, made up
 cd tests/host
 make test_player && ./test_player "/tmp/testcard/card/music/CD/Track 01.dsa"   # checks the audio sample by sample
+make test_eq && ./test_eq   # the equalizer against an exact reference, its curve, no clipping
 make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks it, screenshots in shots/
 ```
 
@@ -294,6 +317,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - README pictures: `tests/demo/make_demo_card.py` builds the made-up library, the screen test's demo mode (`./screens CARD out demo`) shoots the screens and films, and `tools/gen_readme_images.py` turns them into `docs/img/`. (The three commands are in the script.)
 - `tools/gen_builtin_font.py`: the built-in glyphs (ASCII, UI symbols, icons, the umlauts and the keyboards' letters) from dsconv's copy of Unifont
 - `tools/gen_fold_tables.py`: the tables search uses to ignore accents
+- `tools/gen_eq_tables.py`: the equalizer's filters for every gain
 - `tools/gen_default_cover.py`: the picture for songs without a cover
 - `tools/gen_icon.py`: the icon of the `.nds` file
 

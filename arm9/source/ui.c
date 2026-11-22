@@ -11,6 +11,8 @@
 
 #include "app.h"
 #include "default_cover.h"
+#include "eq.h"
+#include "eqprof.h"
 #include "font.h"
 #include "keyboard.h"
 #include "player.h"
@@ -1867,6 +1869,15 @@ static void key_label(const Key *k, int im, char *buf)
 
 static void draw_key(int x, int y, const Key *k, bool lit, int im)
 {
+    if (k->kind == K_DONE && app.ov_vis == OV_EQ_NAME)
+    {
+        // naming a profile: OK saves it (once it has a name)
+        bool ok = app.eq_name[0] != 0;
+        gfx_round_fill(B, x, y, k->w, k->h, 3, ok ? (lit ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC) : key_fill(true));
+        const char *l = txt(S_EQ_OK);
+        text(B, x + (k->w - font_text_width(l)) / 2, y + (k->h - 16) / 2, l, ok ? C_BG : C_FAINT);
+        return;
+    }
     gfx_round_fill(B, x, y, k->w, k->h, 3, lit ? C_ACC : key_fill(k->fn));
     uint16_t col = lit ? C_BG : (k->fn ? C_DIM : C_TEXT);
     uint32_t sym = k->kind == K_SHIFT ? 0x21E7 : (k->kind == K_BACK ? 0x232B : (k->kind == K_DONE ? 0x2B9F : 0));
@@ -1947,6 +1958,8 @@ static void draw_forms(int y0)
     }
 }
 
+static bool draw_keys(int kb_y, bool settled);
+
 // Over the page and the bar: the results moving between the screens, the keyboard.
 static bool search_layers(int oy)
 {
@@ -1963,6 +1976,14 @@ static bool search_layers(int oy)
     }
     if (app.kb_t < KB_TICKS)
         anim = true;
+    return draw_keys(kb_y, app.kb_t == KB_TICKS) || anim;
+}
+
+// The keys at kb_y: the layout (pushed out by another while switching) and,
+// once in place, a held letter's other forms.
+static bool draw_keys(int kb_y, bool settled)
+{
+    bool anim = false;
     gfx_clip(B, 0, kb_y, SCREEN_W, SCREEN_H);
     gfx_fill(B, 0, kb_y, SCREEN_W, SCREEN_H - kb_y, C_BG);
     if (app.im_t > 0)
@@ -1977,7 +1998,7 @@ static bool search_layers(int oy)
     else
         draw_layout(0, kb_y, app.im, true);
     gfx_unclip(B);
-    if (app.acc_key >= 0 && app.kb_t == KB_TICKS)
+    if (app.acc_key >= 0 && settled)
     {
         draw_forms(kb_y);
         anim |= app.acc_t < ACC_TICKS;
@@ -2283,6 +2304,8 @@ static bool draw_player_area(void)
 
     lit_box(20, 148, 28, 24, BTN_INFO);
     icon(B, 12, 140, 0x24D8, C_TEXT);
+    lit_box(48, 148, 28, 24, BTN_EQ);
+    icon(B, 40, 140, ICON_EQ, eq_active() ? C_ACC : C_TEXT);     // lit while it changes the sound
     lit_box(236, 148, 28, 24, BTN_QUEUE);
     icon(B, 228, 140, 0x2630, C_TEXT);
     pill(128, 140, 0x2B9D, lit(BTN_UP));
@@ -2417,6 +2440,196 @@ static bool draw_queue(void)
         text_r(B, 216, y + 1, dur, C_DIM);
     }
     return anim;
+}
+
+// ---- equalizer
+
+static const int8_t eq_flat[EQ_BANDS];
+
+const int8_t *app_eq_profile_gain(int p)
+{
+    const EqProfile *pr = p > 0 ? eqp_get(p - 1) : NULL;
+    return pr ? pr->gain : eq_flat;
+}
+
+bool app_eq_edited(void)
+{
+    return memcmp(app.set.eq_gain, app_eq_profile_gain(app.set.eq_profile), EQ_BANDS) != 0;
+}
+
+// +6, 0, −3
+static void db_label(char *buf, int size, int db)
+{
+    if (db > 0)
+        snprintf(buf, size, "+%d", db);
+    else if (db < 0)
+        snprintf(buf, size, "−%d", -db);
+    else
+        snprintf(buf, size, "0");
+}
+
+void ui_eq_buttons(int *save_x, int *save_w, int *del_x, int *del_w)
+{
+    *save_x = 4;
+    *save_w = font_text_width(txt(S_EQ_SAVE)) + 12;
+    *del_x = *save_x + *save_w + 6;
+    *del_w = font_text_width(txt(S_EQ_DELETE)) + 12;
+}
+
+static void eq_button(int x, int w, const char *label, bool on, bool primary, int id)
+{
+    bool l = on && lit(id);
+    if (on && primary)
+    {
+        gfx_round_fill(B, x, EQ_BTN_Y, w, EQ_BTN_H, 4, l ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
+        text(B, x + 6, EQ_BTN_Y + 1, label, C_BG);
+    }
+    else
+    {
+        round_box(B, x, EQ_BTN_Y, w, EQ_BTN_H, 4, l ? C_LINE : C_BG, C_LINE);
+        text(B, x + 6, EQ_BTN_Y + 1, label, on ? C_TEXT : C_FAINT);
+    }
+}
+
+static void eq_row(int y, const char *name, bool chosen)
+{
+    if (chosen)
+        gfx_fill(B, 0, y, EQ_LIST_W, ROW_H, C_SEL);
+    font_draw(B, 6, y, EQ_LIST_W - 10, name, chosen ? C_ACC : C_TEXT);
+}
+
+// "Delete …?" over the panel, like the row menu.
+static void eq_ask_box(void)
+{
+    const EqProfile *pr = eqp_get(app.set.eq_profile - 1);
+    if (pr == NULL)
+        return;
+    int x = EQ_ASK_X, y = EQ_ASK_Y, w = EQ_ASK_W, h = 20 + 2 * ROW_H + 4;
+    gfx_fill(B, x, y, w, h, C_ACC);
+    gfx_fill(B, x + 1, y + 1, w - 2, h - 2, C_PANEL);
+    char q[96];
+    snprintf(q, sizeof(q), txt(S_EQ_ASK), pr->name);
+    font_draw(B, x + 6, y + 2, w - 12, q, C_DIM);
+    for (int i = 0; i < 2; i++)
+    {
+        int ry = y + 20 + i * ROW_H;
+        bool hi = app.eq_ask_sel == i;
+        if (hi)
+            gfx_fill(B, x + 1, ry, w - 2, ROW_H, C_SEL);
+        char a[48];
+        snprintf(a, sizeof(a), "%s %s", i ? "‹" : "×", txt(i ? S_EQ_KEEP : S_EQ_DELETE));
+        text(B, x + 6, ry, a, hi ? C_ACC : C_TEXT);
+    }
+}
+
+static bool draw_eq(void)
+{
+    gfx_fill(B, 0, 0, SCREEN_W, PANEL_DOWN, C_BG);
+    gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
+    text(B, 8, 2, txt(S_EQ), C_TEXT);
+    if (app_eq_edited())
+    {
+        char e[48];
+        snprintf(e, sizeof(e), " · %s", txt(S_EQ_EDITED));
+        text(B, 8 + font_text_width(txt(S_EQ)), 2, e, C_DIM);
+    }
+    text(B, 236, 2, "×", C_TEXT);
+
+    // the profiles: Flat, a line, the saved ones; one being moved floats
+    // where it would land, the others close up around it
+    int n = eqp_count();
+    for (int r = 0; r < EQP_MAX; r++)
+        gfx_fill(B, 0, EQ_OWN_Y + r * ROW_H, EQ_LIST_W, ROW_H, r % 2 ? C_ZEBRA : C_BG);
+    eq_row(20, txt(S_EQ_FLAT), app.set.eq_profile == 0);
+    gfx_fill(B, 4, EQ_OWN_Y - 1, EQ_LIST_W - 8, 1, C_LINE);
+    bool dragging = app.eq_drag_from >= 0;
+    for (int r = 0; r < n; r++)
+    {
+        int i = r;
+        if (dragging)
+        {
+            if (r == app.eq_drag_to)
+                continue;
+            int k = r > app.eq_drag_to ? r - 1 : r;
+            i = k >= app.eq_drag_from ? k + 1 : k;
+        }
+        eq_row(EQ_OWN_Y + r * ROW_H, eqp_get(i)->name, app.set.eq_profile == i + 1);
+    }
+    if (dragging)
+    {
+        int y = EQ_OWN_Y + app.eq_drag_to * ROW_H - 1;
+        gfx_fill(B, 2, y, EQ_LIST_W - 4, 18, C_PANEL);
+        gfx_rect(B, 2, y, EQ_LIST_W - 4, 18, C_ACC);
+        font_draw(B, 6, y + 1, EQ_LIST_W - 12, eqp_get(app.eq_drag_from)->name, C_TEXT);
+    }
+    gfx_fill(B, EQ_LIST_W, 20, 1, EQ_LINE_Y - 20, C_PANEL);
+
+    // the sliders: the value over, the band under; the one dragged or
+    // moved with the D-pad in the accent
+    for (int b = 0; b < EQ_BANDS; b++)
+    {
+        int cx = EQ_BAND_X(b), v = app.set.eq_gain[b];
+        bool on = app.eq_drag_band == b || (app.eq_sliders && app.eq_band == b);
+        char s[8];
+        db_label(s, sizeof(s), v);
+        text(B, cx - font_text_width(s) / 2, 21, s, on ? C_ACC : C_TEXT);
+        gfx_fill(B, cx - 1, EQ_ZERO_Y + EQ_MIN * EQ_DB_PX, 2, (EQ_MAX - EQ_MIN) * EQ_DB_PX + 1, C_LINE);
+        for (int db = EQ_MIN; db <= EQ_MAX; db += 6)
+            if (db)
+                gfx_fill(B, cx - 3, EQ_ZERO_Y - db * EQ_DB_PX, 7, 1, C_LINE);
+        gfx_fill(B, cx - 6, EQ_ZERO_Y, 13, 1, C_DIM);
+        int ky = EQ_ZERO_Y - v * EQ_DB_PX;
+        if (v)
+            gfx_fill(B, cx - 1, v > 0 ? ky : EQ_ZERO_Y, 2, (v > 0 ? v : -v) * EQ_DB_PX + 1, C_ACC);
+        gfx_round_fill(B, cx - 8, ky - 3, 17, 7, 2, on ? C_ACC : C_TEXT);
+        gfx_fill(B, cx - 4, ky, 9, 1, on ? C_SEL : C_LINE);
+        const char *lab = txt(S_EQ_BASS + b);
+        text(B, cx - font_text_width(lab) / 2, EQ_ZERO_Y + EQ_MAX * EQ_DB_PX + 2, lab, on ? C_ACC : C_DIM);
+    }
+
+    gfx_fill(B, 0, EQ_LINE_Y, SCREEN_W, 1, C_PANEL);
+    int sx, sw, dx, dw;
+    ui_eq_buttons(&sx, &sw, &dx, &dw);
+    eq_button(sx, sw, txt(S_EQ_SAVE), app_eq_edited(), true, BTN_EQ_SAVE);
+    eq_button(dx, dw, txt(S_EQ_DELETE), app.set.eq_profile > 0, false, BTN_EQ_DELETE);
+    if (app.eq_ask)
+        eq_ask_box();
+    return false;
+}
+
+// Saving a new profile: its name on the search keyboard (the whole bottom screen).
+static bool draw_eq_name(void)
+{
+    gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
+    gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
+    text(B, 8, 2, txt(S_EQ_NEW), C_TEXT);
+    text(B, 236, 2, "×", C_TEXT);
+    const char *nm = app.eq_name;
+    int y = FIELD_Y;
+    round_box(B, 4, y, 248, 20, 4, C_ZEBRA, C_ACC);
+    int right = nm[0] ? 228 : 246;
+    int tw = font_text_width(nm);
+    int x = 10 + (tw > right - 16 ? right - 16 - tw : 0);     // long: its end shows
+    gfx_clip(B, 6, y, right, y + 20);
+    if (nm[0])
+        text(B, x, y + 2, nm, C_TEXT);
+    else
+        text(B, 14, y + 2, txt(S_EQ_NAME), C_FAINT);
+    if ((app.frame / 15) % 2 == 0)
+        gfx_fill(B, (nm[0] ? x + tw : 10) + 1, y + 3, 2, 14, C_ACC);
+    gfx_unclip(B);
+    if (nm[0])
+        text(B, 236, y + 2, "×", C_DIM);
+    // what gets saved
+    char sum[96] = "", v[8];
+    for (int b = 0; b < EQ_BANDS; b++)
+    {
+        db_label(v, sizeof(v), app.set.eq_gain[b]);
+        snprintf(sum + strlen(sum), sizeof(sum) - strlen(sum), "%s%s %s", b ? "  " : "", txt(S_EQ_BASS + b), v);
+    }
+    font_draw(B, 8, CHIPS_Y + 1, 240, sum, C_DIM);
+    draw_keys(KB_Y, true);
+    return true;    // the cursor blinks
 }
 
 static void toggle(int x, int y, bool on)
@@ -2695,6 +2908,14 @@ static bool draw_settings(void)
 static bool w_settings(int arg) { (void)arg; return draw_settings(); }
 static bool w_info(int arg) { (void)arg; return draw_info(); }
 static bool w_queue(int arg) { (void)arg; return draw_queue(); }
+static bool w_eq(int arg) { (void)arg; return draw_eq(); }
+static bool w_eq_name(int arg) { (void)arg; return draw_eq_name(); }
+
+// The panel over the player area: song info, the queue or the equalizer.
+static bool (*panel_fn(Overlay ov))(int)
+{
+    return ov == OV_INFO ? w_info : (ov == OV_QUEUE ? w_queue : (ov == OV_EQ ? w_eq : NULL));
+}
 
 bool ui_draw_bottom(void)
 {
@@ -2703,31 +2924,33 @@ bool ui_draw_bottom(void)
     int p = ov_progress();
     if (app.ov_vis == OV_SETTINGS && p >= 256)
         return draw_settings();
+    if (app.ov_vis == OV_EQ_NAME && p >= 256)
+        return draw_eq_name();
 
     int oy = app_panel_offset();
     bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS) || app.press_down || app.frame < app.press_until
                 || (app.pp_t > 0 && app.pp_t < PP_TICKS) || (app.knob_t > 0 && app.knob_t < KNOB_TICKS);
     if (oy > 0)
     {
-        bool panel = app.ov_vis == OV_INFO || app.ov_vis == OV_QUEUE;
+        bool (*panel)(int) = panel_fn(app.ov_vis);
         if (panel && p >= 256)
-            anim |= app.ov_vis == OV_INFO ? draw_info() : draw_queue();
+            anim |= panel(0);
         else
         {
             anim |= draw_player_area();
             if (panel)
             {
                 // rises from behind the tabs
-                shifted(app.ov_vis == OV_INFO ? w_info : w_queue, 0, 0, 0, SCREEN_W, PANEL_DOWN,
-                        PANEL_DOWN * (256 - p) / 256, PANEL_DOWN);
+                shifted(panel, 0, 0, 0, SCREEN_W, PANEL_DOWN, PANEL_DOWN * (256 - p) / 256, PANEL_DOWN);
                 anim = true;
             }
         }
     }
     anim |= draw_panel(oy);
-    if (app.ov_vis == OV_SETTINGS)
+    if (app.ov_vis == OV_SETTINGS || app.ov_vis == OV_EQ_NAME)
     {
-        shifted(w_settings, 0, 0, 0, SCREEN_W, SCREEN_H, SCREEN_H * (256 - p) / 256, SCREEN_H);
+        shifted(app.ov_vis == OV_SETTINGS ? w_settings : w_eq_name, 0, 0, 0, SCREEN_W, SCREEN_H,
+                SCREEN_H * (256 - p) / 256, SCREEN_H);
         anim = true;
     }
     return anim;
