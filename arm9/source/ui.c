@@ -2741,9 +2741,9 @@ static void highcut_row(int dx, int y)
     int ly = y + SLIDER_DY, step = (SLIDER_X1 - SLIDER_X0) / EQ_HIGHCUT_STEPS;
     int kx = dx + SLIDER_X0 + pos * step;
     gfx_fill(B, dx + SLIDER_X0, ly - 1, SLIDER_X1 - SLIDER_X0, 2, C_LINE);
-    gfx_fill(B, dx + SLIDER_X0, ly - 1, kx - dx - SLIDER_X0, 2, C_ACC);    // what passes
+    gfx_fill(B, kx, ly - 1, dx + SLIDER_X1 - kx, 2, C_ACC);    // what's cut: from the right end (off) to the knob
     for (int i = 0; i <= EQ_HIGHCUT_STEPS; i++)
-        gfx_fill(B, dx + SLIDER_X0 + i * step, ly - 4, 1, 8, i <= pos ? C_ACC : C_LINE);
+        gfx_fill(B, dx + SLIDER_X0 + i * step, ly - 4, 1, 8, i >= pos ? C_ACC : C_LINE);
     gfx_disc(B, kx, ly, 6, C_ACC);
     gfx_disc(B, kx, ly, 2, C_BG);
     if (k)
