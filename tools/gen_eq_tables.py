@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Generate arm9/source/eq_tables.h: the equalizer's filters for every gain.
+"""Generate arm9/source/eq_tables.h: the equalizer's filters for every gain,
+the high cut for every edge, the dither's noise shape.
 
     python3 tools/gen_eq_tables.py > arm9/source/eq_tables.h
+
+Needs scipy (the high cut is an elliptic filter), e.g.
+nix-shell -p python3Packages.scipy.
 
 Three bands, each a biquad from the RBJ Audio EQ Cookbook at the DS sample
 rate (16756991 / 512 Hz): Bass a low shelf, Mid a peak, Treble a high shelf.
@@ -10,6 +14,9 @@ Also cos/sin of a grid of frequencies, so the player can work out the
 loudest point of a setting and turn the input down by that much (no clipping).
 """
 import math
+
+import numpy as np
+from scipy import signal
 
 RATE = 16756991 / 512
 GAINS = range(-12, 13)
@@ -85,6 +92,45 @@ for f in FREQS:
     vals = ", ".join(f"{v:.9f}f" for v in (math.cos(w), math.sin(w), math.cos(2 * w), math.sin(2 * w)))
     out.append("    { " + vals + " },  // " + f"{f:.0f} Hz")
 out.append("};")
+out.append("")
+# High cut: 4th order elliptic low-pass (0.1 dB ripple, 40 dB down), flat up
+# to its edge. The DS holds each sample until the next, so a tone at f also
+# sounds as a mirror at RATE - f; with the high cut, mirrors below
+# RATE - (where it's 40 dB down) are gone.
+HC_EDGES = [12000 + 500 * i for i in range(8)]
+out.append("// High cut: 4th order elliptic low-pass, two biquads (Q28) per edge (12.0 .. 15.5 kHz)")
+out.append(f"#define EQ_HIGHCUTS {len(HC_EDGES)}")
+out.append("static const int32_t eq_highcut[EQ_HIGHCUTS][2][5] = {")
+clean = []
+for e in HC_EDGES:
+    sos = signal.ellip(4, 0.1, 40, e, fs=RATE, output="sos")
+    rows = []
+    for sec in sos:
+        b0, b1, b2, a0, a1, a2 = sec
+        rows.append("{ " + ", ".join(str(q28(v / a0)) for v in (b0, b1, b2, a1, a2)) + " }")
+    f = np.linspace(e, RATE / 2 - 1, 8000)
+    _, h = signal.sosfreqz(sos, worN=f, fs=RATE)
+    stop = f[np.argmax(20 * np.log10(np.abs(h) + 1e-12) <= -40)]
+    clean.append(RATE - stop)
+    out.append("    { " + ", ".join(rows) + " },  // " + f"{e / 1000:.1f} kHz, 40 dB down from {stop / 1000:.2f} kHz")
+out.append("};")
+out.append("// its edge and the mirrors it removes: below this (both in 0.1 kHz)")
+out.append("static const uint16_t eq_highcut_edge[EQ_HIGHCUTS] = { " + ", ".join(str(e // 100) for e in HC_EDGES) + " };")
+out.append("static const uint16_t eq_highcut_clean[EQ_HIGHCUTS] = { " + ", ".join(str(int(c // 100)) for c in clean) + " };")
+out.append("")
+
+# Dither to the DS's 10 bits: the error fed back through 1 - c1 z^-1 - c2 z^-2 - c3 z^-3
+# (zeros at 3.5 kHz and z = -0.6): the noise is lower where the ear hears best
+# (1..5 kHz, -4..-6 dB) and higher around 11 kHz, but not near 16 kHz, where
+# its mirrors would land in what you hear.
+w0 = 2 * math.pi * 3500 / RATE
+r = 0.7
+ntf = np.convolve([1, -2 * r * math.cos(w0), r * r], [1, 0.6])
+cs = [round(-c * 4096) for c in ntf[1:]]
+out.append("// Dither: noise shaping, the error fed back with these (Q12)")
+out.append(f"#define EQ_NS_C1 {cs[0]}")
+out.append(f"#define EQ_NS_C2 {cs[1]}")
+out.append(f"#define EQ_NS_C3 {cs[2]}")
 out.append("")
 out.append("#endif")
 print("\n".join(out))

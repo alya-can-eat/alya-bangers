@@ -52,28 +52,40 @@ static void signal(int16_t *x, int n, double amp, unsigned seed)
     }
 }
 
-// The same cascade in doubles, with the same coefficients and pregain.
-static void reference(const int16_t *x, double *y, int n, const int8_t *g)
+static void ref_biquad(const int32_t *c, double *y, int n)
+{
+    double b0 = c[0] / 268435456.0, b1 = c[1] / 268435456.0, b2 = c[2] / 268435456.0;
+    double a1 = c[3] / 268435456.0, a2 = c[4] / 268435456.0;
+    double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (int i = 0; i < n; i++)
+    {
+        double x0 = y[i];
+        double y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+        y[i] = y0;
+    }
+}
+
+// The same cascade in doubles, with the same coefficients and pregain
+// (and the high cut's step, 0: off).
+static void reference_hc(const int16_t *x, double *y, int n, const int8_t *g, int hc)
 {
     double pre = eq_pregain() / 32768.0;
     for (int i = 0; i < n; i++)
         y[i] = x[i] * pre;
     for (int b = 0; b < 3; b++)
+        if (g[b])
+            ref_biquad(eq_coef[b][g[b] + 12], y, n);
+    if (hc)
     {
-        if (!g[b])
-            continue;
-        const int32_t *c = eq_coef[b][g[b] + 12];
-        double b0 = c[0] / 268435456.0, b1 = c[1] / 268435456.0, b2 = c[2] / 268435456.0;
-        double a1 = c[3] / 268435456.0, a2 = c[4] / 268435456.0;
-        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x0 = y[i];
-            double y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-            x2 = x1; x1 = x0; y2 = y1; y1 = y0;
-            y[i] = y0;
-        }
+        ref_biquad(eq_highcut[hc - 1][0], y, n);
+        ref_biquad(eq_highcut[hc - 1][1], y, n);
     }
+}
+
+static void reference(const int16_t *x, double *y, int n, const int8_t *g)
+{
+    reference_hc(x, y, n, g, 0);
 }
 
 static double rms_db_of_sine(double f, int amp)
@@ -163,6 +175,7 @@ static void test_response(void)
 static void test_chunks(void)
 {
     set3(7, -4, 5);
+    eq_set_output(3, true);         // all stages: per channel, so pieces don't matter
     signal(in, N, 15000, 9);
     int16_t whole[N];
     memcpy(whole, in, sizeof(in));
@@ -180,7 +193,8 @@ static void test_chunks(void)
         eq_run(&b, out + i, m, 1);
         i += m;
     }
-    CHECK(memcmp(whole, out, sizeof(out)) == 0, "the same result in pieces of any size");
+    CHECK(memcmp(whole, out, sizeof(out)) == 0, "the same result in pieces of any size (high cut, dither too)");
+    eq_set_output(0, false);
 }
 
 static void test_no_clipping(void)
@@ -217,6 +231,117 @@ static void test_no_clipping(void)
     CHECK(worst_peak < 32767, "boosted full-scale sines reach %d, no clipping", worst_peak);
 }
 
+// The high cut: flat below its edge, 40 dB down where its mirrors would be
+// heard, and exact like the bands.
+static void test_highcut(void)
+{
+    set3(0, 0, 0);
+    for (int k = 1; k <= EQ_HIGHCUT_STEPS; k++)
+    {
+        eq_set_output(k, false);
+        double pre = 20 * log10(eq_pregain() / 32768.0);
+        double edge = eq_highcut_edge10(k) * 100.0, stop = RATE - eq_highcut_clean10(k) * 100.0;
+        double pass1 = rms_db_of_sine(1000, 8000) - pre, pass2 = rms_db_of_sine(edge - 500, 8000) - pre;
+        double stop1 = rms_db_of_sine(stop + 50, 8000) - pre, stop2 = rms_db_of_sine(16200, 8000) - pre;
+        CHECK(pass1 > -0.3 && pass1 < 0.1 && pass2 > -0.3 && pass2 < 0.1,
+              "high cut %.1f kHz: 1 kHz %+.2f dB, %.1f kHz %+.2f dB (flat)", edge / 1000, pass1, (edge - 500) / 1000, pass2);
+        CHECK(stop1 < -38 && stop2 < -38, "high cut %.1f kHz: %.2f kHz %+.1f dB, 16.2 kHz %+.1f dB (40 dB down)",
+              edge / 1000, (stop + 50) / 1000, stop1, stop2);
+    }
+    CHECK(eq_highcut_clean10(7) >= 170 && eq_highcut_clean10(1) >= 187, "edge 15.0 kHz: no mirrors below 17.0 kHz");
+    // exact, with bands too
+    const int8_t g[3] = { 5, -3, 7 };
+    eq_set(g);
+    eq_set_output(4, false);
+    signal(in, N, 12000, 21);
+    memcpy(out, in, sizeof(in));
+    EqState st;
+    eq_state_reset(&st);
+    eq_run(&st, out, N, 0);
+    reference_hc(in, ref, N, g, 4);
+    double worst = 0;
+    for (int i = 0; i < N; i++)
+        worst = fmax(worst, fabs(out[i] - ref[i]));
+    CHECK(worst <= 1.0, "bands and high cut: off the exact result by %.2f", worst);
+    double pre = 20 * log10(eq_pregain() / 32768.0);
+    set3(0, 0, 0);
+    eq_set_output(4, false);
+    double pre_hc = 20 * log10(eq_pregain() / 32768.0);
+    CHECK(pre_hc < -0.9 && pre_hc > -1.1 && pre < pre_hc, "the high cut turns down 1 dB (%.2f dB), with boosts more (%.2f dB)",
+          pre_hc, pre);
+    eq_set_output(0, false);
+    CHECK(!eq_active(), "everything off: nothing to run");
+}
+
+// Power at f (Hann window), the result of a 12 kHz tone of 1.5 steps:
+// rounded by the hardware (cut to 10 bits) its 3rd harmonic folds back to
+// 3.27 kHz; dithered, it's gone into the noise.
+static double tone_db(const int16_t *x, int n, double f)
+{
+    double re = 0, im = 0;
+    for (int i = 0; i < n; i++)
+    {
+        double w = 0.5 - 0.5 * cos(2 * M_PI * i / (n - 1));
+        re += w * x[i] * cos(2 * M_PI * f * i / RATE);
+        im += w * x[i] * sin(2 * M_PI * f * i / RATE);
+    }
+    return 10 * log10(re * re + im * im + 1e-9);
+}
+
+static double band_power(const int16_t *x, int n, double f0, double f1)
+{
+    double p = 0;
+    int k = 0;
+    for (double f = f0; f <= f1; f += 125, k++)
+        p += pow(10, tone_db(x, n, f) / 10);
+    return 10 * log10(p / k);
+}
+
+static void test_dither(void)
+{
+    set3(0, 0, 0);
+    eq_set_output(0, true);
+    CHECK(eq_active() && !eq_bands_active(), "dither alone: run, but the equalizer isn't on");
+    // a quiet 12 kHz tone
+    int n = 8192;
+    for (int i = 0; i < n; i++)
+        in[i] = (int16_t)lround(96 * sin(2 * M_PI * 12000 * i / RATE));
+    int16_t hw[8192];
+    for (int i = 0; i < n; i++)
+        hw[i] = (int16_t)(in[i] & ~63);     // what the DS does: cut to 10 bits
+    memcpy(out, in, n * 2);
+    EqState st;
+    eq_state_reset(&st);
+    eq_run(&st, out, n, 0);
+    bool steps = true;
+    double mean = 0;
+    for (int i = 0; i < n; i++)
+    {
+        steps &= (out[i] & 63) == 0;
+        mean += out[i] - in[i];
+    }
+    mean /= n;
+    CHECK(steps, "dithered: every sample a whole step of the 10 bits (the hardware's cut changes nothing)");
+    CHECK(fabs(mean) < 2, "dithered: no offset (%.2f)", mean);
+    double hw_spur = tone_db(hw, n, 36000 - RATE) - tone_db(hw, n, 12000);
+    double dt_spur = tone_db(out, n, 36000 - RATE) - tone_db(out, n, 12000);
+    printf("  12 kHz tone, 1.5 steps: folded-back 3rd harmonic cut %+.1f dB, dithered %+.1f dB\n", hw_spur, dt_spur);
+    CHECK(dt_spur < hw_spur - 12, "dither: the folded-back distortion of a quiet high tone at least 12 dB lower");
+    // silence: the noise alone, low where the ear hears best
+    memset(out, 0, n * 2);
+    eq_state_reset(&st);
+    eq_run(&st, out, n, 1);
+    int peak = 0;
+    for (int i = 0; i < n; i++)
+        peak = abs(out[i]) > peak ? abs(out[i]) : peak;
+    double mid = band_power(out, n, 1000, 5000), high = band_power(out, n, 9000, 13000);
+    double top = band_power(out, n, 15500, 16300);
+    printf("  dither noise: 1..5 kHz %.1f dB, 9..13 kHz %.1f dB, 15.5..16.3 kHz %.1f dB, peak %d\n", mid, high, top, peak);
+    CHECK(peak <= 4 * 64, "dither noise stays within a few steps (%d)", peak);
+    CHECK(mid < high - 6 && top < high - 2, "dither noise: lower at 1..5 kHz and near 16 kHz than around 11 kHz");
+    eq_set_output(0, false);
+}
+
 int main(void)
 {
     test_flat();
@@ -224,6 +349,8 @@ int main(void)
     test_response();
     test_chunks();
     test_no_clipping();
+    test_highcut();
+    test_dither();
     printf("%s: %d failure(s)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }

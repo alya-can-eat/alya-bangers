@@ -2305,7 +2305,7 @@ static bool draw_player_area(void)
     lit_box(20, 148, 28, 24, BTN_INFO);
     icon(B, 12, 140, 0x24D8, C_TEXT);
     lit_box(48, 148, 28, 24, BTN_EQ);
-    icon(B, 40, 140, ICON_EQ, eq_active() ? C_ACC : C_TEXT);     // lit while it changes the sound
+    icon(B, 40, 140, ICON_EQ, eq_bands_active() ? C_ACC : C_TEXT);   // lit while it changes the sound
     lit_box(236, 148, 28, 24, BTN_QUEUE);
     icon(B, 228, 140, 0x2630, C_TEXT);
     pill(128, 140, 0x2B9D, lit(BTN_UP));
@@ -2640,6 +2640,7 @@ static void toggle(int x, int y, bool on)
 
 static const SetItem items_top[] = {
     { S_PLAYBACK, SI_PAGE, PAGE_PLAYBACK, ICON_PLAYBACK },
+    { S_SOUND, SI_PAGE, PAGE_SOUND, ICON_SOUND },
     { S_BROWSING, SI_PAGE, PAGE_BROWSING, ICON_BROWSING },
     { S_PLAYER, SI_PAGE, PAGE_PLAYER, ICON_PLAYER },
     { S_THEME, SI_PAGE, PAGE_THEME, ICON_THEME },
@@ -2651,6 +2652,10 @@ static const SetItem items_playback[] = {
     { S_PLAY_AT_START, SI_TOGGLE, SET_AUTOPLAY, 0 },
     { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID, 0 },
     { S_LR_LID, SI_TOGGLE, SET_LR_LID, 0 },
+};
+static const SetItem items_sound[] = {
+    { S_HIGHCUT, SI_SLIDER, SET_HIGHCUT, 0 },
+    { S_DITHER, SI_TOGGLE, SET_DITHER, 0 },
 };
 static const SetItem items_browsing[] = {
     { S_CASE, SI_TOGGLE, SET_CASE, 0 },
@@ -2674,6 +2679,7 @@ static const struct {
 } pages[PAGE_COUNT] = {
     [PAGE_TOP] = { S_SETTINGS, items_top, N_ITEMS(items_top), S_NONE },
     [PAGE_PLAYBACK] = { S_PLAYBACK, items_playback, N_ITEMS(items_playback), S_NONE },
+    [PAGE_SOUND] = { S_SOUND, items_sound, N_ITEMS(items_sound), S_NONE },
     [PAGE_BROWSING] = { S_BROWSING, items_browsing, N_ITEMS(items_browsing), S_NONE },
     [PAGE_PLAYER] = { S_PLAYER, items_player, N_ITEMS(items_player), S_NONE },
     [PAGE_THEME] = { S_THEME, NULL, 0, S_NONE },
@@ -2689,6 +2695,66 @@ int ui_set_count(int page)
 const SetItem *ui_set_item(int page, int i)
 {
     return &pages[page].items[i];
+}
+
+int ui_set_row_h(int page, int i)
+{
+    return pages[page].items[i].kind == SI_SLIDER ? SET_SLIDER_H : SET_H;
+}
+
+int ui_set_row_y(int page, int i)
+{
+    int y = SET_Y;
+    for (int k = 0; k < i && k < ui_set_count(page); k++)
+        y += ui_set_row_h(page, k);
+    return y;
+}
+
+int ui_set_row_at(int page, int y)
+{
+    for (int i = 0, ry = SET_Y; i < ui_set_count(page); i++)
+    {
+        int h = ui_set_row_h(page, i);
+        if (y >= ry && y < ry + h)
+            return i;
+        ry += h;
+    }
+    return -1;
+}
+
+// The high cut's slider: its steps left to right (12.0 .. 15.5 kHz), Off at
+// the right end, which leaves the most.
+static void highcut_row(int dx, int y)
+{
+    int k = app.set.highcut;
+    int pos = k ? k - 1 : EQ_HIGHCUT_STEPS;
+    char v[64], f[16];
+    if (k)
+    {
+        int e = eq_highcut_edge10(k);
+        snprintf(v, sizeof(v), "%d.%d kHz", e / 10, e % 10);
+    }
+    else
+        snprintf(v, sizeof(v), "%s", txt(S_OFF));
+    text(B, dx + 8, y + 4, txt(S_HIGHCUT), C_TEXT);
+    text_r(B, dx + 244, y + 4, v, C_ACC);
+    int ly = y + SLIDER_DY, step = (SLIDER_X1 - SLIDER_X0) / EQ_HIGHCUT_STEPS;
+    int kx = dx + SLIDER_X0 + pos * step;
+    gfx_fill(B, dx + SLIDER_X0, ly - 1, SLIDER_X1 - SLIDER_X0, 2, C_LINE);
+    gfx_fill(B, dx + SLIDER_X0, ly - 1, kx - dx - SLIDER_X0, 2, C_ACC);    // what passes
+    for (int i = 0; i <= EQ_HIGHCUT_STEPS; i++)
+        gfx_fill(B, dx + SLIDER_X0 + i * step, ly - 4, 1, 8, i <= pos ? C_ACC : C_LINE);
+    gfx_disc(B, kx, ly, 6, C_ACC);
+    gfx_disc(B, kx, ly, 2, C_BG);
+    if (k)
+    {
+        int c = eq_highcut_clean10(k);
+        snprintf(f, sizeof(f), "%d.%d", c / 10, c % 10);
+        snprintf(v, sizeof(v), txt(S_HIGHCUT_CLEAN), f);
+    }
+    else
+        snprintf(v, sizeof(v), "%s", txt(S_HIGHCUT_OFF));
+    font_draw(B, dx + 8, y + 44, 240, v, C_DIM);
 }
 
 // A page shows the icon of its row on the top page.
@@ -2711,6 +2777,7 @@ static bool set_on(int id)
     case SET_COVER_BG: return !app.set.plain_bg;
     case SET_SHUFFLE_W: return app.set.shuffle_weighted;
     case SET_AUTOPLAY: return app.set.play_at_start;
+    case SET_DITHER: return app.set.dither;
     default: return false;
     }
 }
@@ -2854,14 +2921,20 @@ static bool settings_page(int page, int dx, bool lit)
     {
         int n = pages[page].n;
         for (int i = 0; i < n - 1; i++)
-            gfx_fill(B, dx + 8, SET_Y + i * SET_H + SET_H - 1, 240, 1, C_ZEBRA);
-        if (lit && app.menu_sel >= 0)
-            highlight(dx, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + n * SET_H, C_SEL);
+            gfx_fill(B, dx + 8, ui_set_row_y(page, i + 1) - 1, 240, 1, C_ZEBRA);
+        if (lit && app.menu_sel >= 0 && app.menu_sel < n)
+            highlight(dx, SET_Y + app.menu_vis, SCREEN_W, ui_set_row_h(page, app.menu_sel) - 1, SET_Y,
+                      ui_set_row_y(page, n), C_SEL);
         const int ty = (SET_H - 1 - 16) / 2, gy = (SET_H - 1 - 14) / 2;     // text, switch in the row
         for (int i = 0; i < n; i++)
         {
             const SetItem *it = &pages[page].items[i];
-            int y = SET_Y + i * SET_H;
+            int y = ui_set_row_y(page, i);
+            if (it->kind == SI_SLIDER)
+            {
+                highcut_row(dx, y);
+                continue;
+            }
             const char *value = it->kind == SI_VALUE ? set_value(it->id) : NULL;
             int lx = 8;
             if (it->icon)

@@ -17,7 +17,7 @@ UI = (
     "▶⏸⏭⏮ⓘ☰⋮⮟⮝♪�"       # ▶ ⏸ ⏭ ⏮ ⓘ ☰ ⋮ ⮟ ⮝ ♪ �
     "\U0001f500\U0001f501\U0001f502\U0001f5c0\U0001f50d\U0001f506"             # 🔀 🔁 🔂 🗀 🔍 🔆
     "äöüÄÖÜ"            # the German interface
-    "\U0001f50a\U0001f3a8\U0001f310\U0001f5ae"   # 🔊 🎨 🌐 🖮 settings icons (with ⓘ, U+E005, U+E006)
+    "\U0001f50a\U0001f3a8\U0001f310\U0001f5ae\U0001f3a7"   # 🔊 🎨 🌐 🖮 🎧 settings icons (with ⓘ, U+E005, U+E006)
     "⇧⌫拼音小゛゜ー"       # search keyboards
     "−“”«»"             # equalizer: minus (dB), the quotes of "Delete …?"
 )

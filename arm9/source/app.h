@@ -126,11 +126,16 @@ typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_
                OV_EQ_NAME } Overlay;
 
 // Settings: a top page leading to pages of settings.
-enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL, PAGE_ABOUT,
-       PAGE_COUNT };
+enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_SOUND, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL,
+       PAGE_ABOUT, PAGE_COUNT };
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
-       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY };
-enum { SI_TOGGLE, SI_VALUE, SI_PAGE };      // switch, value (tap: the next one), › another page
+       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER };
+// switch, value (tap: the next one), › another page, a slider (a taller row)
+enum { SI_TOGGLE, SI_VALUE, SI_PAGE, SI_SLIDER };
+#define SET_SLIDER_H 64
+#define SLIDER_X0   16              // its scale: the first step, the last (Off)
+#define SLIDER_X1   240
+#define SLIDER_DY   34              // its line in the row
 typedef struct {
     uint16_t label;         // S_... (i18n.h)
     uint8_t kind;
@@ -138,6 +143,7 @@ typedef struct {
     uint32_t icon;          // in front of the label (0: none); the way to Language without reading
 } SetItem;
 #define ICON_PLAYBACK 0x1F50A       // 🔊
+#define ICON_SOUND    0x1F3A7       // 🎧
 #define ICON_BROWSING 0xE005        // a list (builtin_font.c)
 #define ICON_PLAYER   0xE006        // a record
 #define ICON_THEME    0x1F3A8       // 🎨
@@ -221,6 +227,7 @@ typedef struct {
     int theme_sel;              // theme page: 0 accent, 1 background, 2 text
     Hsv theme_hsv;              // that colour, as the picker shows it
     int theme_drag;             // CP_RING or CP_TRIANGLE while the stylus drags
+    bool slider_drag;           // settings: the high cut's slider under the stylus
     bool presets_open;          // the list of preset themes is open
     int presets_t;              // it rises out of its button: 0 .. OV_TICKS
     bool album_queue;           // the queue is one album
@@ -299,6 +306,10 @@ int ui_rowmenu_y(int row_y);
 // Song currently loaded, or LIB_NONE.
 uint32_t app_current_track(void);
 int ui_set_count(int page);
+// Where a settings row starts, how tall it is, the row at y (-1: none).
+int ui_set_row_y(int page, int i);
+int ui_set_row_h(int page, int i);
+int ui_set_row_at(int page, int y);
 int ui_info_value_x(void);
 int ui_player_artist_at(int x, int y);     // which artist name, -1: none
 int ui_cover_bg_contrast(const uint16_t *cover);    // for the tests

@@ -30,6 +30,8 @@ typedef enum {
     // equalizer
     S_EQ, S_EQ_FLAT, S_EQ_BASS, S_EQ_MID, S_EQ_TREBLE, S_EQ_EDITED, S_EQ_SAVE, S_EQ_DELETE,
     S_EQ_KEEP, S_EQ_ASK, S_EQ_NEW, S_EQ_NAME, S_EQ_OK, S_EQ_FULL,
+    // settings: Sound
+    S_SOUND, S_HIGHCUT, S_HIGHCUT_CLEAN, S_HIGHCUT_OFF, S_DITHER,
     // toasts
     S_CANT_PLAY, S_QUEUE_FULL, S_PLAYS_NEXT, S_ADDED, S_N_PLAY_NEXT, S_N_ADDED,
     // why a song can't be played (after S_CANT_PLAY)

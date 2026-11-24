@@ -463,7 +463,19 @@ static int demo(void)
     tap(240, BAR_Y + 14);
     run(OV_TICKS + 10);
     shot("settings");
-    tap(100, SET_Y + 3 * SET_H + 10);
+    // Sound: the high cut at 15.0 kHz, dither on
+    tap(100, SET_Y + 1 * SET_H + 10);
+    run(30);
+    hold(SLIDER_X0 + 6 * ((SLIDER_X1 - SLIDER_X0) / EQ_HIGHCUT_STEPS), ui_set_row_y(PAGE_SOUND, 0) + SLIDER_DY, 3);
+    release();
+    tap(100, ui_set_row_y(PAGE_SOUND, 1) + 10);
+    run(10);
+    shot("sound");
+    tap(100, ui_set_row_y(PAGE_SOUND, 1) + 10);
+    tap(SLIDER_X1, ui_set_row_y(PAGE_SOUND, 0) + SLIDER_DY);
+    press(KEY_B);
+    run(30);
+    tap(100, SET_Y + 4 * SET_H + 10);
     run(30);
     shot("theme");
     film_n = 0;
@@ -944,7 +956,7 @@ int main(int argc, char **argv)
     check(!app.set.show_remaining, "length on the right by default");
     shot("13_settings");
     // Player page: slides in from the right
-    tap(100, SET_Y + 2 * SET_H + 10);
+    tap(100, SET_Y + 3 * SET_H + 10);
     check(app.set_page == PAGE_PLAYER && app.page_t > 0 && app.page_t < TAB_TICKS, "Player page sliding in");
     shot("13a_page_sliding");
     run(20);
@@ -965,8 +977,53 @@ int main(int argc, char **argv)
     check(app.set_page == PAGE_TOP, "‹ goes back");
     run(20);
     check(app.page_t == 0, "the top page is back in place");
-    // Browsing page: case-sensitive names
+    // Sound: the high cut's slider (right end off, further left cuts lower) and dither
     tap(100, SET_Y + 1 * SET_H + 10);
+    run(20);
+    check(app.set_shown == PAGE_SOUND && ui_set_count(PAGE_SOUND) == 2
+          && ui_set_item(PAGE_TOP, 1)->icon == ICON_SOUND, "Sound page: high cut and dither");
+    check(app.set.highcut == 0 && !app.set.dither, "both off by default");
+    check(ui_set_row_h(PAGE_SOUND, 0) == SET_SLIDER_H && ui_set_row_y(PAGE_SOUND, 1) == SET_Y + SET_SLIDER_H
+          && ui_set_row_at(PAGE_SOUND, SET_Y + SET_SLIDER_H + 4) == 1, "the slider row is taller, Dither under it");
+    shot("13i_sound");
+    {
+        int sy = ui_set_row_y(PAGE_SOUND, 0) + SLIDER_DY, step = (SLIDER_X1 - SLIDER_X0) / EQ_HIGHCUT_STEPS;
+        bool bands = eq_bands_active();
+        hold(SLIDER_X0 + 6 * step, sy, 3);
+        check(app.set.highcut == 7 && eq_highcut_edge10(7) == 150 && eq_active(), "touch: 15.0 kHz");
+        check(eq_bands_active() == bands, "the high cut doesn't light the EQ button");
+        drag_to(SLIDER_X0 + 2 * step + 5, sy + 12, 4);
+        check(app.set.highcut == 3 && app.overlay == OV_SETTINGS && app.set_page == PAGE_SOUND,
+              "drag left: 13.0 kHz, also a bit off the line");
+        shot("13j_sound_cut");
+        drag_to(SLIDER_X1 + 12, sy, 4);
+        check(app.set.highcut == 0, "drag past the right end: off");
+        drag_to(SLIDER_X0 - 12, sy, 4);
+        check(app.set.highcut == 1 && eq_highcut_edge10(1) == 120, "past the left end: the lowest, 12.0 kHz");
+        release();
+        check(!app.slider_drag, "let go");
+        tap(SLIDER_X0 + 7 * step - 3, sy - 6);
+        check(app.set.highcut == EQ_HIGHCUT_STEPS && eq_highcut_edge10(EQ_HIGHCUT_STEPS) == 155,
+              "a tap jumps there: 15.5 kHz");
+    }
+    tap(100, ui_set_row_y(PAGE_SOUND, 1) + 10);
+    check(app.set.dither && app.set.highcut == EQ_HIGHCUT_STEPS, "Dither on, the slider stays");
+    save_now();
+    {
+        Settings ss;
+        Theme ts;
+        Resume rs;
+        state_defaults(&ss);
+        check(state_load(&ss, &ts, &rs) && ss.highcut == EQ_HIGHCUT_STEPS && ss.dither == 1, "both kept in state.bin");
+    }
+    shot("13k_sound_dither");
+    tap(100, ui_set_row_y(PAGE_SOUND, 1) + 10);
+    tap(SLIDER_X1, ui_set_row_y(PAGE_SOUND, 0) + SLIDER_DY);
+    check(!app.set.dither && app.set.highcut == 0 && eq_active() == eq_bands_active(), "and both off again");
+    press(KEY_B);
+    run(20);
+    // Browsing page: case-sensitive names
+    tap(100, SET_Y + 2 * SET_H + 10);
     run(20);
     tap(100, SET_Y + 0 * SET_H + 10);
     check(app.set.case_sensitive, "case-sensitive on (Browsing page)");
@@ -974,7 +1031,7 @@ int main(int argc, char **argv)
     check(app.set_page == PAGE_TOP && app.overlay == OV_SETTINGS, "B goes back, settings stay open");
     run(20);
     // Theme: three colours and the colour triangle
-    tap(100, SET_Y + 3 * SET_H + 10);
+    tap(100, SET_Y + 4 * SET_H + 10);
     run(20);
     check(app.set_shown == PAGE_THEME && app.theme_sel == 0, "Theme page, the accent chosen");
     shot("13f_theme");
@@ -1032,7 +1089,7 @@ int main(int argc, char **argv)
     press(KEY_B);
     run(20);
     check(app.set_page == PAGE_TOP, "B leaves the Theme page");
-    tap(100, SET_Y + 4 * SET_H + 10);
+    tap(100, SET_Y + 5 * SET_H + 10);
     run(20);
     check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 2, "Regional: language and keyboard");
     check(app.set.lang == LANG_EN && app.set.keyboard == KB_QWERTY, "English and QWERTY by default");
@@ -1042,7 +1099,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < ui_set_count(PAGE_TOP); i++)
             all &= ui_set_item(PAGE_TOP, i)->icon != 0;
         check(all, "every row of the top settings page has an icon");
-        check(ui_set_item(PAGE_TOP, 4)->icon == 0x1F310 && ui_set_item(PAGE_REGIONAL, 0)->icon == 0x1F310
+        check(ui_set_item(PAGE_TOP, 5)->icon == 0x1F310 && ui_set_item(PAGE_REGIONAL, 0)->icon == 0x1F310
               && ui_set_item(PAGE_REGIONAL, 0)->id == SET_LANG, "the globe: Regional, then Language");
         // the icons are glyphs the player always has
         for (int i = 0; i < ui_set_count(PAGE_TOP); i++)
@@ -1065,7 +1122,7 @@ int main(int argc, char **argv)
     press(KEY_B);
     run(20);
     // About
-    tap(100, SET_Y + 5 * SET_H + 10);
+    tap(100, SET_Y + 6 * SET_H + 10);
     run(20);
     check(app.set_shown == PAGE_ABOUT && app.page_t == TAB_TICKS, "About in place");
     shot("13c_about");
@@ -1083,11 +1140,34 @@ int main(int argc, char **argv)
     run(10);
     check(app.menu_vis == SET_H, "highlight arrived");
     shot("13d_settings_sel");
+    // Sound: on the slider row Left and Right move the slider, B goes back
+    press(KEY_RIGHT);
+    check(app.set_page == PAGE_SOUND && app.menu_sel == 0, "Right opens Sound, highlight on the slider");
+    run(20);
+    check(app.set.highcut == 0, "the high cut starts off");
+    press(KEY_LEFT);
+    check(app.set_page == PAGE_SOUND && app.set.highcut == EQ_HIGHCUT_STEPS && eq_active(),
+          "Left on the slider: the highest edge, the page stays");
+    press(KEY_LEFT);
+    check(app.set.highcut == EQ_HIGHCUT_STEPS - 1, "Left again: a lower edge");
+    press(KEY_RIGHT);
+    press(KEY_RIGHT);
+    check(app.set.highcut == 0 && !eq_active(), "Right to the end: off");
+    press(KEY_RIGHT);
+    check(app.set.highcut == 0 && app.set_page == PAGE_SOUND, "Right at the end does nothing");
+    press(KEY_DOWN);
+    run(10);
+    check(app.menu_sel == 1, "Down to Dither");
+    press(KEY_LEFT);
+    check(app.set_page == PAGE_TOP && app.menu_sel == 1, "Left on Dither goes back, to the Sound row");
+    run(20);
+    press(KEY_DOWN);
+    run(10);
     press(KEY_RIGHT);
     check(app.set_page == PAGE_BROWSING && app.menu_sel == 0, "Right opens Browsing, highlight on its first row");
     run(20);
     press(KEY_LEFT);
-    check(app.set_page == PAGE_TOP && app.menu_sel == 1, "Left comes back to the Browsing row");
+    check(app.set_page == PAGE_TOP && app.menu_sel == 2, "Left comes back to the Browsing row");
     run(20);
     press(KEY_A);
     run(20);
@@ -1100,7 +1180,7 @@ int main(int argc, char **argv)
     tap(36, 10);
     check(find_row("KIVARA") >= 0, "KIVARA separate when case-sensitive");
     tap(240, BAR_Y + 14);
-    tap(100, SET_Y + 1 * SET_H + 10);       // Browsing
+    tap(100, SET_Y + 2 * SET_H + 10);       // Browsing
     run(20);
     tap(100, SET_Y + 0 * SET_H + 10);       // case-sensitive off again
     tap(240, 8);
@@ -1769,6 +1849,17 @@ int main(int argc, char **argv)
             }
             fit &= font_text_width(txt(S_EQ_DELETE)) + 16 <= EQ_ASK_W - 12 && font_text_width(txt(S_EQ_KEEP)) + 16 <= EQ_ASK_W - 12
                    && font_text_width(txt(S_EQ_OK)) <= 46;
+            // the high cut: its name beside the value, the line under the slider
+            fit &= font_text_width(txt(S_HIGHCUT)) + 8 + font_text_width("15.5 kHz") <= 236
+                   && font_text_width(txt(S_HIGHCUT)) + 8 + font_text_width(txt(S_OFF)) <= 236
+                   && font_text_width(txt(S_HIGHCUT_OFF)) <= 236 && font_text_width(txt(S_DITHER)) <= 196;
+            for (int k = 1; k <= EQ_HIGHCUT_STEPS; k++)
+            {
+                char f[16], v[64];
+                snprintf(f, sizeof(f), "%d.%d", eq_highcut_clean10(k) / 10, eq_highcut_clean10(k) % 10);
+                snprintf(v, sizeof(v), txt(S_HIGHCUT_CLEAN), f);
+                fit &= font_text_width(v) <= 236;
+            }
         }
         i18n_lang = app.set.lang;
         check(fit, "the texts fit their places, in both languages");
@@ -1777,7 +1868,7 @@ int main(int argc, char **argv)
         run(40);
         tap(240, BAR_Y + 14);
         run(20);
-        tap(100, SET_Y + 4 * SET_H + 10);
+        tap(100, SET_Y + 5 * SET_H + 10);
         run(20);
         tap(100, SET_Y + 0 * SET_H + 10);
         check(app.set.lang == LANG_DE && strcmp(txt(S_SETTINGS), "Einstellungen") == 0, "tap Language: Deutsch");
@@ -1785,8 +1876,9 @@ int main(int argc, char **argv)
         press(KEY_B);
         run(20);
         shot("20_de_settings");
-        static const char *const names[] = { "20_de_playback", "20_de_browsing", "20_de_player", "20_de_theme" };
-        for (int i = 0; i < 4; i++)
+        static const char *const names[] = { "20_de_playback", "20_de_sound", "20_de_browsing", "20_de_player",
+                                             "20_de_theme" };
+        for (int i = 0; i < 5; i++)
         {
             tap(100, SET_Y + i * SET_H + 10);
             run(20);
@@ -1794,7 +1886,7 @@ int main(int argc, char **argv)
             press(KEY_B);
             run(20);
         }
-        tap(100, SET_Y + 5 * SET_H + 10);
+        tap(100, SET_Y + 6 * SET_H + 10);
         run(20);
         shot("20_de_about");
         press(KEY_B);
@@ -1847,7 +1939,7 @@ int main(int argc, char **argv)
         // back to English
         tap(240, BAR_Y + 14);
         run(20);
-        tap(100, SET_Y + 4 * SET_H + 10);
+        tap(100, SET_Y + 5 * SET_H + 10);
         run(20);
         tap(100, SET_Y + 0 * SET_H + 10);
         check(app.set.lang == LANG_EN && strcmp(txt(S_SETTINGS), "Settings") == 0, "and back to English");

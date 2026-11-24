@@ -128,6 +128,7 @@ static void test_eq(const char *path, const Song *s)
     memcpy(r, s->right, n * 2);
     const int8_t g[EQ_BANDS] = { 6, -3, 4 };
     eq_set(g);
+    eq_set_output(5, true);         // the high cut and dither too
     EqState st;
     eq_state_reset(&st);
     for (uint32_t b = 0; b < s->h.block_count; b++)
@@ -158,6 +159,7 @@ static void test_eq(const char *path, const Song *s)
             {
                 const int8_t flat[EQ_BANDS] = { 0, 0, 0 };
                 eq_set(flat);
+                eq_set_output(0, false);
                 off_at = (int)b;
             }
         }

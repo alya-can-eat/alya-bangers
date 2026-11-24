@@ -1200,6 +1200,10 @@ static void set_change(int id)
         break;
     case SET_PAUSE_LID: app.set.pause_on_lid ^= 1; break;
     case SET_AUTOPLAY: app.set.play_at_start ^= 1; break;
+    case SET_DITHER:
+        app.set.dither ^= 1;
+        eq_set_output(app.set.highcut, app.set.dither);
+        break;
     case SET_LR_LID: app.set.lr_skip_lid ^= 1; break;
     case SET_RG:
         app.set.rg_mode = (app.set.rg_mode + 1) % RG_MODES;
@@ -1339,6 +1343,31 @@ static void set_back(void)
 }
 
 // A row of the settings page that's showing: open its page or change it.
+// The high cut's slider at a position: 0 .. 7 its edges (12.0 .. 15.5 kHz),
+// 8 off (the right end).
+static void highcut_to(int pos)
+{
+    pos = pos < 0 ? 0 : (pos > EQ_HIGHCUT_STEPS ? EQ_HIGHCUT_STEPS : pos);
+    int k = pos == EQ_HIGHCUT_STEPS ? 0 : pos + 1;
+    if (k == app.set.highcut)
+        return;
+    app.set.highcut = (uint8_t)k;
+    eq_set_output(app.set.highcut, app.set.dither);
+    touch_state();
+    redraw = true;
+}
+
+static int highcut_pos(void)
+{
+    return app.set.highcut ? app.set.highcut - 1 : EQ_HIGHCUT_STEPS;
+}
+
+static void highcut_at(int x)
+{
+    int step = (SLIDER_X1 - SLIDER_X0) / EQ_HIGHCUT_STEPS;
+    highcut_to((x - SLIDER_X0 + step / 2) / step);
+}
+
 static void set_activate(int i)
 {
     if (i < 0 || i >= ui_set_count(app.set_page))
@@ -1797,8 +1826,8 @@ static void tap_settings(int x, int y)
         else if (x < 112)
             set_back();                 // ‹
     }
-    else if (y >= SET_Y && y < SET_Y + ui_set_count(app.set_page) * SET_H)
-        set_activate((y - SET_Y) / SET_H);
+    else if (ui_set_row_at(app.set_page, y) >= 0)
+        set_activate(ui_set_row_at(app.set_page, y));
     redraw = true;
 }
 
@@ -1893,6 +1922,14 @@ static void touch_down(int x, int y)
     else if (app.overlay == OV_SETTINGS && app.set_page == PAGE_THEME && app.page_t == TAB_TICKS && y >= 20
              && theme_touch(x, y, true))
         tp.held = true;
+    else if (app.overlay == OV_SETTINGS && app.page_t == TAB_TICKS && ui_set_row_at(app.set_page, y) >= 0
+             && ui_set_item(app.set_page, ui_set_row_at(app.set_page, y))->kind == SI_SLIDER)
+    {
+        // the slider: where the stylus is, then follows it
+        app.slider_drag = true;
+        highcut_at(x);
+        tp.held = true;
+    }
     else if (app.overlay == OV_EQ && oy == PANEL_DOWN && !app.eq_ask && x > EQ_LIST_W && y >= 20 && y < EQ_LINE_Y)
     {
         // a slider: where the stylus is, then follows it
@@ -1936,6 +1973,8 @@ static void touch_move(int x, int y)
         theme_touch(x, y, false);
     else if (app.eq_drag_band >= 0)
         eq_band_to(app.eq_drag_band, eq_db_at(y));
+    else if (app.slider_drag)
+        highcut_at(x);
     else if (app.eq_drag_from >= 0)
     {
         int to = y < EQ_OWN_Y ? 0 : (y - EQ_OWN_Y) / ROW_H;
@@ -2007,6 +2046,8 @@ static void touch_up(void)
     }
     else if (app.eq_drag_band >= 0)
         app.eq_drag_band = -1;
+    else if (app.slider_drag)
+        app.slider_drag = false;
     else if (app.eq_drag_from >= 0)
     {
         eq_move(app.eq_drag_from, app.eq_drag_to);
@@ -2085,6 +2126,9 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
                 theme_apply();
             }
         }
+        else if (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
+                 && ui_set_item(app.set_page, app.menu_sel)->kind == SI_SLIDER && (rep & (KEY_LEFT | KEY_RIGHT)))
+            highcut_to(highcut_pos() + ((rep & KEY_RIGHT) ? 1 : -1));     // the slider: Left reaches lower
         else if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
             set_back();
         else if (ui_set_count(app.set_page) > 0)
@@ -2308,6 +2352,10 @@ static void restore(void)
         if (app.set.eq_gain[b] < EQ_MIN || app.set.eq_gain[b] > EQ_MAX)
             app.set.eq_gain[b] = 0;
     eq_set(app.set.eq_gain);
+    if (app.set.highcut > EQ_HIGHCUT_STEPS)
+        app.set.highcut = 0;
+    app.set.dither = app.set.dither ? 1 : 0;
+    eq_set_output(app.set.highcut, app.set.dither);
     palette_make(&app.theme);
     lib_group_artists(app.set.case_sensitive);
     if (!ok || !r.path[0] || !lib_loaded())
@@ -2632,7 +2680,9 @@ static void app_tick(void)
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
     bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && app.presets_open;
-    int menu_target = app.ov_vis == OV_SETTINGS && !presets ? app.menu_sel * SET_H
+    int menu_target = app.ov_vis == OV_SETTINGS && !presets
+                      ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
+                         ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)
                       : (app.ov_vis == OV_FILTER && app.fpage >= 0 ? (app.menu_sel - app.fscroll) * 16 : app.menu_sel * 16);
     static int fpage_was = -1;
     bool page_changed = app.set_page != page_was || app.fpage != fpage_was;

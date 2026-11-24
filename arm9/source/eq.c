@@ -25,10 +25,24 @@
 
 #define WORK 512                    // samples per pass
 
+#define STEP (64 << 12)             // one step of the DS's 10 bits, x 4096
+
 static int8_t gains[EQ_BANDS];
 static const int32_t *coef[EQ_BANDS];   // NULL: the band is at 0 dB, skipped
-static int32_t pregain = 32768;     // Q15
+static int32_t band_pregain = 32768;    // Q15: what the bands need
+static int32_t pregain = 32768;     // and with the high cut's margin
+static const int32_t (*highcut)[5];     // the high cut's two biquads, NULL: off
+static int highcut_step;
+static bool dither;
+static uint8_t out_gen;             // changes with the output stages
 static int32_t work[WORK] DTCM_BSS;
+
+// The high cut is steep: on loud songs it rings up to about +1 dB above
+// full scale (measured on band-limited masters), so 1 dB more down then.
+static void set_pregain(void)
+{
+    pregain = highcut ? (band_pregain * 29205) >> 15 : band_pregain;   // 29205 = 32768 x 10^(-1/20)
+}
 
 // |H(w)|^2 of one biquad from the grid's cos/sin.
 static float power(const int32_t *c, const float *g)
@@ -50,9 +64,12 @@ void eq_set(const int8_t gain[EQ_BANDS])
         coef[b] = g ? eq_coef[b][g - EQ_MIN] : NULL;
         on |= g != 0;
     }
-    pregain = 32768;
+    band_pregain = 32768;
     if (!on)
+    {
+        set_pregain();
         return;
+    }
     // the loudest point of the curve (cuts only: just above 1 here and there,
     // from rounding), and 0.25 dB more for the points between the grid's
     float peak = 1.0f;
@@ -69,7 +86,8 @@ void eq_set(const int8_t gain[EQ_BANDS])
     float r = peak > 4.0f ? peak / 4.0f : peak;
     for (int i = 0; i < 12; i++)
         r = 0.5f * (r + peak / r);
-    pregain = (int32_t)(32768.0f / r / 1.0292f);
+    band_pregain = (int32_t)(32768.0f / r / 1.0292f);
+    set_pregain();
 }
 
 void eq_get(int8_t gain[EQ_BANDS])
@@ -77,9 +95,36 @@ void eq_get(int8_t gain[EQ_BANDS])
     memcpy(gain, gains, sizeof(gains));
 }
 
-bool eq_active(void)
+bool eq_bands_active(void)
 {
     return coef[0] || coef[1] || coef[2];
+}
+
+bool eq_active(void)
+{
+    return eq_bands_active() || highcut || dither;
+}
+
+void eq_set_output(int step, bool dith)
+{
+    step = step < 0 || step > EQ_HIGHCUT_STEPS ? 0 : step;
+    if (step == highcut_step && dith == dither)
+        return;
+    highcut_step = step;
+    highcut = step ? eq_highcut[step - 1] : NULL;
+    dither = dith;
+    set_pregain();
+    out_gen++;                      // a stage switched on starts from silence
+}
+
+int eq_highcut_edge10(int step)
+{
+    return step >= 1 && step <= EQ_HIGHCUT_STEPS ? eq_highcut_edge[step - 1] : 0;
+}
+
+int eq_highcut_clean10(int step)
+{
+    return step >= 1 && step <= EQ_HIGHCUT_STEPS ? eq_highcut_clean[step - 1] : 0;
 }
 
 int32_t eq_pregain(void)
@@ -90,6 +135,42 @@ int32_t eq_pregain(void)
 void eq_state_reset(EqState *st)
 {
     memset(st, 0, sizeof(*st));
+    st->rng[0] = 0x9E3779B9u;
+    st->rng[1] = 0x7F4A7C15u;
+    st->gen = out_gen;
+}
+
+// Round to the DS's 10 bits with TPDF dither (two random numbers, together
+// -1..+1 step) and the rounding error fed back, shaped (eq_tables.h).
+// The samples come out as multiples of 64: the hardware's cut is exact.
+ARM_CODE ITCM_CODE static void to_10bit(EqState *st, int ch, const int32_t *x, int16_t *out, int n)
+{
+    int32_t e1 = st->ns[ch][0], e2 = st->ns[ch][1], e3 = st->ns[ch][2];
+    uint32_t r = st->rng[ch];
+    for (int i = 0; i < n; i++)
+    {
+        int32_t v = x[i] - (int32_t)(((int64_t)EQ_NS_C1 * e1 + (int64_t)EQ_NS_C2 * e2
+                                      + (int64_t)EQ_NS_C3 * e3) >> 12);
+        r ^= r << 13;
+        r ^= r >> 17;
+        r ^= r << 5;
+        int32_t d = (int32_t)(((r & 0xFFFF) + (r >> 16)) << 2) - STEP;
+        int32_t q = (v + d + STEP / 2) & ~(STEP - 1);
+        if (q > 511 * STEP)
+            q = 511 * STEP;
+        else if (q < -512 * STEP)
+            q = -512 * STEP;
+        int32_t e = q - v;
+        e = e > 2 * STEP ? 2 * STEP : (e < -2 * STEP ? -2 * STEP : e);   // clipped: don't let it run away
+        e3 = e2;
+        e2 = e1;
+        e1 = e;
+        out[i] = (int16_t)(q >> 12);
+    }
+    st->ns[ch][0] = e1;
+    st->ns[ch][1] = e2;
+    st->ns[ch][2] = e3;
+    st->rng[ch] = r;
 }
 
 // One band over the work buffer.
@@ -119,6 +200,13 @@ ARM_CODE ITCM_CODE void eq_run(EqState *st, int16_t *buf, int n, int ch)
 {
     if (!eq_active())
         return;
+    if (st->gen != out_gen)
+    {
+        // a stage was switched: the high cut and the dither start afresh
+        memset(st->hc, 0, sizeof(st->hc));
+        memset(st->ns, 0, sizeof(st->ns));
+        st->gen = out_gen;
+    }
     const int32_t g = pregain;
     while (n > 0)
     {
@@ -129,11 +217,19 @@ ARM_CODE ITCM_CODE void eq_run(EqState *st, int16_t *buf, int n, int ch)
         for (int b = 0; b < EQ_BANDS; b++)
             if (coef[b])
                 biquad(coef[b], &st->b[ch][b], work, m);
-        for (int i = 0; i < m; i++)
+        if (highcut)
         {
-            int32_t v = (work[i] + 2048) >> 12;
-            buf[i] = (int16_t)(v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
+            biquad(highcut[0], &st->hc[ch][0], work, m);
+            biquad(highcut[1], &st->hc[ch][1], work, m);
         }
+        if (dither)
+            to_10bit(st, ch, work, buf, m);
+        else
+            for (int i = 0; i < m; i++)
+            {
+                int32_t v = (work[i] + 2048) >> 12;
+                buf[i] = (int16_t)(v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
+            }
         buf += m;
         n -= m;
     }

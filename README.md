@@ -32,6 +32,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 - Player with a turning record and a visualizer
 - Queue you can edit
 - 3-band equalizer with your own profiles
+- High cut and dither for cleaner highs
 - Ratings and plays
 - Themes with your own colours
 - English and German
@@ -176,6 +177,10 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 - Every page has an icon, so you can find the language without being able to read it: the globe (🌐) leads to Regional, then Language.
 - Pages:
   - Playback: ReplayGain, play on launch, pause when the lid closes, L/R skip with the lid closed
+  - Sound: for the harsh sound very high parts (cymbals, hi-hats) can get on the DS. Both off by default, try what helps with your headphones.
+    - High cut: a steep filter on the very highs. The slider's right end is off, the further left the lower it cuts (15.5 down to 12.0 kHz). The line under it says below what nothing gets mirrored.
+    - Dither (10 bits): the DS's rounding becomes a quiet hiss instead of a harsh edge.
+    - How both work is under [How playback works](#how-playback-works).
   - Browsing: case-sensitive names, scroll all long rows
   - Player: time on the right (length or time left), cover background, shuffle by rating
   - Theme:
@@ -217,6 +222,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 
 - In menus: Up/Down, A chooses, B closes.
 - In the equalizer: X switches between the profiles (Up/Down) and the sliders (Left/Right: which one, Up/Down: 1 dB). A saves, Y deletes, B closes.
+- On the high cut's slider (Settings › Sound): Left/Right move it, B goes back.
 - Menus slide up when they open and down when they close, buttons light up when tapped, and play and pause morph into each other.
 
 > [!NOTE]
@@ -284,6 +290,19 @@ Technical stuff, in case you're curious :-D
   - The inner loop runs from ITCM in ARM mode, on a buffer in DTCM. Bands at 0 dB are skipped, so Flat costs nothing. All 3 bands take about 12 % of the ARM9 (counted from the compiled loop, not measured on the DS yet).
   - The loudest point of the curve (+0.25 dB) is worked out when a slider moves, and the input is turned down by that much.
 
+<img src="docs/img/sound.png" width="256" align="right" alt="Settings › Sound: the high cut at 15.0 kHz, no mirrors below 17.0 kHz; Dither on">
+
+- High cut and dither (Settings › Sound):
+  - The DS plays 10 bits (PWM at 32.768 kHz, see GBATEK). The hardware just cuts off the lower 6 bits and holds every sample until the next one.
+  - Holding mirrors very high sounds to 32.7 kHz minus their frequency (15 kHz also shows up at 17.7 kHz). The cut adds distortion that folds back down as tones that aren't in the music. That's the harsh sound on cymbals.
+  - High cut: a 4th-order elliptic low-pass (0.1 dB ripple, at least 40 dB down), two more biquads after the bands. Its edge goes from 12.0 to 15.5 kHz in 0.5 kHz steps. What's left above the edge only mirrors above 16.8 to 18.7 kHz (the line under the slider).
+  - While the high cut is on, the input is turned down 1 dB. Steep filters overshoot a bit, on loud masters about +1 dB.
+  - Dither: TPDF dither and 3rd-order noise shaping round to 10 bits before the hardware does, so its cut changes nothing. The error becomes an even hiss, pushed away from around 3.5 kHz (where hearing is most sensitive) to the top.
+  - On a very quiet 12 kHz tone the distortion that folds back drops from −33 dB to −54 dB with dither (`test_eq`).
+  - They run in the same pass as the equalizer. High cut about 7 %, dither about 2 % of the ARM9 (counted, not measured on the DS yet). Off costs nothing.
+
+<br clear="right">
+
 ### stats.bin:
 
 - 16-byte header: `ABST`, version 1, header size, record count, record size
@@ -303,7 +322,7 @@ Technical stuff, in case you're curious :-D
 python3 tests/card/make_test_card.py /tmp/testcard   # the test library, made up
 cd tests/host
 make test_player && ./test_player "/tmp/testcard/card/music/CD/Track 01.dsa"   # checks the audio sample by sample
-make test_eq && ./test_eq   # the equalizer against an exact reference, its curve, no clipping
+make test_eq && ./test_eq   # the equalizer, high cut and dither against exact references, curves, no clipping
 make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks it, screenshots in shots/
 ```
 
@@ -317,7 +336,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - README pictures: `tests/demo/make_demo_card.py` builds the made-up library, the screen test's demo mode (`./screens CARD out demo`) shoots the screens and films, and `tools/gen_readme_images.py` turns them into `docs/img/`. (The three commands are in the script.)
 - `tools/gen_builtin_font.py`: the built-in glyphs (ASCII, UI symbols, icons, the umlauts and the keyboards' letters) from dsconv's copy of Unifont
 - `tools/gen_fold_tables.py`: the tables search uses to ignore accents
-- `tools/gen_eq_tables.py`: the equalizer's filters for every gain
+- `tools/gen_eq_tables.py`: the equalizer's filters for every gain, the high cut's filters and the noise shaping (needs scipy, e.g. `nix-shell -p python3Packages.scipy`)
 - `tools/gen_default_cover.py`: the picture for songs without a cover
 - `tools/gen_icon.py`: the icon of the `.nds` file
 
