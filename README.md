@@ -4,7 +4,7 @@ Music player for the Nintendo DS, requires a flashcart. :-)
 Version pre-1.0, DS Edition. 1.0 is in the making.
 
 > [!NOTE]
-> There's no ready-made `.nds` to download yet. If you want to try it, build it yourself (see [Building](#building)).
+> There's nothing to download yet. With 1.0 the `.nds` and the converter will be in the [releases](../../releases). Until then build it yourself (see [Building](#building)).
 
 <table>
 <tr>
@@ -36,6 +36,7 @@ Your music gets put on the card from the PC with [alya-bangers-dsconv](#converte
 - Ratings and plays
 - Themes with your own colours
 - English and German
+- A converter with a window for Windows and Linux
 
 ## Browsing:
 
@@ -283,7 +284,7 @@ With the official BlocksDS container. You need Podman or Docker for it.
 
 This makes `alya-bangers.nds`. The first run downloads the image, which is about 430 MB.
 
-GitHub Actions builds it the same way for the releases (see [Generated stuff](#generated-stuff)).
+GitHub Actions builds it the same way for the releases (see [Releasing](#releasing)).
 
 ## Testing in melonDS:
 
@@ -372,7 +373,24 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - `alya-bangers-dsconv/tools/build_app_icon.py`: the converter's icon, the same picture
 - `alya-bangers-dsconv/tools/build_window_font.py`: the converter's font, Unifont as squares (needs fontTools)
 - `alya-bangers-dsconv/tools/window_pictures.py`: the converter's pictures here
-- Releases: on a `v…` tag `.github/workflows/release.yml` builds `alya-bangers.nds` (with `./build.sh`), the converter's `.exe` and AppImage (`alya-bangers-dsconv/packaging/build.py`, which also tries them) and puts all three into a draft release. Run by hand (Actions › release › Run workflow) it just makes the files.
+
+## Releasing:
+
+1. Change the version (e.g. `pre-1.0` and `1.0.0.dev0` both become `1.0`) in:
+   - `arm9/source/app.h` (`APP_VERSION`, shown on the About page)
+   - `alya-bangers-dsconv/src/alya_bangers_dsconv/constants.py`, `alya-bangers-dsconv/pyproject.toml` and `alya-bangers-dsconv/flake.nix` (the converter's window and file names)
+   - the top of this README
+2. Commit that and push a tag with the same version: `git tag v1.0 && git push origin v1.0`
+3. `.github/workflows/release.yml` then builds:
+   - `alya-bangers.nds`, with `./build.sh` in the BlocksDS container
+   - the converter's `.exe` and AppImage with `alya-bangers-dsconv/packaging/build.py`, which also tries both (converts a song, opens the window)
+   - and puts all three into a draft release.
+4. Try that `.nds` on the DS, then publish the release.
+
+> [!NOTE]
+> The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.
+
+Started by hand (Actions › release › Run workflow) it only makes the three files, without a release.
 
 ## Not there yet:
 
