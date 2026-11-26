@@ -6,7 +6,8 @@ Version pre-1.0, DS Edition. 1.0 is in the making.
 > [!NOTE]
 > There's no release yet. With 1.0 the `.nds` and the converter will be in the [releases](../../releases).
 >
-> Until then there are pre-release builds in [GitHub Actions](../../actions/workflows/release.yml): open the newest run, the files are at the bottom under *Artifacts* (`nds`, `converter-Windows`, `converter-Linux`). Downloading them needs a GitHub account, and they're kept for 90 days. They aren't tested on a DS like a release is. Or build it yourself (see [Building](#building)).
+> There are pre-release builds in [GitHub Actions](../../actions/workflows/release.yml): open the newest run, the files are at the bottom under *Artifacts* (`nds`, `converter-Windows`, `converter-Linux`). Downloading them needs a GitHub account, and they're kept for 90 days. They are less tested than a release.
+> If you want to build it yourself (see [Building](#building)).
 
 <table>
 <tr>
