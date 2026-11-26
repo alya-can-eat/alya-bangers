@@ -42,7 +42,10 @@ bool fifoSendDatamsg(u32 channel, u32 num_bytes, u8 *data)
         case STREAM_CMD_STOP:
             sim_hw.running = false;
             sim_hw.stops++;
-            // The real ARM7 answers from its FIFO interrupt; here, right away.
+            sim_hw.last_fade = c.fade_frames;
+            // The real ARM7 answers from its FIFO interrupt; here, right away. The
+            // sample it stopped at within the next block: whatever the test set.
+            event_handler(STREAM_EVT_MAKE(STREAM_EVT_FRAME, c.generation, sim_hw.stop_frame), event_userdata);
             event_handler(STREAM_EVT_MAKE(STREAM_EVT_STOPPED, c.generation, sim_hw.played),
                           event_userdata);
             break;

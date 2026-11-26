@@ -10,6 +10,10 @@
 // The equalizer runs over the samples in the ring, in place, at most
 // EQ_LEAD blocks ahead of the one playing: reading stays up to 8 blocks
 // ahead, but a change of the equalizer is heard within half a second.
+//
+// Pause fades out (the ARM7 turns the volume down) and tells us the exact
+// sample it stopped at. Resume starts the hardware at that block's start, with
+// silence up to that sample and a fade in from there, so nothing is heard twice.
 
 #include <limits.h>
 #include <stdio.h>
@@ -30,6 +34,7 @@
 #define EQ_LEAD         4                       // blocks equalized ahead of the one playing
 #define EQ_URGENT       2                       // fewer ready: all that's missing at once
 #define EQ_STEP         1024                    // frames per call otherwise
+#define FADE_FRAMES     480                     // pause and resume: 15 ms
 
 static int16_t ring_l[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
 static int16_t ring_r[RING_BLOCKS * BLOCK_FRAMES] __attribute__((aligned(32)));
@@ -46,6 +51,8 @@ static bool running;                // hardware is playing
 static uint32_t base_block;         // song block that sits in ring slot 0 at start
 static uint32_t loaded;             // blocks loaded since start
 static uint32_t paused_block;       // where to continue after a pause
+static uint32_t paused_frame;       // and the sample in that block
+static volatile uint32_t stop_frame;    // from the ARM7: samples played of the block after `played`
 static volatile uint32_t played;    // blocks finished since start, from the ARM7
 static volatile bool stop_ack;
 static uint8_t generation;
@@ -61,8 +68,14 @@ static void event_handler(u32 value, void *userdata)
 {
     if (STREAM_EVT_GEN(value) != (generation & 0xF))
         return; // left over from a previous start
+    uint32_t type = value & STREAM_EVT_TYPE_MASK;
+    if (type == STREAM_EVT_FRAME)
+    {
+        stop_frame = STREAM_EVT_COUNT(value);
+        return;
+    }
     played = STREAM_EVT_COUNT(value);
-    if ((value & STREAM_EVT_TYPE_MASK) == STREAM_EVT_STOPPED)
+    if (type == STREAM_EVT_STOPPED)
         stop_ack = true;
 }
 
@@ -76,20 +89,28 @@ static void send_cmd(const StreamCmd *c)
     fifoSendDatamsg(FIFO_STREAM_CMD, sizeof(*c), (u8 *)c);
 }
 
-// Stop the hardware and wait until the ARM7 has confirmed, so `played` is final
-// and the rings may be overwritten.
-static void hw_stop(void)
+// Stop the hardware (after fading out over `fade` samples) and wait until the
+// ARM7 has confirmed, so `played` and `stop_frame` are final and the rings may
+// be overwritten.
+static void hw_stop_fade(uint16_t fade)
 {
     if (!running)
         return;
     StreamCmd c = { 0 };
     c.cmd = STREAM_CMD_STOP;
     c.generation = generation;
+    c.fade_frames = fade;
     stop_ack = false;
+    stop_frame = 0;
     send_cmd(&c);
-    for (int i = 0; i < 20000 && !stop_ack; i++)
+    for (int i = 0; i < 60000 && !stop_ack; i++)
         swiDelay(100);
     running = false;
+}
+
+static void hw_stop(void)
+{
+    hw_stop_fade(0);
 }
 
 static void load_block(uint32_t rel)
@@ -180,7 +201,23 @@ static void eq_ahead(void)
     }
 }
 
-static void hw_start(uint32_t block)
+// Silence before sample `from` of the first block, then a fade in, in both
+// rings (after the equalizer, which already ran over these blocks).
+static void fade_in(uint32_t from)
+{
+    int16_t *rings[2] = { ring_l, ring_r };
+    for (int c = 0; c < (hdr.channels == 2 ? 2 : 1); c++)
+    {
+        int16_t *x = rings[c];
+        memset(x, 0, from * 2);
+        for (uint32_t i = 0; i < FADE_FRAMES; i++)
+            x[from + i] = (int16_t)((int32_t)x[from + i] * (int32_t)i / FADE_FRAMES);
+        DC_FlushRange(x, (from + FADE_FRAMES) * 2);
+    }
+}
+
+// Start at `block`; with `fade`, from sample `from` of it with a fade in.
+static void hw_start_at(uint32_t block, uint32_t from, bool fade)
 {
     hw_stop();
 
@@ -200,6 +237,8 @@ static void hw_start(uint32_t block)
     if (eq_was_on)
         for (; eq_blk < EQ_URGENT; eq_blk++)
             eq_part(eq_blk, 0, BLOCK_FRAMES);
+    if (fade)
+        fade_in(from < BLOCK_FRAMES ? from : 0);
 
     StreamCmd c = { 0 };
     c.cmd = STREAM_CMD_START;
@@ -212,6 +251,11 @@ static void hw_start(uint32_t block)
     c.generation = generation;
     send_cmd(&c);
     running = true;
+}
+
+static void hw_start(uint32_t block)
+{
+    hw_start_at(block, 0, false);
 }
 
 static void close_file(void)
@@ -270,6 +314,7 @@ bool player_open(const char *path, uint32_t start_ms, bool play, char *err, int 
     else
     {
         paused_block = block;
+        paused_frame = 0;
         state = PLAYER_PAUSED;
     }
     return true;
@@ -324,13 +369,14 @@ void player_toggle_pause(void)
 {
     if (state == PLAYER_PLAYING)
     {
-        hw_stop();
-        paused_block = base_block + played; // resumes at the start of the block that was playing
+        hw_stop_fade(FADE_FRAMES);
+        paused_block = base_block + played;
+        paused_frame = stop_frame < BLOCK_FRAMES ? stop_frame : 0;
         state = PLAYER_PAUSED;
     }
     else if (state == PLAYER_PAUSED)
     {
-        hw_start(paused_block);
+        hw_start_at(paused_block, paused_frame, true);
         state = PLAYER_PLAYING;
     }
 }
@@ -344,6 +390,7 @@ static void jump_to_block(int64_t block)
     if (state == PLAYER_PAUSED)
     {
         paused_block = block;
+        paused_frame = 0;
     }
     else if (state == PLAYER_PLAYING || state == PLAYER_ENDED)
     {
@@ -455,7 +502,7 @@ uint32_t player_position_ms(void)
 {
     if (state == PLAYER_IDLE)
         return 0;
-    uint64_t frames = (uint64_t)current_block() * BLOCK_FRAMES;
+    uint64_t frames = (uint64_t)current_block() * BLOCK_FRAMES + (state == PLAYER_PAUSED ? paused_frame : 0);
     if (frames > hdr.frame_count)
         frames = hdr.frame_count;
     return (uint32_t)(frames * 1000 * hdr.timer_divider / hdr.sound_clock_hz);

@@ -17,10 +17,14 @@
 #define CH_LEFT         0
 #define CH_RIGHT        1
 #define STREAM_TIMER    1   // timer 0 is used by Maxmod, 2/3 by Wi-Fi/RTC (unused here)
+#define FADE_STEP       8   // samples per volume step while fading out
 
 static volatile uint32_t blocks_played;
 static volatile uint8_t generation;
 static volatile bool exit_loop;
+static bool streaming;
+static uint8_t cur_volume = 127;
+static uint16_t block_frames = 4096;
 
 static void power_button_callback(void)
 {
@@ -34,13 +38,61 @@ static void stream_timer_irq(void)
                     STREAM_EVT_MAKE(STREAM_EVT_BLOCK, generation, blocks_played));
 }
 
-static void stream_stop(void)
+// Samples played of the current block: the timer counts up from
+// 0x10000 - block_frames and starts over at the end of each block.
+static uint32_t block_pos(void)
+{
+    return (uint16_t)(TIMER_DATA(STREAM_TIMER) - (0x10000 - block_frames));
+}
+
+// Stop. Returns the samples played of the block after the last one counted.
+static uint32_t stream_stop(void)
 {
     int ime = enterCriticalSection();
-    TIMER_CR(STREAM_TIMER) = 0;
+    TIMER_CR(STREAM_TIMER) = 0;     // first: the count holds still from here on
     REG_SOUNDXCNT(CH_LEFT) = 0;
     REG_SOUNDXCNT(CH_RIGHT) = 0;
+    uint32_t pos = streaming ? block_pos() : 0;
+    // A block that ended while interrupts were off (during a fade) is counted
+    // here, so no event for it comes after STOPPED.
+    if (streaming && (REG_IF & IRQ_TIMER(STREAM_TIMER)))
+    {
+        blocks_played++;
+        REG_IF = IRQ_TIMER(STREAM_TIMER);
+    }
+    streaming = false;
     leaveCriticalSection(ime);
+    return pos < block_frames ? pos : 0;
+}
+
+// Turn the volume down to 0 over `frames` samples, counted by the stream
+// timer, so a pause doesn't cut the wave off with a click.
+static void stream_fade_out(uint32_t frames)
+{
+    uint32_t steps = frames / FADE_STEP;
+    if (!streaming || steps == 0)
+        return;
+    uint32_t last = block_pos(), elapsed = 0;
+    for (uint32_t i = 1; i <= steps; i++)
+    {
+        uint32_t spins = 0;
+        while (elapsed < i * FADE_STEP)
+        {
+            uint32_t now = block_pos();
+            if (now == last)
+            {
+                if (++spins > 100000)
+                    return;     // the timer doesn't move: just stop without the fade
+                continue;
+            }
+            spins = 0;
+            elapsed += (now + block_frames - last) % block_frames;  // also across a block's end
+            last = now;
+        }
+        uint8_t v = (uint8_t)(cur_volume * (steps - i) / steps);
+        REG_SOUNDXVOL(CH_LEFT) = v;
+        REG_SOUNDXVOL(CH_RIGHT) = v;
+    }
 }
 
 static void stream_start(const StreamCmd *c)
@@ -49,6 +101,8 @@ static void stream_start(const StreamCmd *c)
 
     blocks_played = 0;
     generation = c->generation;
+    cur_volume = c->volume;
+    block_frames = (uint16_t)c->block_frames;
 
     uint32_t words = c->ring_bytes / 4;
     uint16_t tmr = (uint16_t)(0x10000 - c->timer_divider);
@@ -74,6 +128,7 @@ static void stream_start(const StreamCmd *c)
     REG_SOUNDXCNT(CH_LEFT) = cnt | SOUNDXCNT_PAN(0);
     REG_SOUNDXCNT(CH_RIGHT) = cnt | SOUNDXCNT_PAN(127);
     TIMER_CR(STREAM_TIMER) = TIMER_ENABLE | TIMER_IRQ_REQ | TIMER_DIV_1024;
+    streaming = true;
     leaveCriticalSection(ime);
 }
 
@@ -95,11 +150,16 @@ static void stream_cmd_handler(int bytes, void *userdata)
             stream_start(&c);
             break;
         case STREAM_CMD_STOP:
-            stream_stop();
+        {
+            stream_fade_out(c.fade_frames);
+            uint32_t pos = stream_stop();
+            fifoSendValue32(FIFO_STREAM_EVENT, STREAM_EVT_MAKE(STREAM_EVT_FRAME, c.generation, pos));
             fifoSendValue32(FIFO_STREAM_EVENT,
                             STREAM_EVT_MAKE(STREAM_EVT_STOPPED, c.generation, blocks_played));
             break;
+        }
         case STREAM_CMD_VOLUME:
+            cur_volume = c.volume;
             REG_SOUNDXVOL(CH_LEFT) = c.volume;
             REG_SOUNDXVOL(CH_RIGHT) = c.volume;
             break;

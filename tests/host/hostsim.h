@@ -18,6 +18,8 @@ typedef struct {
     uint8_t generation;
     uint32_t played;
     int starts, stops;
+    uint32_t stop_frame;    // set by a test: the sample within the next block a stop reports
+    uint16_t last_fade;     // fade_frames of the last stop
 } SimHardware;
 
 extern SimHardware sim_hw;

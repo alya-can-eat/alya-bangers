@@ -283,7 +283,10 @@ Technical stuff, in case you're curious :-D
   - While 3 or more blocks are ready ahead, the ARM9 reads one block per call (twice per frame), so the reading is spread out.
   - When fewer are ready, it reads everything that's missing at once.
   - The ARM7 (and with it the sound hardware) has priority on main RAM, so copying whole screens can't make the sound wait.
-- Pause and seek restart the stream at a block boundary (0.125 s steps).
+- Seek restarts the stream at a block boundary (0.125 s steps).
+- Pause and resume fade (15 ms each), so they don't click:
+  - Pause: the ARM7 turns the channels' volume down step by step, counting samples on the same timer, then stops and reports the exact sample.
+  - Resume: the stream starts at that block's beginning, silent up to that sample, and fades in from there. Nothing is heard twice.
 - Equalizer:
   - Runs on the samples in the ring, in place, at most 4 blocks (0.5 s) ahead of the one playing. The reading stays up to 8 blocks ahead, so a change is heard within half a second without reading anything again.
   - Biquads (RBJ Audio EQ Cookbook) with 32-bit coefficients from `arm9/source/eq_tables.h`, samples carried with 12 extra bits, 64-bit sums.
@@ -348,6 +351,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - Gapless playback
 - A date and time format of its own (right now it follows the language)
 - Arabic script (right to left, joined letters; Persian and Urdu with it)
+- A battery warning you can hear
 
 ## Licence:
 

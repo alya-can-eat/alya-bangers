@@ -86,6 +86,29 @@ static long play_and_identify(const Song *s, long expected)
     return -1;
 }
 
+// Play one block and check it's block b of the song, silent before sample
+// `from`, fading in over the next 480 samples (as the player does on resume).
+static bool play_faded_in(const Song *s, long b, uint32_t from)
+{
+    if (!sim_play_block(heard_l, heard_r) || b < 0 || b >= (long)s->h.block_count)
+        return false;
+    const int16_t *l = s->left + (size_t)b * BF, *r = s->right + (size_t)b * BF;
+    for (uint32_t i = 0; i < BF; i++)
+    {
+        int32_t el = l[i], er = r[i];
+        if (i < from)
+            el = er = 0;
+        else if (i < from + 480)
+        {
+            el = el * (int32_t)(i - from) / 480;
+            er = er * (int32_t)(i - from) / 480;
+        }
+        if (heard_l[i] != el || heard_r[i] != er)
+            return false;
+    }
+    return true;
+}
+
 static void test_straight(const char *path, const Song *s)
 {
     char err[64];
@@ -191,22 +214,46 @@ static void test_pause_seek(const char *path, const Song *s)
         CHECK(play_and_identify(s, next) == next, "block %ld", next);
     }
 
-    // Pause: no sound until resumed, then continue exactly where we were.
+    // Pause: fades out, no sound until resumed, then continue exactly where we
+    // were, fading in.
     player_toggle_pause();
     CHECK(player_state() == PLAYER_PAUSED && !sim_hw.running, "paused");
+    CHECK(sim_hw.last_fade == 480, "pause fades out over 480 samples (%u)", sim_hw.last_fade);
     uint32_t pos = player_position_ms();
     CHECK(pos == (uint32_t)((uint64_t)20 * BF * 1000 * 512 / 16756991), "pause position %lu",
           (unsigned long)pos);
     player_toggle_pause();
     CHECK(player_state() == PLAYER_PLAYING && sim_hw.running, "resumed");
-    for (int i = 0; i < 5; i++, next++)
+    player_service();
+    CHECK(play_faded_in(s, next, 0), "after resume: block %ld, fading in", next);
+    next++;
+    for (int i = 0; i < 4; i++, next++)
     {
         player_service();
         CHECK(play_and_identify(s, next) == next, "after resume: block %ld", next);
     }
 
+    // Paused in the middle of a block (sample 1000): the position says so, and
+    // the music goes on from that very sample, silent before it.
+    sim_hw.stop_frame = 1000;
+    player_toggle_pause();
+    sim_hw.stop_frame = 0;
+    pos = player_position_ms();
+    CHECK(pos == (uint32_t)(((uint64_t)next * BF + 1000) * 1000 * 512 / 16756991), "pause position %lu mid-block",
+          (unsigned long)pos);
+    player_toggle_pause();
+    player_service();
+    CHECK(play_faded_in(s, next, 1000), "resumed from sample 1000 of block %ld", next);
+    next++;
+    for (int i = 0; i < 3; i++, next++)
+    {
+        player_service();
+        CHECK(play_and_identify(s, next) == next, "then: block %ld", next);
+    }
+
     // +10 s = 80 blocks (327285 frames / 4096 = 79.9, rounded)
     player_seek_seconds(10);
+    CHECK(sim_hw.last_fade == 0, "seeking jumps right away, no fade");
     next += 80;
     for (int i = 0; i < 5; i++, next++)
     {
@@ -228,8 +275,7 @@ static void test_pause_seek(const char *path, const Song *s)
     player_seek_seconds(-1000);
     player_toggle_pause();
     player_service();
-    b = play_and_identify(s, 0);
-    CHECK(b == 0, "seek far back clamps to the start: heard %ld", b);
+    CHECK(play_faded_in(s, 0, 0), "seek far back clamps to the start, fading in");
 
     // Restart (L near the start of a song).
     for (int i = 0; i < 3; i++)

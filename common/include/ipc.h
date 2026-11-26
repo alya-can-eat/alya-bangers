@@ -17,7 +17,8 @@
 
 typedef enum {
     STREAM_CMD_START  = 1, // start both channels and the block timer
-    STREAM_CMD_STOP   = 2, // stop; ARM7 answers with STREAM_EVT_STOPPED
+    STREAM_CMD_STOP   = 2, // stop (after fading out, if fade_frames); ARM7 answers with
+                           // STREAM_EVT_FRAME, then STREAM_EVT_STOPPED
     STREAM_CMD_VOLUME = 3, // change channel volume while playing
 } StreamCmdType;
 
@@ -30,11 +31,14 @@ typedef struct {
     uint16_t timer_divider; // sound clock divider: 512 = 32728.5 Hz
     uint8_t  volume;        // channel volume, 0..127
     uint8_t  generation;    // echoed back in events, so stale events can be ignored
+    uint16_t fade_frames;   // STOP: turn the volume down to 0 over this many samples first
+    uint16_t reserved;
 } StreamCmd;
 
 // ARM7 -> ARM9 event word: [31:28] type, [27:24] generation, [23:0] count.
 #define STREAM_EVT_BLOCK        (0u << 28)  // count = blocks fully played since START
 #define STREAM_EVT_STOPPED      (1u << 28)  // count = blocks fully played when stopped
+#define STREAM_EVT_FRAME        (2u << 28)  // count = samples played of the next block when stopped
 #define STREAM_EVT_TYPE_MASK    (0xFu << 28)
 #define STREAM_EVT_GEN(v)       (((v) >> 24) & 0xF)
 #define STREAM_EVT_COUNT(v)     ((v) & 0xFFFFFF)
