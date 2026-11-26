@@ -28,9 +28,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 NAME = "alya-bangers-dsconv"
 sys.path.insert(0, str(ROOT / "src"))
-from alya_bangers_dsconv.constants import __version__  # noqa: E402
+from alya_bangers_dsconv.constants import version_label  # noqa: E402
 
-LABEL = "pre-1.0" if "dev" in __version__ else __version__
+LABEL = version_label()
 DIST = ROOT / "dist"
 RELEASE = DIST / "release"
 

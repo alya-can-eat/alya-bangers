@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from .constants import DATA_DIR, __version__
+from .constants import DATA_DIR, version_label
 from .convert import Hooks, Prepared, SetupError, execute, free_space, prepare, space_needed
 
 APP_NAME = "alya-bangers-dsconv"
@@ -432,8 +432,7 @@ class Window(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        version = "pre-1.0" if "dev" in __version__ else __version__
-        root.addWidget(header(APP_NAME, version, "♪"))
+        root.addWidget(header(APP_NAME, version_label(), "♪"))
 
         body = QVBoxLayout()
         body.setContentsMargins(16, 10, 16, 14)

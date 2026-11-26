@@ -379,16 +379,19 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 
 ## Releasing:
 
-1. Change the version (e.g. `1.0` becomes `1.1`) in:
+Between releases the version is the next one with "pre" in front: `pre-1.1` on the DS, `1.1.dev0` for the converter (its window shows `pre-1.1` too).
+
+1. Change the version (e.g. `pre-1.1` and `1.1.dev0` both become `1.1`) in:
    - `arm9/source/app.h` (`APP_VERSION`, shown on the About page)
    - `alya-bangers-dsconv/src/alya_bangers_dsconv/constants.py`, `alya-bangers-dsconv/pyproject.toml` and `alya-bangers-dsconv/flake.nix` (the converter's window and file names)
    - the top of this README
-2. Commit that and push a tag with the same version: `git tag v1.0 && git push origin v1.0`
+2. Commit that and push a tag with the same version: `git tag 1.1 && git push origin 1.1`
 3. `.github/workflows/release.yml` then builds:
-   - `alya-bangers.nds`, with `./build.sh` in the BlocksDS container
+   - `alya-bangers.nds`, with `./build.sh` in the BlocksDS container (in the release as `alya-bangers-1.1.nds`)
    - the converter's `.exe` and AppImage with `alya-bangers-dsconv/packaging/build.py`, which also tries both (converts a song, opens the window)
    - and puts all three into a draft release.
-4. Try that `.nds` on the DS, then publish the release.
+4. Try that `.nds` on the DS, give the release a title, then publish it.
+5. Set the next pre-version (`pre-1.2`, `1.2.dev0`), so builds in between don't look like the release.
 
 > [!NOTE]
 > The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.

@@ -13,7 +13,7 @@
       packages = forAll (pkgs: rec {
         alya-bangers-dsconv = pkgs.python3Packages.buildPythonApplication {
           pname = "alya-bangers-dsconv";
-          version = "1.0";
+          version = "1.1.dev0";
           pyproject = true;
           src = ./.;
           build-system = [ pkgs.python3Packages.setuptools ];

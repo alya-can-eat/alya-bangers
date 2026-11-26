@@ -1,6 +1,12 @@
 """Numbers shared by the converter, the index and the DS player."""
 
-__version__ = "1.0"
+__version__ = "1.1.dev0"
+
+
+def version_label(v: str = __version__) -> str:
+    """As people see it: "1.1.dev0" (between releases) is "pre-1.1"."""
+    return "pre-" + v.split(".dev")[0] if ".dev" in v else v
+
 
 # Bump FORMAT_VERSION whenever the .dsa layout changes, CONVERTER_REVISION when the
 # converter produces different output with the same layout. Either one makes the

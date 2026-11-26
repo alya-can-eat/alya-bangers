@@ -1,13 +1,13 @@
 # Builds alya-bangers.nds (in the official BlocksDS container, like ./build.sh)
 # and alya-bangers-dsconv for Windows (one .exe) and Linux (an AppImage), tries
-# the converter on both, and on a version tag (v1.0, …) puts all three into a
-# draft release. Run it by hand (Actions › release › Run workflow) to just get
+# the converter on both, and on a version tag (1.1, or v1.1) puts all three
+# into a draft release. Run it by hand (Actions › release › Run workflow) to just get
 # the files, without a release.
 name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["[0-9]*", "v[0-9]*"]
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,7 @@ jobs:
 
   release:
     needs: [nds, converter]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -89,6 +89,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # the .nds with its version, like alya-bangers-1.0.nds
+          mv out/alya-bangers.nds "out/alya-bangers-${GITHUB_REF_NAME#v}.nds"
           gh release create "$GITHUB_REF_NAME" out/* --draft --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes "alya-bangers.nds for the DS, and the converter for Windows (.exe) and Linux (.AppImage)."

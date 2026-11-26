@@ -59,6 +59,11 @@ def test_colours_and_font_are_the_ds_apps(app):
     assert app.font().family() == "Unifont alya-bangers" and app.font().pixelSize() == 16
 
 
+def test_version_label():
+    from alya_bangers_dsconv.constants import version_label
+    assert version_label("1.1.dev0") == "pre-1.1" and version_label("1.0") == "1.0"
+
+
 def test_card_folder(tmp_path):
     assert gui.output_for(tmp_path / "DSPICO") == tmp_path / "DSPICO" / "music"
     assert gui.output_for(tmp_path / "DSPICO" / "Music") == tmp_path / "DSPICO" / "Music"

@@ -80,7 +80,7 @@
 #define HINGE       16              // the gap between the screens, for the results moving across
 
 #define APP_NAME    "alya-bangers"
-#define APP_VERSION "1.0"
+#define APP_VERSION "pre-1.1"
 #define APP_URL     "github.com/alya-can-eat"
 // Animations run on real time (vblanks, 60 per second), so they take as long
 // on the DS as planned even when it draws fewer frames.
