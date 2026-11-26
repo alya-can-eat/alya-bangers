@@ -10,16 +10,17 @@ from pathlib import Path
 from .constants import __version__
 
 USAGE = """\
-dsconv SOURCE OUTPUT [options]      convert a music folder for the DS
-dsconv inspect FILE.dsa [--cover X.png]
-dsconv export FILE.dsa OUT.wav
-dsconv index OUTPUT                 rebuild library index and font only
+alya-bangers-dsconv                              open the window
+alya-bangers-dsconv SOURCE OUTPUT [options]      convert a music folder for the DS
+alya-bangers-dsconv inspect FILE.dsa [--cover X.png]
+alya-bangers-dsconv export FILE.dsa OUT.wav
+alya-bangers-dsconv index OUTPUT                 rebuild library index and font only
 """
 
 
 def _convert(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
-        prog="dsconv", usage=USAGE,
+        prog="alya-bangers-dsconv", usage=USAGE,
         description="Convert a music folder into .dsa files for the DS player, keeping the "
                     "folder structure. Run it again any time: only new or changed files are converted.")
     p.add_argument("source", type=Path, help="your music folder")
@@ -34,7 +35,7 @@ def _convert(argv: list[str]) -> int:
     p.add_argument("--force", action="store_true", help="reconvert everything")
     p.add_argument("--no-index", action="store_true", help="skip building the library index and font")
     p.add_argument("-q", "--quiet", action="store_true", help="only print problems and the summary")
-    p.add_argument("--version", action="version", version=f"dsconv {__version__}")
+    p.add_argument("--version", action="version", version=f"alya-bangers-dsconv {__version__}")
     a = p.parse_args(argv)
     from .convert import run_convert
     return run_convert(a.source, a.output, dry_run=a.dry_run, yes=a.yes, delete=a.delete,
@@ -42,7 +43,7 @@ def _convert(argv: list[str]) -> int:
 
 
 def _inspect(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="dsconv inspect", description="Show the header and tags of a .dsa file.")
+    p = argparse.ArgumentParser(prog="alya-bangers-dsconv inspect", description="Show the header and tags of a .dsa file.")
     p.add_argument("file", type=Path)
     p.add_argument("--cover", type=Path, help="also save the cover as a PNG")
     a = p.parse_args(argv)
@@ -76,7 +77,7 @@ def _inspect(argv: list[str]) -> int:
 
 
 def _export(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="dsconv export",
+    p = argparse.ArgumentParser(prog="alya-bangers-dsconv export",
                                 description="Write the audio of a .dsa file as WAV, to listen on the PC.")
     p.add_argument("file", type=Path)
     p.add_argument("out", type=Path)
@@ -94,7 +95,7 @@ def _export(argv: list[str]) -> int:
 
 
 def _index(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="dsconv index", description="Rebuild library.idx and font.bin.")
+    p = argparse.ArgumentParser(prog="alya-bangers-dsconv index", description="Rebuild library.idx and font.bin.")
     p.add_argument("output", type=Path)
     a = p.parse_args(argv)
     from .index import build_library_files
@@ -106,8 +107,20 @@ def _index(argv: list[str]) -> int:
     return 0
 
 
+def _window() -> int:
+    try:
+        from .gui import run
+    except ImportError as e:
+        print(USAGE, end="")
+        print(f"\n(Without arguments the window opens, but it needs PySide6: {e})", file=sys.stderr)
+        return 2
+    return run()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        return _window()    # double-clicked: the window
     cmds = {"inspect": _inspect, "export": _export, "index": _index}
     try:
         if argv and argv[0] in cmds:

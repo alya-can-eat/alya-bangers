@@ -3,14 +3,14 @@
 or not font.bin contains them (ASCII, the UI symbols and icons, the umlauts
 of the German interface).
 
-    python3 tools/gen_builtin_font.py dsconv/src > arm9/source/builtin_font.c
+    python3 tools/gen_builtin_font.py alya-bangers-dsconv/src > arm9/source/builtin_font.c
 
-Glyphs come from GNU Unifont (via dsconv's copy); U+E000 is drawn here.
+Glyphs come from GNU Unifont (via the converter's copy); U+E000 is drawn here.
 """
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from dsconv.index import _load_font_data  # noqa: E402
+from alya_bangers_dsconv.index import _load_font_data  # noqa: E402
 
 UI = (
     "…·×–‹›→↳⇅★☆●○©"   # … · × – ‹ › → ↳ ⇅ ★ ☆ ● ○ ©

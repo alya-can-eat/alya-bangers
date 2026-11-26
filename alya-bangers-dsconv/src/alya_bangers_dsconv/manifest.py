@@ -62,7 +62,7 @@ class Manifest:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"tool": "dsconv", "version": __version__, "format_version": FORMAT_VERSION,
+        data = {"tool": "alya-bangers-dsconv", "version": __version__, "format_version": FORMAT_VERSION,
                 "settings": self.settings, "files": self.files, "choices": self.choices}
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True),

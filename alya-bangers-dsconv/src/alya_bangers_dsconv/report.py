@@ -134,11 +134,15 @@ class Report:
             self.lines += [f"  {r}: {db:.2f} dB" for r, db in sorted(self.turned_down)]
         self.screen = screen
 
-    def show(self) -> None:
-        print("\n".join(self.screen), flush=True)
+    def show(self, say=None) -> None:
+        text = "\n".join(self.screen)
+        if say is None:
+            print(text, flush=True)
+        else:
+            say(text)
 
     def write(self, path: Path) -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        text = f"dsconv run {stamp}\nsource: {self.src_root}\noutput: {self.dst_root}\n\n" + "\n".join(self.lines) + "\n"
+        text = f"alya-bangers-dsconv run {stamp}\nsource: {self.src_root}\noutput: {self.dst_root}\n\n" + "\n".join(self.lines) + "\n"
         path.write_text(text, encoding="utf-8")
         self.screen.append(f"\nFull report: {path}")

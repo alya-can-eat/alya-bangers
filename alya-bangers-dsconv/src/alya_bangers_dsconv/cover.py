@@ -117,7 +117,7 @@ def convert_cover(data: bytes) -> tuple[bytes, bytes]:
 
 
 def bgr555_to_image(data: bytes, size: int) -> Image.Image:
-    """Inverse of the conversion, for `dsconv inspect --cover`."""
+    """Inverse of the conversion, for `alya-bangers-dsconv inspect --cover`."""
     px = np.frombuffer(data, dtype="<u2").reshape(size, size)
     r = (px & 31).astype(np.uint8)
     g = ((px >> 5) & 31).astype(np.uint8)

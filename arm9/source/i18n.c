@@ -32,7 +32,7 @@ static const char *const en[S_COUNT] = {
     [S_LIB_DAMAGED] = "library.idx is damaged.",
     [S_LIB_TOO_BIG] = "library.idx is too big.",
     [S_LIB_VERSION] = "library.idx: wrong version.",
-    [S_RUN_DSCONV] = "Run dsconv on your music.",
+    [S_RUN_DSCONV] = "Run alya-bangers-dsconv.",
     [S_SUN] = "Sun", [S_MON] = "Mon", [S_TUE] = "Tue", [S_WED] = "Wed",
     [S_THU] = "Thu", [S_FRI] = "Fri", [S_SAT] = "Sat",
     [S_DROPS] = "drops: %lu",
@@ -153,7 +153,7 @@ static const char *const en[S_COUNT] = {
     [S_NO_SD] = "Can't read the SD card.",
     [S_DLDI] = "Is the DLDI driver OK?",
     [S_NO_MUSIC] = "No /music folder on the card.",
-    [S_MAKE_MUSIC] = "Create it with dsconv.",
+    [S_MAKE_MUSIC] = "Use alya-bangers-dsconv.",
 };
 
 static const char *const de[S_COUNT] = {
@@ -178,7 +178,7 @@ static const char *const de[S_COUNT] = {
     [S_LIB_DAMAGED] = "library.idx ist beschädigt.",
     [S_LIB_TOO_BIG] = "library.idx ist zu gross.",
     [S_LIB_VERSION] = "library.idx: falsche Version.",
-    [S_RUN_DSCONV] = "Musik mit dsconv konvertieren.",
+    [S_RUN_DSCONV] = "alya-bangers-dsconv starten.",
     [S_SUN] = "So", [S_MON] = "Mo", [S_TUE] = "Di", [S_WED] = "Mi",
     [S_THU] = "Do", [S_FRI] = "Fr", [S_SAT] = "Sa",
     [S_DROPS] = "Aussetzer: %lu",
@@ -299,7 +299,7 @@ static const char *const de[S_COUNT] = {
     [S_NO_SD] = "SD-Karte nicht lesbar.",
     [S_DLDI] = "Ist der DLDI-Treiber OK?",
     [S_NO_MUSIC] = "Ordner /music fehlt.",
-    [S_MAKE_MUSIC] = "Mit dsconv erstellen.",
+    [S_MAKE_MUSIC] = "alya-bangers-dsconv benutzen.",
 };
 
 static const char *const *const tables[LANG_COUNT] = { en, de };

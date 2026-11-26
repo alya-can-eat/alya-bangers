@@ -7,7 +7,7 @@ accents, genres), synthetic audio, two covers drawn here.
     python3 tests/card/make_test_card.py /tmp/testcard     # -> /tmp/testcard/card/music
     cd tests/host && make screens-run CARD=/tmp/testcard/card/music
 
-Needs ffmpeg and dsconv's Python dependencies (mutagen, pykakasi, pypinyin, ...).
+Needs ffmpeg and the converter's Python dependencies (mutagen, pykakasi, pypinyin, ...).
 """
 import os
 import random
@@ -117,6 +117,6 @@ for a, t, g in [("洛星涵", "星之河", "Vocal Synth"), ("洛星涵", "Glint"
                 ("Velvet Harbor", "Goodbye Again", "Electronic")]:
     song(f"{SRC}/Singles/{a} - {t}.opus", 3, 240, title=t, artist=a, genre=g)
 
-env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "dsconv", "src"))
-subprocess.run([sys.executable, "-m", "dsconv", SRC, CARD, "--yes"], check=True, env=env)
+env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "alya-bangers-dsconv", "src"))
+subprocess.run([sys.executable, "-m", "alya_bangers_dsconv", SRC, CARD, "--yes"], check=True, env=env)
 print("test card:", CARD)

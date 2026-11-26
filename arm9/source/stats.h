@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Ratings and plays made on the DS. The library index comes from dsconv and
+// Ratings and plays made on the DS. The library index comes from alya-bangers-dsconv and
 // is only read, so these live in their own file (/_nds/alya-bangers/stats.bin).
 // Songs are found by their path relative to the music root.
 

@@ -204,7 +204,7 @@ void gfx_blit(Canvas *c, int x, int y, int w, int h, const uint16_t *src)
         int yy = y + j;
         if (yy < c->cy0 || yy >= c->cy1)
             continue;
-        // pixels must already be opaque (bit 15 set), as dsconv writes them
+        // pixels must already be opaque (bit 15 set), as alya-bangers-dsconv writes them
         memcpy(c->px + yy * SCREEN_W + x0, src + j * w + (x0 - x), (x1 - x0) * 2);
     }
     c->dirty = true;

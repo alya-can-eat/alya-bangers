@@ -1,6 +1,6 @@
-# dsconv file formats (version 1)
+# alya-bangers-dsconv file formats (version 1)
 
-This is the contract between the converter (`dsconv`) and the DS player
+This is the contract between the converter (`alya-bangers-dsconv`) and the DS player
 (alya-bangers).
 There is **no backwards compatibility**: when a format changes, its version
 number goes up, the converter reconverts everything on the next run, and the

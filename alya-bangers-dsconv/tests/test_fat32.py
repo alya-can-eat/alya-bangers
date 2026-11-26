@@ -1,4 +1,4 @@
-from dsconv.fat32 import fat_key, safe_component, utf16_len
+from alya_bangers_dsconv.fat32 import fat_key, safe_component, utf16_len
 
 
 def test_forbidden_characters_become_fullwidth():

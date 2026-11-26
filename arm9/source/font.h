@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Text drawing with font.bin (written by dsconv), falling back to a few
+// Text drawing with font.bin (written by alya-bangers-dsconv), falling back to a few
 // built-in glyphs (ASCII) when the file is missing or lacks a character.
 
 #ifndef DSPLAYER_FONT_H__

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// font.bin layout (dsconv FORMAT.md, section 3): 32-byte header, then a table
+// font.bin layout (alya-bangers-dsconv FORMAT.md, section 3): 32-byte header, then a table
 // of 12-byte glyph entries sorted by code point (and variant), then 1-bit
 // bitmaps, 16 rows of 1 or 2 bytes, most significant bit = leftmost pixel.
 

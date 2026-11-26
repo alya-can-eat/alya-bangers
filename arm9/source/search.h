@@ -6,7 +6,7 @@
 // Matching ignores case and accents ("golmo" finds Gölmo), hiragana and
 // katakana are the same, small kana match big ones. A letter typed with its
 // accent must be exactly that ("gö" finds Gölmo, not Golden Hours). Names with kanji
-// or hanzi are also found by their readings from dsconv: kana always, pinyin
+// or hanzi are also found by their readings from alya-bangers-dsconv: kana always, pinyin
 // with the pinyin input (spaces don't matter there: "luoxinghan").
 
 #ifndef DSPLAYER_SEARCH_H__

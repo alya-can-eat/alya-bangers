@@ -1,4 +1,4 @@
-# dsconv
+# alya-bangers-dsconv
 
 Converts a music folder (FLAC, Opus, MP3, AAC/M4A, Vorbis, WAV, AIFF, WavPack)
 into `.dsa` files that [alya-bangers](../README.md), the Nintendo DS player,
@@ -8,32 +8,43 @@ characters your library needs.
 
 The formats are specified in [FORMAT.md](FORMAT.md).
 
+<img src="../docs/img/converter.png" width="400" alt="The window after the check: 33 new songs, about 150 MB more on the card, Start">
+
+Started without arguments it opens a window (music folder, DS card, Convert);
+with arguments it's a command line tool. How the window works is in the
+[main README](../README.md#converter).
+
 ## Run it
 
-Nothing to install by hand: every dependency comes as a prebuilt package with
-its native libraries included (FFmpeg via PyAV, libsoxr, numpy, mutagen,
-Pillow, and the GNU Unifont glyphs are bundled).
+**Windows and Linux:** the `.exe` and the `.AppImage` from the
+[releases](../../../releases). Nothing else to install.
 
 **NixOS / Nix** (flakes enabled), from this folder:
 
 ```sh
-nix run . -- ~/Music /run/media/alya/DSPICO/music
+nix run .                                              # the window
+nix run . -- ~/Music /run/media/alya/DSPICO/music      # the command line
 ```
 
-To have `dsconv` as a normal command: `nix profile install .`
+`nix profile install .` makes it a normal command, with an entry in the app
+launcher.
 
-**Any other Linux, macOS or Windows** with [uv](https://docs.astral.sh/uv/):
+**From the source**, anywhere, with [uv](https://docs.astral.sh/uv/): every
+dependency comes as a prebuilt package with its native libraries included
+(FFmpeg via PyAV, libsoxr, Qt via PySide6, numpy, mutagen, Pillow, and the GNU
+Unifont glyphs are bundled).
 
 ```sh
-uvx --from . dsconv ~/Music /path/to/card/music
+uvx --from . alya-bangers-dsconv                       # the window
+uvx --from . alya-bangers-dsconv ~/Music /path/to/card/music
 ```
 
 (On NixOS use the Nix route; uv's prebuilt wheels need a normal Linux loader.)
 
-## First run
+## First run on the command line
 
 ```sh
-dsconv ~/Music /run/media/alya/DSPICO/music --dry-run
+alya-bangers-dsconv ~/Music /run/media/alya/DSPICO/music --dry-run
 ```
 
 shows every rename and collision without writing anything. Then run it for
@@ -53,7 +64,7 @@ just run the same command again after changing your library.
   ReplayGain values for the player to apply.
 - **Readings for search:** names with kanji or hanzi get a kana reading
   (pykakasi) and a pinyin reading (pypinyin), so the DS finds 林星月 by
-  "lin" and 春 by "はる". Run dsconv again after updating and the index gets
+  "lin" and 春 by "はる". Run it again after updating and the index gets
   them; nothing is reconverted.
 - **Covers:** embedded front cover first, then `cover.*` / `folder.*` /
   `front.*` / `album.*` in the folder, then the folder's only image. Disc
@@ -88,9 +99,9 @@ just run the same command again after changing your library.
 Other commands:
 
 ```sh
-dsconv inspect song.dsa [--cover cover.png]   # header, tags, cover
-dsconv export song.dsa song.wav               # listen to the converted audio on the PC
-dsconv index /path/to/card/music              # rebuild index and font only
+alya-bangers-dsconv inspect song.dsa [--cover cover.png]   # header, tags, cover
+alya-bangers-dsconv export song.dsa song.wav               # listen to the converted audio on the PC
+alya-bangers-dsconv index /path/to/card/music              # rebuild index and font only
 ```
 
 After each run the full report is in `<output>/.dsmusic/last-run.txt`.
@@ -98,7 +109,7 @@ After each run the full report is in `<output>/.dsmusic/last-run.txt`.
 ## Changing the format
 
 There is no backwards compatibility on purpose. When `FORMAT_VERSION` or
-`CONVERTER_REVISION` in `src/dsconv/constants.py` changes, the next run
+`CONVERTER_REVISION` in `src/alya_bangers_dsconv/constants.py` changes, the next run
 reconverts everything automatically.
 
 ## Development
@@ -111,7 +122,21 @@ The tests build a small library with the awkward cases of a real one
 (colons and asterisks in names, NFD file names, case collisions, disc
 subfolders, 24-bit WAV with RIFF tags, embedded vs. folder covers, CJK and
 emoji titles, 5.1 audio, damaged files) and check the output down to the audio
-frequencies, block layout, index and font.
+frequencies, block layout, index and font. The window's tests click through it
+offscreen: check, the question about two files, convert, stop, close while
+converting, a card that's too small.
+
+The release files:
+
+```sh
+python -m pip install ".[build]"
+python packaging/build.py     # Windows: the .exe, Linux: the AppImage (needs appimagetool)
+```
+
+It packs everything with PyInstaller (`packaging/entry.py` is the start), then
+tries the result: converts a short song from the command line and opens the
+window offscreen for a moment. GitHub Actions does the same for both systems
+(`.github/workflows/converter.yml`).
 
 ## Licence
 
@@ -120,5 +145,5 @@ GPL-2.0-or-later with the font embedding exception (see `LICENSES/`).
 
 Code: <https://github.com/alya-can-eat>
 
-dsconv is part of an unofficial homebrew project, not affiliated with or
+alya-bangers-dsconv is part of an unofficial homebrew project, not affiliated with or
 endorsed by Nintendo. Nintendo DS is a trademark of Nintendo.

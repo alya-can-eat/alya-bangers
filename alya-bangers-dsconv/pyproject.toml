@@ -3,15 +3,16 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dsconv"
+name = "alya-bangers-dsconv"
 version = "1.0.0.dev0"
-description = "Convert a music library into files a Nintendo DS player can stream directly"
+description = "Convert a music library for alya-bangers, the Nintendo DS music player"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later AND GPL-2.0-or-later WITH Font-exception-2.0"
 license-files = ["LICENSE", "LICENSES/*"]
 # Every dependency ships prebuilt wheels with its native libraries bundled
-# (PyAV bundles FFmpeg, soxr bundles libsoxr), so no system packages are needed.
+# (PyAV bundles FFmpeg, soxr bundles libsoxr, PySide6 bundles Qt), so no system
+# packages are needed.
 dependencies = [
     "av>=12",
     "soxr>=0.3",
@@ -20,19 +21,21 @@ dependencies = [
     "pillow>=10",
     "pykakasi>=2.2",    # kana readings of kanji names, for searching on the DS
     "pypinyin>=0.50",   # pinyin readings of Chinese names
+    "PySide6-Essentials>=6.5",  # the window
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+build = ["pyinstaller>=6.10"]
 
 [project.scripts]
-dsconv = "dsconv.cli:main"
+alya-bangers-dsconv = "alya_bangers_dsconv.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-dsconv = ["data/*"]
+alya_bangers_dsconv = ["data/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -6,8 +6,8 @@ and show the player's built-in picture).
     python3 tests/demo/make_demo_card.py /tmp/demo        # -> /tmp/demo/card/music
     cd tests/host && ./screens /tmp/demo/card/music shots demo
 
-Needs ffmpeg and dsconv's Python dependencies (run it from `nix develop` in
-dsconv/, or with them installed).
+Needs ffmpeg and the converter's Python dependencies (run it from `nix develop` in
+alya-bangers-dsconv/, or with them installed).
 """
 import math
 import os
@@ -272,6 +272,6 @@ if not os.path.exists(two):
     f["artist"] = ["Nightglass", "Mira Kestrel"]
     f.save()
 
-env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "dsconv", "src"))
-subprocess.run([sys.executable, "-m", "dsconv", SRC, CARD, "--yes"], check=True, env=env)
+env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "alya-bangers-dsconv", "src"))
+subprocess.run([sys.executable, "-m", "alya_bangers_dsconv", SRC, CARD, "--yes"], check=True, env=env)
 print("demo card:", CARD)

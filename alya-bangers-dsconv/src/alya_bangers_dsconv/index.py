@@ -299,7 +299,7 @@ def build_index(dst_root: Path) -> tuple[bytes, dict, set[str]]:
 
 def _load_font_data():
     base, jp, comb = {}, {}, {}
-    with resources.files("dsconv").joinpath("data/unifont.txt.gz").open("rb") as raw:
+    with resources.files("alya_bangers_dsconv").joinpath("data/unifont.txt.gz").open("rb") as raw:
         with gzip.open(raw, "rt", encoding="ascii") as f:
             for line in f:
                 if line[0] == "#":
@@ -378,7 +378,7 @@ def build_library_files(dst_root: Path) -> dict:
 
 # ------------------------------------------------------------- readers ----
 # Reference readers: what the DS player has to do, in Python. Used by the
-# tests and by `dsconv index --show`.
+# tests and by `alya-bangers-dsconv index --show`.
 
 def read_index(data: bytes) -> dict:
     (magic, version, hsize, n_tracks, n_keys, n_values, n_albums, n_refs, s_off, s_size,

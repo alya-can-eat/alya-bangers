@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Reader for .dsa files (see FORMAT.md in the dsconv repository).
+// Reader for .dsa files (see FORMAT.md in the alya-bangers-dsconv repository).
 
 #ifndef DSPLAYER_DSA_H__
 #define DSPLAYER_DSA_H__

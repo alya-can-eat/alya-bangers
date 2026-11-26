@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate arm9/source/default_cover.c: the picture shown for songs without
 a cover (purple dusk, mountains, a pale moon), 128x128 and 32x32, dithered to
-BGR555 by dsconv's own cover code.
+BGR555 by the converter's own cover code.
 
-    python3 tools/gen_default_cover.py /path/to/dsconv/src > arm9/source/default_cover.c
+    python3 tools/gen_default_cover.py alya-bangers-dsconv/src > arm9/source/default_cover.c
 """
 import io
 import random
@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 from PIL import Image, ImageDraw  # noqa: E402
-from dsconv.cover import _convert  # noqa: E402
+from alya_bangers_dsconv.cover import _convert  # noqa: E402
 
 
 def artwork():

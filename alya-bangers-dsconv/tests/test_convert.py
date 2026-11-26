@@ -10,20 +10,13 @@ import numpy as np
 import pytest
 
 import fixtures
-from dsconv.constants import BLOCK_FRAMES, HEADER_SIZE, SAMPLE_RATE, SECTOR
-from dsconv.convert import run_convert
-from dsconv.dsa import FLAG_COVER, open_dsa
-from dsconv.index import read_font, read_index
-from dsconv.manifest import Manifest
+from alya_bangers_dsconv.constants import BLOCK_FRAMES, HEADER_SIZE, SAMPLE_RATE, SECTOR
+from alya_bangers_dsconv.convert import run_convert
+from alya_bangers_dsconv.dsa import FLAG_COVER, open_dsa
+from alya_bangers_dsconv.index import read_font, read_index
+from alya_bangers_dsconv.manifest import Manifest
 
 SINGLES = "Singles"
-
-
-@pytest.fixture(scope="session")
-def library(tmp_path_factory):
-    root = tmp_path_factory.mktemp("lib")
-    facts = fixtures.build_library(root)
-    return root, facts
 
 
 @pytest.fixture(scope="session")
@@ -150,7 +143,7 @@ def test_replaygain(converted):
 
 
 def _center_and_corner(f):
-    from dsconv.cover import bgr555_to_image
+    from alya_bangers_dsconv.cover import bgr555_to_image
     img = bgr555_to_image(f.read_cover(), 128)
     return img.getpixel((64, 64)), img.getpixel((4, 4))
 
@@ -165,7 +158,7 @@ def test_cover_priority(converted):
     assert edge[0] > 150 and edge[1] < 60
     # 16:9 thumbnail cropped to the centre: white square spans half the width
     f = dsa(dst, f"{SINGLES}/Brassfox - Good F＊＊King Noise.dsa")
-    from dsconv.cover import bgr555_to_image
+    from alya_bangers_dsconv.cover import bgr555_to_image
     img = bgr555_to_image(f.read_cover(), 128)
     row = [img.getpixel((x, 64)) for x in range(128)]
     white = [x for x, p in enumerate(row) if p[0] > 200 and p[2] > 200]
@@ -196,7 +189,7 @@ def test_index(converted):
     best = albums["GrEaT NO.2 sOnGs"]           # Disc 1/ and Disc 2/ form one album
     assert [idx["tracks"][i]["disc"] for i in best["tracks"]] == [1, 2]
     assert "Singles" not in albums       # no album tag, no album
-    assert V == sorted(V, key=__import__("dsconv.collate", fromlist=["sort_key"]).sort_key)
+    assert V == sorted(V, key=__import__("alya_bangers_dsconv.collate", fromlist=["sort_key"]).sort_key)
     t = next(t for t in idx["tracks"] if t["path"].endswith("春風レター.dsa"))
     assert V[t["title"]] == "春風レター" and t["tags"]["artist"] == ["Kumoyuki"]
 

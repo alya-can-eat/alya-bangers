@@ -1,4 +1,4 @@
-"""Build src/dsconv/data/unifont.txt.gz from a GNU Unifont installation.
+"""Build src/alya_bangers_dsconv/data/unifont.txt.gz from a GNU Unifont installation.
 
 Only needed when updating the bundled font. Usage:
 
@@ -35,7 +35,7 @@ def read_hex(path: Path) -> dict[int, str]:
 
 def main() -> None:
     src = Path(sys.argv[1] if len(sys.argv) > 1 else "/usr/share/unifont")
-    out = Path(__file__).resolve().parent.parent / "src" / "dsconv" / "data" / "unifont.txt.gz"
+    out = Path(__file__).resolve().parent.parent / "src" / "alya_bangers_dsconv" / "data" / "unifont.txt.gz"
 
     base = read_hex(src / "unifont.hex")
     allg = read_hex(src / "unifont_all.hex")
@@ -56,7 +56,7 @@ def main() -> None:
                 combining[int(cp, 16)] = int(off)
 
     lines = [
-        "# dsconv font data generated from GNU Unifont by tools/build_font_data.py",
+        "# alya-bangers-dsconv font data generated from GNU Unifont by tools/build_font_data.py",
         "# GNU Unifont: GPL-2.0-or-later with the GNU font embedding exception",
     ]
     for cp in sorted(glyphs):

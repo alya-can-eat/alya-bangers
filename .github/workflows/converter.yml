@@ -1,0 +1,80 @@
+# Builds alya-bangers-dsconv for Windows (one .exe) and Linux (an AppImage),
+# tries both, and on a version tag (v1.0, …) puts them into a draft release.
+# The .nds gets added to that release by hand.
+name: converter
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-22.04     # an older glibc, so the AppImage runs on more systems
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: alya-bangers-dsconv
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Linux libraries Qt needs at run time (packed into the AppImage)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 libegl1 libfuse2
+          curl -sSL -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
+
+      - name: Install
+        run: python -m pip install ".[test,build]"
+
+      # The test library has names Windows can't hold (CON.flac, folders ending
+      # in dots, names that only differ in case), so the full tests run on Linux;
+      # on Windows the packed app is tried below.
+      - name: Tests
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Build and try
+        run: python packaging/build.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: converter-${{ runner.os }}
+          path: alya-bangers-dsconv/dist/release/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --draft --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Converter for Windows (.exe) and Linux (.AppImage). The .nds comes separately."

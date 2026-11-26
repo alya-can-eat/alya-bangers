@@ -14,7 +14,7 @@ Version pre-1.0, DS Edition. 1.0 is in the making.
 </tr>
 </table>
 
-Your music gets converted on the PC first with [dsconv](dsconv/), which is in this repo too (`dsconv/`). Everything else is the DS program.
+Your music gets put on the card from the PC with [alya-bangers-dsconv](#converter), which is in this repo too (`alya-bangers-dsconv/`). Everything else is the DS program.
 
 ---
 
@@ -55,7 +55,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
   - Shown together, and the song is listed under each of them.
   - In the player every name opens its own artist.
   - Names joined inside one value ("A x B") stay one artist.
-- Names are drawn with the `font.bin` dsconv writes, so Japanese, Chinese, Cyrillic, Vietnamese and even emoji show up correctly.
+- Names are drawn with the `font.bin` the converter writes, so Japanese, Chinese, Cyrillic, Vietnamese and even emoji show up correctly.
 
 <br clear="right">
 
@@ -132,7 +132,7 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 - Matching:
   - Case and accents don't matter ("solve" finds Sölve), unless you type the accent ("sö" means exactly ö).
   - Hiragana finds katakana.
-  - Names with kanji or hanzi are found by their readings (dsconv adds them): kana with かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
+  - Names with kanji or hanzi are found by their readings (the converter adds them): kana with かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
 
 <br clear="right">
 
@@ -228,10 +228,34 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 > [!NOTE]
 > If the SD card is ever too slow, a red "drops: N" shows up at the top. If you see that on a real DS, please open an issue!
 
+## Converter:
+
+<table>
+<tr>
+<td><img src="docs/img/converter.png" width="400" alt="alya-bangers-dsconv after the check: 33 new songs, about 150 MB more on the card, Start"></td>
+<td><img src="docs/img/converter_run.png" width="400" alt="alya-bangers-dsconv converting: 14 of 33, the progress bar, the song it just did"></td>
+</tr>
+</table>
+
+alya-bangers-dsconv puts your music on the card. Same colours and font as on the DS :-)
+
+- Get it from the [releases](../../releases): the `.exe` for Windows, the `.AppImage` for Linux. Then double-click it.
+  - Windows: the first time "Windows protected your PC" shows up, because the file isn't signed. *More info*, then *Run anyway*.
+  - Linux: allow executing it first (in the file's properties, or `chmod +x`).
+  - NixOS: AppImages don't run as they are there. The flake is easier: `nix run github:alya-can-eat/alya-bangers?dir=alya-bangers-dsconv`, or `nix profile install` it for an entry in the app launcher.
+- Choose your music folder and the DS card. A card that already has music from it is found by itself.
+- Convert first checks what's new and whether it fits on the card, then Start.
+  - Next time only new and changed songs get converted.
+- Two files that would become the same song (like a FLAC and an Opus of it): it asks which one goes on the card and suggests the better one. The answer is remembered.
+- *Remove songs that are gone from the music folder*: also deletes the songs on the card you don't have anymore.
+- Stop finishes the songs in progress. Next time it goes on from there.
+- English or German, like the computer.
+- It also works on the command line, more in [alya-bangers-dsconv](alya-bangers-dsconv/).
+
 ## SD card:
 
 ```
-/music/                      <- dsconv output folder
+/music/                      <- what the converter writes
 /music/.dsmusic/font.bin
 /music/.dsmusic/library.idx
 /_nds/alya-bangers/state.bin <- written by the player
@@ -240,10 +264,10 @@ Your music gets converted on the PC first with [dsconv](dsconv/), which is in th
 /alya-bangers.nds            <- anywhere, start it from Pico Launcher
 ```
 
-Convert your music onto the card with dsconv:
+Put your music on it with the [converter](#converter), or on the command line:
 
 ```sh
-dsconv ~/Music /run/media/alya/DSPICO/music
+alya-bangers-dsconv ~/Music /run/media/alya/DSPICO/music
 ```
 
 ## Building:
@@ -263,7 +287,7 @@ This makes `alya-bangers.nds`. The first run downloads the image, which is about
 
 You can try it in melonDS before using the real card. melonDS is in nixpkgs (`nix-shell -p melonDS`).
 
-1. Convert some music into a test folder: `dsconv ~/Music/some-album /tmp/dscard/music`
+1. Convert some music into a test folder: choose `/tmp/dscard` as the card in the converter, or `alya-bangers-dsconv ~/Music/some-album /tmp/dscard/music`
 2. In melonDS's emulator settings (DLDI section): enable DLDI, set the folder to sync the SD image with to `/tmp/dscard` and turn that sync on.
 3. *File → Open ROM*: `alya-bangers.nds`
 
@@ -330,23 +354,29 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 ```
 
 - The screen test expects exactly this made-up library (its artists, albums and counts).
-- `make_test_card.py` needs ffmpeg and dsconv's Python dependencies.
+- `make_test_card.py` needs ffmpeg and the converter's Python dependencies.
+- The converter's own tests: `cd alya-bangers-dsconv && nix develop -c pytest` (the window's tests run offscreen).
 - The tests need a gcc that can build 32-bit programs (`-m32`), e.g. `nix-shell -p gcc_multi`.
 - The screen test also draws every screen in German and checks that every text exists in both languages and fits its place. All texts of the interface are in `arm9/source/i18n.c` (English and German side by side).
 
 ### Generated stuff:
 
 - README pictures: `tests/demo/make_demo_card.py` builds the made-up library, the screen test's demo mode (`./screens CARD out demo`) shoots the screens and films, and `tools/gen_readme_images.py` turns them into `docs/img/`. (The three commands are in the script.)
-- `tools/gen_builtin_font.py`: the built-in glyphs (ASCII, UI symbols, icons, the umlauts and the keyboards' letters) from dsconv's copy of Unifont
+- `tools/gen_builtin_font.py`: the built-in glyphs (ASCII, UI symbols, icons, the umlauts and the keyboards' letters) from the converter's copy of Unifont
 - `tools/gen_fold_tables.py`: the tables search uses to ignore accents
 - `tools/gen_eq_tables.py`: the equalizer's filters for every gain, the high cut's filters and the noise shaping (needs scipy, e.g. `nix-shell -p python3Packages.scipy`)
 - `tools/gen_default_cover.py`: the picture for songs without a cover
 - `tools/gen_icon.py`: the icon of the `.nds` file
+- `alya-bangers-dsconv/tools/build_app_icon.py`: the converter's icon, the same picture
+- `alya-bangers-dsconv/tools/build_window_font.py`: the converter's font, Unifont as squares (needs fontTools)
+- `alya-bangers-dsconv/tools/window_pictures.py`: the converter's pictures here
+- Releases: on a `v…` tag `.github/workflows/converter.yml` builds the `.exe` and the AppImage (`alya-bangers-dsconv/packaging/build.py`), tries both and puts them into a draft release. The `.nds` gets added by hand.
 
 ## Not there yet:
 
 - Playlists
 - Genre and other tags as tabs
+- Search: genre and other tags (composer, label, mood …) found while typing, the other tags in + Filter, two of the same tag meaning "or"
 - Colours from the cover
 - Gapless playback
 - A date and time format of its own (right now it follows the language)

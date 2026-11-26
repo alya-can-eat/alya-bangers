@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import multiprocessing
 import os
+import shutil
 import signal
 import sys
 import time
@@ -16,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from . import audio
-from .constants import DATA_DIR, OUT_EXT, REPORT_NAME, __version__
+from .constants import DATA_DIR, OUT_EXT, REPORT_NAME, SAMPLE_RATE, __version__
 from .cover import convert_cover
 from .dsa import DsaWriter, encode_tags, replaygain
 from .fat32 import fat_key
@@ -25,7 +26,7 @@ from .plan import Plan, Source, build_plan
 from .report import Report
 from .tags import best_picture, read_tags
 
-TMP_PREFIX = ".dsconv-"
+TMP_PREFIX = ".dsconv-"  # the converter's old name; kept so leftovers of older runs are found
 
 
 # ------------------------------------------------------------- worker ----
@@ -159,9 +160,10 @@ def _rank(p) -> tuple:
 
 
 def resolve_collisions(plan: Plan, manifest: Manifest, report: Report, *,
-                       yes: bool, dry_run: bool, interactive: bool) -> dict[str, Source]:
+                       yes: bool, dry_run: bool, hooks: "Hooks") -> dict[str, Source]:
     chosen: dict[str, Source] = {}
     accept_all = yes
+    can_ask = hooks.can_ask()
     for key, cands in sorted(plan.collisions.items()):
         rels = sorted(c.rel for c in cands)
         probes = {c.rel: _safe_probe(c) for c in cands}
@@ -173,10 +175,10 @@ def resolve_collisions(plan: Plan, manifest: Manifest, report: Report, *,
         if saved and saved.get("candidates") == rels and saved.get("chosen") in rels:
             pick = next(c for c in cands if c.rel == saved["chosen"])
             how = "your earlier choice"
-        elif not (accept_all or dry_run or not interactive):
-            pick, accept_all = _ask(suggested.dest_rel, ordered, probes)
+        elif not (accept_all or dry_run or not can_ask):
+            pick, accept_all = hooks.ask(suggested.dest_rel, ordered, probes)
             how = "your choice" if pick is not suggested else "suggested, confirmed by you"
-        elif not interactive and not yes and not dry_run:
+        elif not can_ask and not yes and not dry_run:
             how = "suggested; no terminal to ask"
         chosen[key] = pick
         if not dry_run:
@@ -246,34 +248,89 @@ def _remove_empty_dirs(dst_root: Path, start: Path) -> None:
         d = d.parent
 
 
-def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: bool = False,
-                delete: bool = False, jobs: int | None = None, force: bool = False,
-                build_index: bool = True, quiet: bool = False) -> int:
-    from .index import build_library_files  # local import keeps worker start-up light
+class SetupError(Exception):
+    """The folders can't be used as given (shown to the user as is)."""
 
+
+class Hooks:
+    """How a run reports and asks. These defaults are the command line's;
+    the window has its own."""
+
+    def __init__(self, quiet: bool = False):
+        self.quiet = quiet
+
+    def say(self, msg: str) -> None:
+        """A line of progress or the summary."""
+        print(msg, flush=True)
+
+    def phase(self, name: str) -> None:
+        """Where the run is: "scan", "convert", "index" or "done"."""
+
+    def song_done(self, done: int, total: int, src: Source, res: dict) -> None:
+        if not self.quiet or not res["ok"]:
+            width = len(str(total))
+            status = "ok    " if res["ok"] else "FAILED"
+            print(f"[{done:>{width}}/{total}] {status} {src.dest_rel}", flush=True)
+
+    def can_ask(self) -> bool:
+        return (sys.stdin is not None and sys.stdout is not None
+                and sys.stdin.isatty() and sys.stdout.isatty())
+
+    def ask(self, dest_rel: str, ordered: list[Source], probes) -> tuple[Source, bool]:
+        """Which of these files becomes dest_rel; True as well: the suggestion for all the rest."""
+        return _ask(dest_rel, ordered, probes)
+
+    def stop_requested(self) -> bool:
+        return False
+
+
+@dataclass
+class Prepared:
+    """What a run will do, worked out before anything is written."""
+    src_root: Path
+    dst_root: Path
+    report: Report
+    manifest: Manifest
+    selected: list[Source]
+    todo: list[tuple[Source, str]]      # (source, its folder cover's signature)
+    orphans: list[str]                  # on the card without a source
+    temps: list[Path]                   # leftovers of an interrupted run
+    t0: float
+
+    @property
+    def new(self) -> list[Source]:
+        return [s for s, _ in self.todo if "out_size" not in self.manifest.files.get(s.dest_rel, {})]
+
+    @property
+    def changed(self) -> list[Source]:
+        return [s for s, _ in self.todo if "out_size" in self.manifest.files.get(s.dest_rel, {})]
+
+
+def prepare(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: bool = False,
+            force: bool = False, hooks: Hooks | None = None) -> Prepared:
+    """Scan, settle collisions (asking if allowed) and compare with the card.
+    Writes nothing. Raises SetupError if the folders can't be used."""
+    hooks = hooks or Hooks()
     src_root = src_root.expanduser().resolve()
     dst_root = dst_root.expanduser().resolve()
     if not src_root.is_dir():
-        print(f"error: source folder not found: {src_root}", file=sys.stderr)
-        return 2
+        raise SetupError(f"source folder not found: {src_root}")
     if dst_root == src_root:
-        print("error: source and output are the same folder", file=sys.stderr)
-        return 2
+        raise SetupError("source and output are the same folder")
     if dst_root in src_root.parents:
-        print("error: the source folder is inside the output folder", file=sys.stderr)
-        return 2
+        raise SetupError("the source folder is inside the output folder")
 
     t0 = time.monotonic()
+    hooks.phase("scan")
     report = Report(src_root, dst_root, dry_run=dry_run)
-    print(f"dsconv {__version__}: scanning {src_root}")
+    hooks.say(f"alya-bangers-dsconv {__version__}: scanning {src_root}")
     plan = build_plan(src_root, dst_root)
     manifest = Manifest(dst_root)
     if manifest.stale_settings:
-        print("The file format or converter changed since the last run: everything will be reconverted.")
+        hooks.say("The file format or converter changed since the last run: everything will be reconverted.")
     report.plan(plan)
 
-    chosen = resolve_collisions(plan, manifest, report, yes=yes, dry_run=dry_run,
-                                interactive=sys.stdin.isatty() and sys.stdout.isatty())
+    chosen = resolve_collisions(plan, manifest, report, yes=yes, dry_run=dry_run, hooks=hooks)
     selected: list[Source] = []
     for key, cands in plan.groups.items():
         selected.append(chosen[key] if len(cands) > 1 else cands[0])
@@ -293,25 +350,77 @@ def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: b
     orphans += sorted(k for k in manifest.files
                       if fat_key(k) not in wanted and k not in orphans and (dst_root / k).exists())
     report.orphans = orphans
+    return Prepared(src_root, dst_root, report, manifest, selected, todo, orphans, temps, t0)
 
-    if dry_run:
-        report.to_convert = [s.dest_rel for s, _ in todo]
-        report.finish(time.monotonic() - t0, delete=delete)
-        report.show()
-        return 0
 
+# Bytes of output per second of stereo audio, plus the header and covers of one file.
+OUT_BYTES_PER_SECOND = SAMPLE_RATE * 2 * 2
+OUT_BYTES_PER_FILE = 48 * 1024
+
+
+def _seconds(path: Path) -> float | None:
+    try:
+        import mutagen
+        f = mutagen.File(path)
+        if f is not None and f.info is not None and f.info.length > 0:
+            return float(f.info.length)
+    except Exception:
+        pass
+    return None
+
+
+def space_needed(prep: Prepared, delete: bool) -> int:
+    """About how many bytes the card needs on top of what's there now (negative:
+    it gets emptier). From the songs' lengths, without decoding anything."""
+    need = 0
+    for s, _ in prep.todo:
+        sec = _seconds(s.path)
+        # unknown length: assume an MP3 of 256 kbit/s, a fair middle
+        need += int((sec if sec is not None else s.size / 32000) * OUT_BYTES_PER_SECOND) + OUT_BYTES_PER_FILE
+        old = prep.manifest.files.get(s.dest_rel, {}).get("out_size")
+        if old:
+            need -= old
+    if delete:
+        for rel in prep.orphans:
+            try:
+                need -= (prep.dst_root / rel).stat().st_size
+            except OSError:
+                pass
+    return need
+
+
+def free_space(dst_root: Path) -> int | None:
+    """Free bytes where dst_root is (or would be)."""
+    p = dst_root
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    try:
+        return shutil.disk_usage(p).free
+    except OSError:
+        return None
+
+
+def execute(prep: Prepared, *, delete: bool = False, jobs: int | None = None,
+            build_index: bool = True, hooks: Hooks | None = None) -> int:
+    """Convert what prepare() found, delete what's gone (if asked), build the
+    index and font. 0: done, 1: some files failed, 130: stopped (progress kept)."""
+    from .index import build_library_files  # local import keeps worker start-up light
+
+    hooks = hooks or Hooks()
+    src_root, dst_root, report, manifest = prep.src_root, prep.dst_root, prep.report, prep.manifest
+    todo = prep.todo
     dst_root.mkdir(parents=True, exist_ok=True)
-    for t in temps:
+    for t in prep.temps:
         try:
             t.unlink()
         except OSError:
             pass
 
-    print(f"{len(selected)} songs: {report.unchanged} up to date, {len(todo)} to convert")
+    hooks.phase("convert")
+    hooks.say(f"{len(prep.selected)} songs: {report.unchanged} up to date, {len(todo)} to convert")
     interrupted = False
     if todo:
         workers = jobs or os.cpu_count() or 2
-        width = len(str(len(todo)))
         done = 0
         since_save = 0
         # "spawn", not "fork": the main process may already have run FFmpeg
@@ -332,19 +441,18 @@ def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: b
                 if res["ok"]:
                     manifest.record(s.dest_rel, s.rel, s.size, s.mtime_ns, sig, res["out_size"])
                     report.converted(s, res)
-                    status = "ok    "
                 else:
                     report.failed(s, res["error"])
-                    status = "FAILED"
-                if not quiet or not res["ok"]:
-                    print(f"[{done:>{width}}/{len(todo)}] {status} {s.dest_rel}", flush=True)
+                hooks.song_done(done, len(todo), s, res)
                 since_save += 1
                 if since_save >= 25:
                     manifest.save()
                     since_save = 0
+                if hooks.stop_requested():
+                    raise KeyboardInterrupt
         except KeyboardInterrupt:
             interrupted = True
-            print("\nInterrupted: finishing the files in progress, then stopping…", flush=True)
+            hooks.say("\nInterrupted: finishing the files in progress, then stopping…")
             ex.shutdown(wait=True, cancel_futures=True)
             # Files that were already handed to a worker still complete; record
             # them so the next run does not redo them.
@@ -357,7 +465,7 @@ def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: b
             ex.shutdown(wait=True, cancel_futures=True)
 
     if delete and not interrupted:
-        for rel in orphans:
+        for rel in prep.orphans:
             p = dst_root / rel
             try:
                 p.unlink()
@@ -371,19 +479,39 @@ def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: b
     manifest.save()
 
     if interrupted:
-        print("Progress saved. Run the same command again to continue.")
+        hooks.say("Progress saved. Run the same command again to continue.")
+        hooks.phase("done")
         return 130
 
     if build_index:
-        print("Building library index and font…", flush=True)
+        hooks.phase("index")
+        hooks.say("Building library index and font…")
         try:
             stats = build_library_files(dst_root)
             report.index_stats = stats
         except Exception as e:
             report.warn("(index)", f"index/font not built: {type(e).__name__}: {e}")
 
-    report.finish(time.monotonic() - t0, delete=delete)
+    report.finish(time.monotonic() - prep.t0, delete=delete)
     (dst_root / DATA_DIR).mkdir(exist_ok=True)
     report.write(dst_root / DATA_DIR / REPORT_NAME)
-    report.show()
+    report.show(hooks.say)
+    hooks.phase("done")
     return 1 if report.failures else 0
+
+
+def run_convert(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: bool = False,
+                delete: bool = False, jobs: int | None = None, force: bool = False,
+                build_index: bool = True, quiet: bool = False, hooks: Hooks | None = None) -> int:
+    hooks = hooks or Hooks(quiet=quiet)
+    try:
+        prep = prepare(src_root, dst_root, dry_run=dry_run, yes=yes, force=force, hooks=hooks)
+    except SetupError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    if dry_run:
+        prep.report.to_convert = [s.dest_rel for s, _ in prep.todo]
+        prep.report.finish(time.monotonic() - prep.t0, delete=delete)
+        prep.report.show(hooks.say)
+        return 0
+    return execute(prep, delete=delete, jobs=jobs, build_index=build_index, hooks=hooks)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// library.idx (dsconv FORMAT.md, section 2): every song with its tags, loaded
+// library.idx (alya-bangers-dsconv FORMAT.md, section 2): every song with its tags, loaded
 // whole into RAM. Values are stored in sort order, so sorting by any tag is
 // an integer sort.
 
