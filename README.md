@@ -260,7 +260,7 @@ alya-bangers-dsconv puts your music on the card. Same colours and font as on the
 
 **Why does the music get converted first?**
 
-So the DS doesn't have to do it while playing. MP3, FLAC or Opus would keep the DS busy decoding all the time. The converted songs are ready to play as they are, so there's more power left for the screens and effects, the battery lasts longer, and it sounds better. More in [How playback works](#how-playback-works).
+So the DS doesn't have to do it while playing. MP3, FLAC or Opus would keep the DS busy decoding all the time. The converted songs are ready to play as they are, so there's more power left for the screens, features and effects, the battery lasts longer, and it sounds better. More in [How playback works](#how-playback-works).
 
 **Does everything get converted again every time?**
 
