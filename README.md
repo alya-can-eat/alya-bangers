@@ -4,7 +4,9 @@ Music player for the Nintendo DS, requires a flashcart. :-)
 Version pre-1.0, DS Edition. 1.0 is in the making.
 
 > [!NOTE]
-> There's nothing to download yet. With 1.0 the `.nds` and the converter will be in the [releases](../../releases). Until then build it yourself (see [Building](#building)).
+> There's no release yet. With 1.0 the `.nds` and the converter will be in the [releases](../../releases).
+>
+> Until then there are pre-release builds in [GitHub Actions](../../actions/workflows/release.yml): open the newest run, the files are at the bottom under *Artifacts* (`nds`, `converter-Windows`, `converter-Linux`). Downloading them needs a GitHub account, and they're kept for 90 days. They aren't tested on a DS like a release is. Or build it yourself (see [Building](#building)).
 
 <table>
 <tr>
@@ -240,7 +242,7 @@ Your music gets put on the card from the PC with [alya-bangers-dsconv](#converte
 
 alya-bangers-dsconv puts your music on the card. Same colours and font as on the DS :-)
 
-- Get it from the [releases](../../releases): the `.exe` for Windows, the `.AppImage` for Linux. Then double-click it.
+- Get it from the [releases](../../releases) (or a pre-release build from [GitHub Actions](../../actions/workflows/release.yml)): the `.exe` for Windows, the `.AppImage` for Linux. Then double-click it.
   - Windows: the first time "Windows protected your PC" shows up, because the file isn't signed. *More info*, then *Run anyway*.
   - Linux: allow executing it first (in the file's properties, or `chmod +x`).
   - NixOS: AppImages don't run as they are there. The flake is easier: `nix run github:alya-can-eat/alya-bangers?dir=alya-bangers-dsconv`, or `nix profile install` it for an entry in the app launcher.
@@ -390,7 +392,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 > [!NOTE]
 > The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.
 
-Started by hand (Actions › release › Run workflow) it only makes the three files, without a release.
+Started by hand ([Actions › release](../../actions/workflows/release.yml) › Run workflow) it only makes the three files, without a release. Those are the pre-release builds.
 
 ## Not there yet:
 
