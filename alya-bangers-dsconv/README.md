@@ -12,7 +12,7 @@ The formats are specified in [FORMAT.md](FORMAT.md).
 
 Started without arguments it opens a window (music folder, DS card, Convert);
 with arguments it's a command line tool. How the window works is in the
-[main README](../README.md#converter).
+[converter page](../docs/converter.md).
 
 ## Run it
 
