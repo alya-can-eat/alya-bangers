@@ -283,6 +283,8 @@ With the official BlocksDS container. You need Podman or Docker for it.
 
 This makes `alya-bangers.nds`. The first run downloads the image, which is about 430 MB.
 
+GitHub Actions builds it the same way for the releases (see [Generated stuff](#generated-stuff)).
+
 ## Testing in melonDS:
 
 You can try it in melonDS before using the real card. melonDS is in nixpkgs (`nix-shell -p melonDS`).
@@ -370,7 +372,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - `alya-bangers-dsconv/tools/build_app_icon.py`: the converter's icon, the same picture
 - `alya-bangers-dsconv/tools/build_window_font.py`: the converter's font, Unifont as squares (needs fontTools)
 - `alya-bangers-dsconv/tools/window_pictures.py`: the converter's pictures here
-- Releases: on a `v…` tag `.github/workflows/converter.yml` builds the `.exe` and the AppImage (`alya-bangers-dsconv/packaging/build.py`), tries both and puts them into a draft release. The `.nds` gets added by hand.
+- Releases: on a `v…` tag `.github/workflows/release.yml` builds `alya-bangers.nds` (with `./build.sh`), the converter's `.exe` and AppImage (`alya-bangers-dsconv/packaging/build.py`, which also tries them) and puts all three into a draft release. Run by hand (Actions › release › Run workflow) it just makes the files.
 
 ## Not there yet:
 

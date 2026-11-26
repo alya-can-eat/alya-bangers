@@ -136,7 +136,7 @@ python packaging/build.py     # Windows: the .exe, Linux: the AppImage (needs ap
 It packs everything with PyInstaller (`packaging/entry.py` is the start), then
 tries the result: converts a short song from the command line and opens the
 window offscreen for a moment. GitHub Actions does the same for both systems
-(`.github/workflows/converter.yml`).
+(`.github/workflows/release.yml`).
 
 ## Licence
 
