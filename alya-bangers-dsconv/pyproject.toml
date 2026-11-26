@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alya-bangers-dsconv"
-version = "1.0.0.dev0"
+version = "1.0"
 description = "Convert a music library for alya-bangers, the Nintendo DS music player"
 readme = "README.md"
 requires-python = ">=3.10"

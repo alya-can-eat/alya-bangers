@@ -1,6 +1,6 @@
 """Numbers shared by the converter, the index and the DS player."""
 
-__version__ = "1.0.0.dev0"
+__version__ = "1.0"
 
 # Bump FORMAT_VERSION whenever the .dsa layout changes, CONVERTER_REVISION when the
 # converter produces different output with the same layout. Either one makes the

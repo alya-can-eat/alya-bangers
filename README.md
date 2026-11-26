@@ -1,10 +1,10 @@
 # alya-bangers
 Music player for the Nintendo DS, requires a flashcart. :-)
 
-Version pre-1.0, DS Edition. 1.0 is in the making.
+Version 1.0, DS Edition.
 
 > [!NOTE]
-> There's no release yet. With 1.0 the `.nds` and the converter will be in the [releases](../../releases).
+> The `.nds` and the converter are in the [releases](../../releases).
 >
 > There are pre-release builds in [GitHub Actions](../../actions/workflows/release.yml): open the newest run, the files are at the bottom under *Artifacts* (`nds`, `converter-Windows`, `converter-Linux`). Downloading them needs a GitHub account, and they're kept for 90 days. They are less tested than a release.
 > If you want to build it yourself (see [Building](#building)).
@@ -379,7 +379,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 
 ## Releasing:
 
-1. Change the version (e.g. `pre-1.0` and `1.0.0.dev0` both become `1.0`) in:
+1. Change the version (e.g. `1.0` becomes `1.1`) in:
    - `arm9/source/app.h` (`APP_VERSION`, shown on the About page)
    - `alya-bangers-dsconv/src/alya_bangers_dsconv/constants.py`, `alya-bangers-dsconv/pyproject.toml` and `alya-bangers-dsconv/flake.nix` (the converter's window and file names)
    - the top of this README
