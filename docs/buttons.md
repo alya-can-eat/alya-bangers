@@ -2,6 +2,8 @@
 
 [‹ alya-bangers](../README.md)
 
+Everything works by touch. The buttons do the same:
+
 | Button | Browsing | Player |
 |---|---|---|
 | Up / Down | move (faster when held) | |

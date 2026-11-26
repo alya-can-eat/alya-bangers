@@ -4,17 +4,13 @@
 
 <img src="img/search.webp" width="256" align="right" alt="Typing night: the results rise onto the top screen, the D-pad picks one, the keyboard goes down and the results slide into a list">
 
-- Type on the bottom screen. The results show up on the top screen while you type: artists, albums and songs, the matching part highlighted.
-  - D-pad Up/Down and A pick one.
-- ⮟ (or B) puts the keyboard away and the results slide down into a list:
-  - Tap a song to play the results from there
-  - Hold one for the row menu
-  - Tap an artist or album to open it
-  - Tap the query to type again, × clears it
-- Matching:
-  - Case and accents don't matter ("solve" finds Sölve), unless you type the accent ("sö" means exactly ö).
-  - Hiragana finds katakana.
-  - Names with kanji or hanzi are found by their readings (the converter adds them): kana with かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
+Type on the bottom screen, and the results show up on the top screen while you type: artists, albums and songs.
+
+- Keyboards for ABC, かな, 拼音 and АБВ
+- Capital letters and accents don't matter.
+- Japanese and Chinese names are also found by how they're read.
+- \+ Filter narrows it down, e.g. to a genre.
+- ⮟ puts the keyboard away, and the results become a list.
 
 <br clear="right">
 
@@ -41,6 +37,18 @@
 </tr>
 </table>
 
+## Details:
+
+- The results: the matching part is highlighted. D-pad Up/Down and A pick one.
+- ⮟ (or B) puts the keyboard away and the results slide down into a list:
+  - Tap a song to play the results from there
+  - Hold one for the row menu
+  - Tap an artist or album to open it
+  - Tap the query to type again, × clears it
+- Matching:
+  - Case and accents don't matter ("solve" finds Sölve), unless you type the accent ("sö" means exactly ö).
+  - Hiragana finds katakana.
+  - Names with kanji or hanzi are found by their readings (the converter adds them): kana with かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
 - Keyboards: ABC (QWERTY, or QWERTZ in Settings › Regional), かな, 拼音, АБВ and 123
   - かな is the 50-sound table. ゛ ゜ and 小 change the last kana.
   - Tap the input key for the next keyboard (the new keys push the old ones out), hold it for the list.

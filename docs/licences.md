@@ -2,6 +2,13 @@
 
 [‹ alya-bangers](../README.md)
 
+© 2026 Alya (alya-can-eat). GNU GPL v3 or later (`LICENSE`).
+
+- Built-in fallback glyphs: GNU Unifont (GPL-2.0-or-later with the font embedding exception, see `LICENSES/`)
+- Makefiles: BlocksDS templates (CC0)
+
+Code: <https://github.com/alya-can-eat>
+
 ## Third-party code in the `.nds`:
 
 Besides the code in this repo, a built `alya-bangers.nds` also contains this:

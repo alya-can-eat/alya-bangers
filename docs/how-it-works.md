@@ -2,7 +2,9 @@
 
 [‹ alya-bangers](../README.md)
 
-Technical stuff, in case you're curious :-D
+In short: the PC converts the music once, so the DS only has to read it from the card and hand it to its sound chip. That leaves time for the screens, the effects and the equalizer.
+
+The rest is technical stuff, in case you're curious :-D
 
 - The ARM9 reads the card, the ARM7 drives the sound hardware. (The messages between them are in `common/include/ipc.h`.)
 - Two hardware channels (left panned left, right panned right) loop over a ring of 8 blocks each (1 s).

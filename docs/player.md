@@ -4,19 +4,15 @@
 
 <img src="img/player.webp" width="256" align="right" alt="Next song and back: covers slide over their records">
 
-- ⮟ in the bar: the browser slides down until only the tabs are left.
-  - Seek bar (drag it), shuffle, previous, play/pause, next, repeat (off, all, one), ⓘ song info, ☰ queue, ⮝ back to browsing
-- Top screen:
-  - The cover on its record, turning at 33⅓ rpm
-  - Visualizer, the next song, time and date
-  - The background is the cover, blurred and darkened. It's made one slice per frame and fades in once the covers settle. A very dark cover gets a lighter background so it doesn't melt into it.
-- When the song changes:
-  - The cover slides off over its record, the next one grows out of the Next spot and its record rolls out. Going back plays it backwards.
-  - In browse mode the covers behave like a stack, in list order.
-  - The texts fade and scroll from their start for every song.
-- Paused: the record spins down and the bars of the visualizer fall.
-- Tap the artist at the start of the top line for their albums.
-- Songs without a cover get a built-in picture: the moonlit beach.
+The cover of the song on a turning record, with a visualizer.
+
+- ⮟ in the bottom bar opens the player.
+- Buttons: seek bar, shuffle, previous, play/pause, next, repeat, ⓘ song info, ☰ queue, ⮝ back to browsing
+- ⓘ: give the song stars.
+- ☰: the queue. Jump to a song, remove it or move it.
+- The slider button next to ⓘ: the equalizer (Bass, Mid, Treble), with your own profiles.
+- Close the lid and the music keeps playing. L/R change songs.
+- Switched on again, it's back at the same song.
 
 <br clear="right">
 
@@ -39,6 +35,21 @@
 </tr>
 </table>
 
+## Details:
+
+- ⮟ in the bar: the browser slides down until only the tabs are left.
+  - Seek bar (drag it), repeat (off, all, one)
+- Top screen:
+  - The cover on its record, turning at 33⅓ rpm
+  - Visualizer, the next song, time and date
+  - The background is the cover, blurred and darkened. It's made one slice per frame and fades in once the covers settle. A very dark cover gets a lighter background so it doesn't melt into it.
+- When the song changes:
+  - The cover slides off over its record, the next one grows out of the Next spot and its record rolls out. Going back plays it backwards.
+  - In browse mode the covers behave like a stack, in list order.
+  - The texts fade and scroll from their start for every song.
+- Paused: the record spins down and the bars of the visualizer fall.
+- Tap the artist at the start of the top line for their albums.
+- Songs without a cover get a built-in picture: the moonlit beach.
 - Rating and plays (ⓘ):
   - Tap a star to give the song that many. Tap the last lit one again for none. Left / Right work too.
   - A song counts as played after half of it or 4 minutes of listening, once per listen.

@@ -2,6 +2,8 @@
 
 [‹ alya-bangers](../README.md)
 
+For building it yourself, testing and making releases.
+
 ## Building:
 
 With the official BlocksDS container. You need Podman or Docker for it.
@@ -78,3 +80,14 @@ Between releases the version is the next one with "pre" in front: `pre-1.1` on t
 > The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.
 
 Started by hand ([Actions › release](../../../actions/workflows/release.yml) › Run workflow) it only makes the three files, without a release. Those are the pre-release builds.
+
+## Not there yet, in detail:
+
+- Playlists
+- Genre and other tags as tabs
+- Search: genre and other tags (composer, label, mood …) found while typing, the other tags in + Filter, two of the same tag meaning "or"
+- Colours from the cover
+- Gapless playback
+- A date and time format of its own (right now it follows the language)
+- Arabic script (right to left, joined letters; Persian and Urdu with it)
+- A battery warning you can hear
