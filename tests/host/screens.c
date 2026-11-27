@@ -5,6 +5,7 @@
 //
 //   ./screens /path/to/card/music out_dir
 
+#include <dirent.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -537,6 +538,60 @@ static int demo(void)
     shot("german_search");
     app.set.lang = i18n_lang = LANG_EN;
 
+    // playlists: two albums into "Night drive", then the folder tab
+    app.artist = -1;
+    app.album = LIB_NONE;
+    show_tab(TAB_ALBUM);
+    run(TAB_TICKS + 10);
+    static const char *const albums[2] = { "Afterglow Arcade", "Coastline Tapes" };
+    for (int k = 0; k < 2; k++)
+    {
+        int ai = find_row(albums[k]);
+        app.scroll = ai > 2 ? ai - 2 : 0;
+        int r = ai - app.scroll;
+        hold(100, LIST_Y + r * ROW_H + 8, HOLD_TICKS + 2);
+        release();
+        run(OV_TICKS + 4);
+        tap(150, ui_rowmenu_y(LIST_Y + r * ROW_H) + 20 + 3 * 16 + 8);
+        run(OV_TICKS + 6);
+        if (k == 0)
+        {
+            tap(150, BAR_Y - PLADD_H + 20 + 8);         // New playlist
+            run(OV_TICKS + 6);
+            tap_key(0, K_SHIFT);
+            type_text("Night");
+            tap_key(0, K_SPACE);
+            type_text("drive");
+            run(10);
+            shot("playlist_name");
+            tap_key(0, K_DONE);
+            run(OV_TICKS + 40);
+        }
+        else
+        {
+            press(KEY_DOWN);
+            run(10);
+            shot("playlist_add");
+            press(KEY_A);
+            run(OV_TICKS + 40);
+        }
+    }
+    app.folder[0] = 0;
+    app.pl = PL_FOLDERS;
+    show_tab(TAB_FOLDER);
+    run(TAB_TICKS + 10);
+    app.scroll = 0;
+    select_index(0);
+    run(240);       // the toast gone
+    shot("playlist_folder");
+    activate(0);
+    run(TAB_TICKS + 4);
+    activate(1);
+    run(TAB_TICKS + 10);
+    press(KEY_DOWN);
+    run(10);
+    shot("playlist_songs");
+
     printf("%s\n", failures ? "DEMO INCOMPLETE" : "demo pictures written");
     return failures != 0;
 }
@@ -567,6 +622,20 @@ int main(int argc, char **argv)
     remove(eq_file);
     remove(eq_new);
     eqp_set_file(eq_file);
+    // playlists: a folder of their own, empty at the start
+    static char pl_dir[600];
+    snprintf(pl_dir, sizeof(pl_dir), "%s/playlists", out_dir);
+    DIR *pd = opendir(pl_dir);
+    for (struct dirent *e; pd && (e = readdir(pd)) != NULL;)
+    {
+        char f[1200];
+        snprintf(f, sizeof(f), "%s/%s", pl_dir, e->d_name);
+        if (e->d_name[0] != '.')
+            remove(f);
+    }
+    if (pd)
+        closedir(pd);
+    pl_set_dir(pl_dir);
 
     gfx_init();
     player_init();
@@ -1950,6 +2019,151 @@ int main(int argc, char **argv)
         run(30);
     }
 
+    // ---- playlists: made on the DS, on top of the folder tab
+    {
+        tap(170, 10);   // Title tab
+        run(TAB_TICKS + 4);
+        int r = 2;
+        uint32_t song = app.items[app.scroll + r].id;
+        hold(100, LIST_Y + r * ROW_H + 8, 35);
+        release();
+        check(app.overlay == OV_ROWMENU && app_row_count(app.menu_item) == 4 && app_row_extra(app.menu_item) == ROWX_ADD,
+              "hold a song: a fourth row, Add to playlist");
+        run(OV_TICKS + 2);
+        shot("50_pl_rowmenu");
+        tap(150, ui_rowmenu_y(LIST_Y + r * ROW_H) + 20 + 3 * 16 + 8);
+        check(app.overlay == OV_PL_ADD, "Add to playlist: New playlist, then the playlists");
+        run(OV_TICKS + 2);
+        shot("50a_pl_picker_empty");
+        tap(150, BAR_Y - PLADD_H + 20 + 8);
+        check(app.overlay == OV_EQ_NAME && app.name_for == NAME_PL, "New playlist: its name first");
+        run(OV_TICKS + 2);
+        tap_key(0, K_SHIFT);
+        type_text("Bus");
+        shot("50b_pl_name");
+        tap_key(0, K_DONE);
+        check(app.overlay == OV_NONE && pl_count() == 1 && strcmp(pl_name(0), "Bus") == 0 && pl_size(0) == 1
+              && pl_tracks(0)[0] == song, "OK: playlist Bus with the song");
+        run(OV_TICKS + 2);
+
+        // an album to it: its songs, the one already in it once
+        tap(108, 10);   // Album tab
+        run(TAB_TICKS + 4);
+        int ai = find_row("Paper Archive vol.1");
+        app.scroll = ai;
+        uint32_t album = app.items[ai].id;
+        int in_album = 0;
+        for (int k = 0; k < lib_album(album)->count; k++)
+            in_album += lib_album_track(lib_album(album), k) != song;
+        hold(100, LIST_Y + 8, 35);
+        release();
+        run(OV_TICKS + 2);
+        tap(150, ui_rowmenu_y(LIST_Y) + 20 + 3 * 16 + 8);
+        run(OV_TICKS + 2);
+        shot("50c_pl_picker");
+        tap(150, BAR_Y - PLADD_H + 20 + 16 + 8);
+        check(app.overlay == OV_NONE && pl_size(0) == 1 + in_album, "an album to Bus: its songs, no song twice");
+        hold(100, LIST_Y + 8, 35);
+        release();
+        run(OV_TICKS + 2);
+        tap(150, ui_rowmenu_y(LIST_Y) + 20 + 3 * 16 + 8);
+        run(OV_TICKS + 2);
+        tap(150, BAR_Y - PLADD_H + 20 + 16 + 8);
+        check(pl_size(0) == 1 + in_album, "again: already in it");
+        run(10);
+        shot("50d_pl_already");
+
+        // the folder tab: Playlists on top (of the card's top folder), then Bus, then its songs
+        app.folder[0] = 0;
+        tap(208, 10);
+        run(TAB_TICKS + 4);
+        check(app.tab == TAB_FOLDER && app.items[0].kind == ITEM_PLAYLISTS, "folder tab: Playlists on top");
+        app.scroll = 0;
+        shot("51_pl_folder");
+        tap(100, LIST_Y + 8);
+        run(TAB_TICKS + 4);
+        check(app.pl == PL_LIST && app.n_items == 2 && app.items[1].kind == ITEM_PLAYLIST, "Playlists: Bus");
+        shot("51a_pl_list");
+        tap(100, LIST_Y + ROW_H + 8);
+        run(TAB_TICKS + 4);
+        check(app.pl == 0 && app.n_items == 1 + pl_size(0) && app.items[1].id == song, "Bus: its songs in its order");
+        app.scroll = 0;
+        shot("51b_pl_songs");
+        tap(100, LIST_Y + 2 * ROW_H + 8);
+        run(10);
+        check(queue_count() == pl_size(0) && queue_track(queue_pos()) == pl_tracks(0)[1],
+              "tap a song: the playlist plays from it");
+        hold(100, LIST_Y + ROW_H + 8, 35);
+        release();
+        check(app_row_extra(app.menu_item) == ROWX_REMOVE, "a song in a playlist: Remove");
+        run(OV_TICKS + 2);
+        shot("51c_pl_song_menu");
+        int before = pl_size(0);
+        tap(150, ui_rowmenu_y(LIST_Y + ROW_H) + 20 + 3 * 16 + 8);
+        check(pl_size(0) == before - 1 && app.n_items == pl_size(0) + 1 && app.items[1].id != song,
+              "Remove: out of the playlist");
+        run(20);
+        tap(100, LIST_Y + 8);       // ‹ Playlists
+        run(TAB_TICKS + 4);
+        check(app.pl == PL_LIST && app.sel == 1, "‹: the playlists, on Bus");
+        tap(100, LIST_Y + 8);       // ‹ the folders
+        run(TAB_TICKS + 4);
+        check(app.pl == PL_FOLDERS && app.items[app.sel].kind == ITEM_PLAYLISTS, "‹: the folders, on Playlists");
+
+        // the queue as a playlist: 💾 on the queue panel
+        slide_to(true);
+        run(SLIDE_TICKS + 4);
+        press(KEY_Y);
+        run(OV_TICKS + 4);
+        shot("52_pl_queue");
+        tap(Q_SAVE_X + 8, 10);
+        check(app.overlay == OV_EQ_NAME && app.name_for == NAME_PL_QUEUE, "💾: the queue as a playlist, its name");
+        run(OV_TICKS + 2);
+        type_text("all");
+        shot("52a_pl_queue_name");
+        tap_key(0, K_DONE);
+        int all = pl_find("all");
+        check(app.overlay == OV_QUEUE && pl_count() == 2 && all == 0 && pl_size(all) == queue_count(),
+              "OK: \"all\" with the queue's songs, back on the queue");
+        press(KEY_B);
+        run(OV_TICKS + 2);
+        slide_to(false);
+        run(SLIDE_TICKS + 4);
+
+        // read again from the files
+        int nb = pl_size(pl_find("Bus")), na = pl_size(pl_find("all"));
+        pl_load();
+        check(pl_count() == 2 && pl_size(pl_find("bus")) == nb && pl_size(pl_find("all")) == na
+              && strcmp(pl_name(0), "all") == 0, "read again from the card: the same");
+
+        // deleting asks first
+        app.pl = PL_LIST;
+        show_tab(TAB_FOLDER);
+        run(TAB_TICKS + 4);
+        hold(100, LIST_Y + ROW_H + 8, 35);
+        release();
+        check(app_row_extra(app.menu_item) == ROWX_DELETE, "hold a playlist: Delete");
+        tap(150, ui_rowmenu_y(LIST_Y + ROW_H) + 20 + 3 * 16 + 8);
+        check(app.overlay == OV_PL_ASK, "Delete asks first");
+        run(OV_TICKS + 2);
+        shot("53_pl_delete_ask");
+        tap(PLASK_X + 40, PLASK_Y + 20 + ROW_H + 8);
+        check(app.overlay == OV_NONE && pl_count() == 2, "Keep: still there");
+        hold(100, LIST_Y + ROW_H + 8, 35);
+        release();
+        tap(150, ui_rowmenu_y(LIST_Y + ROW_H) + 20 + 3 * 16 + 8);
+        tap(PLASK_X + 40, PLASK_Y + 20 + 8);
+        char gone[1300];
+        snprintf(gone, sizeof(gone), "%s/all.m3u", pl_dir);
+        FILE *gf = fopen(gone, "rb");
+        check(pl_count() == 1 && pl_find("all") < 0 && gf == NULL && app.n_items == 2, "Delete: gone, its file too");
+        if (gf)
+            fclose(gf);
+        app.pl = PL_FOLDERS;
+        show_tab(TAB_ARTIST);
+        run(30);
+    }
+
     // ---- the German interface: every text there, every screen drawn, the texts fit
     {
         check(i18n_missing(LANG_DE) == S_NONE && i18n_missing(LANG_EN) == S_NONE, "every text in English and German");
@@ -1971,6 +2185,9 @@ int main(int argc, char **argv)
                    && font_text_width(txt(S_PRESET_ULTRAVIOLET)) <= PRESET_X1 - PRESET_X0 - 46 - 16;
             for (int i = 0; i < 3; i++)
                 fit &= font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4;       // the row menu
+            fit &= font_text_width(txt(S_ADD_TO_PL)) <= 240 - 88 - 24 - 4 && font_text_width(txt(S_PL_REMOVE)) <= 240 - 88 - 24 - 4
+                   && font_text_width(txt(S_PL_NEW)) <= PLADD_X1 - PLADD_X0 - 28
+                   && font_text_width(txt(S_ADD_TO_PL)) <= PLADD_X1 - PLADD_X0 - 16;
             for (int i = S_SORT_ARTISTS; i <= S_SORT_FOLDERS; i++)
                 fit &= font_text_width(txt(i)) <= 248 - 96 - 8;                        // sort menu title
             for (int i = S_SORT_NAME_UP; i <= S_SORT_TRACK; i++)

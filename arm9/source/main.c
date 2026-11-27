@@ -21,6 +21,7 @@
 #include "font.h"
 #include "keyboard.h"
 #include "player.h"
+#include "playlist.h"
 #include "queue.h"
 #include "stats.h"
 #include "util.h"
@@ -171,9 +172,32 @@ static void rebuild_list(void)
     case TAB_FOLDER:
     {
         int n = 0;
-        if (app.folder[0])
+        if (app.pl >= pl_count())
+            app.pl = pl_count() ? PL_LIST : PL_FOLDERS;   // that playlist is gone
+        if (app.pl == PL_LIST && pl_count() == 0)
+            app.pl = PL_FOLDERS;
+        if (app.pl == PL_LIST)
+        {
             app.items[n++] = (Item){ ITEM_UP, 0 };
-        n += lib_list_folder(app.items + n, app.folder, sort);
+            for (int i = 0; i < pl_count(); i++)
+                app.items[n++] = (Item){ ITEM_PLAYLIST, (uint32_t)i };
+        }
+        else if (app.pl >= 0)
+        {
+            // its songs in its order
+            app.items[n++] = (Item){ ITEM_UP, 0 };
+            const uint32_t *t = pl_tracks(app.pl);
+            for (int i = 0; i < pl_size(app.pl) && n < item_cap; i++)
+                app.items[n++] = (Item){ ITEM_TRACK, t[i] };
+        }
+        else
+        {
+            if (app.folder[0])
+                app.items[n++] = (Item){ ITEM_UP, 0 };
+            else if (pl_count())
+                app.items[n++] = (Item){ ITEM_PLAYLISTS, 0 };   // on top of the folders
+            n += lib_list_folder(app.items + n, app.folder, sort);
+        }
         app.n_items = n;
         break;
     }
@@ -484,6 +508,16 @@ static void mark(uint32_t t) { app.added[t >> 3] |= 1 << (t & 7); }
 
 static int item_tracks(const Item *it)
 {
+    if (it->kind == ITEM_PLAYLIST)
+    {
+        int n = pl_size((int)it->id);
+        n = n < tracks_cap ? n : tracks_cap;
+        if (n > 0)
+            memcpy(tracks_buf, pl_tracks((int)it->id), n * sizeof(uint32_t));
+        return n;
+    }
+    if (it->kind == ITEM_PLAYLISTS)
+        return 0;
     return lib_item_tracks(it, app.folder, tracks_buf, tracks_cap);
 }
 
@@ -565,6 +599,14 @@ static void activate(int i)
         search_tag_toggle(&app.sf, (int)TAG_ITEM_KEY(it->id), TAG_ITEM_VALUE(it->id));
         query_clear();
         break;
+    case ITEM_PLAYLISTS:
+        app.pl = PL_LIST;
+        show_tab_dir(TAB_FOLDER, 1);
+        break;
+    case ITEM_PLAYLIST:
+        app.pl = (int)it->id;
+        show_tab_dir(TAB_FOLDER, 1);
+        break;
     case ITEM_FOLDER:
     {
         char name[256];
@@ -576,6 +618,19 @@ static void activate(int i)
     }
     case ITEM_UP:
     {
+        if (app.pl != PL_FOLDERS)
+        {
+            // a playlist: back to the playlists; the playlists: back to the folders
+            int was = app.pl;
+            app.pl = was >= 0 ? PL_LIST : PL_FOLDERS;
+            show_tab_dir(TAB_FOLDER, -1);
+            if (was >= 0)
+                select_item(ITEM_PLAYLIST, (uint32_t)was);
+            else
+                select_item(ITEM_PLAYLISTS, 0);
+            app.sel_vis = (app.sel - app.scroll) * ROW_H;
+            break;
+        }
         char *slash = strrchr(app.folder, '/');
         char left[512];
         snprintf(left, sizeof(left), "%s", slash ? slash + 1 : app.folder);
@@ -600,6 +655,162 @@ static void activate(int i)
     }
 }
 
+// ---- playlists
+
+int app_row_extra(int i)
+{
+    if (i < 0 || i >= app.n_items)
+        return ROWX_NONE;
+    const Item *it = &app.items[i];
+    if (it->kind == ITEM_PLAYLIST)
+        return ROWX_DELETE;
+    if (it->kind == ITEM_TRACK && app.tab == TAB_FOLDER && app.pl >= 0)
+        return ROWX_REMOVE;
+    return it->kind == ITEM_UP || it->kind == ITEM_HEADER || it->kind == ITEM_PLAYLISTS ? ROWX_NONE : ROWX_ADD;
+}
+
+int app_row_count(int i)
+{
+    return app_row_extra(i) == ROWX_NONE ? 3 : 4;
+}
+
+// The list again after a playlist changed, staying where it was.
+static void refresh_list(void)
+{
+    int sel = app.sel, scroll = app.scroll;
+    rebuild_list();
+    app.sel = sel < app.n_items ? sel : app.n_items - 1;
+    if (app.sel < 0)
+        app.sel = 0;
+    int max = app.n_items > list_rows() ? app.n_items - list_rows() : 0;
+    app.scroll = scroll < max ? scroll : max;
+    app.sel_vis = (app.sel - app.scroll) * ROW_H;
+    redraw = true;
+}
+
+// "Added to …", "Already in …"
+static void pl_added_toast(int pl, int added, int n)
+{
+    const char *nm = pl_name(pl);
+    if (added < 0)
+        toast(txt(S_PL_FULL), nm);
+    else if (added == 0)
+        toast(txt(S_PL_ALREADY), nm);
+    else if (n == 1)
+        toast(txt(S_PL_ADDED), nm);
+    else
+        toast(txt(S_PL_N_ADDED), added, nm);
+}
+
+// Its songs to playlist pl (the songs of the queue for NAME_PL_QUEUE).
+static void pl_add_songs(int pl, bool queue)
+{
+    int n = 0;
+    if (queue)
+        for (int i = 0; i < queue_count() && n < tracks_cap; i++)
+            tracks_buf[n++] = queue_track(i);
+    else
+        n = item_tracks(&app.pl_item);
+    pl_added_toast(pl, n ? pl_add(pl, tracks_buf, n) : 0, n);
+    if (app.tab == TAB_FOLDER)
+        refresh_list();
+}
+
+static void name_start(int kind)
+{
+    app.eq_name[0] = 0;
+    app.key_down = app.acc_key = -1;
+    app.shift = app.kb_num = false;
+    app.name_for = (uint8_t)kind;
+    app.overlay = OV_EQ_NAME;
+}
+
+// "Add to playlist": New playlist, then the playlists.
+static void pl_picker_open(const Item *it)
+{
+    app.pl_item = *it;
+    app.pl_scroll = 0;
+    app.menu_sel = 0;
+    app.overlay = OV_PL_ADD;
+}
+
+static void pl_picker_scroll_to_sel(void)
+{
+    if (app.menu_sel < app.pl_scroll)
+        app.pl_scroll = app.menu_sel;
+    if (app.menu_sel >= app.pl_scroll + PLADD_ROWS)
+        app.pl_scroll = app.menu_sel - PLADD_ROWS + 1;
+}
+
+static void pl_picker_choose(int r)
+{
+    if (r == 0)
+        name_start(NAME_PL);
+    else if (r > 0 && r <= pl_count())
+    {
+        app.overlay = OV_NONE;
+        pl_add_songs(r - 1, false);
+    }
+}
+
+static void pl_picker_tap(int x, int y)
+{
+    int y0 = BAR_Y - PLADD_H;
+    if (x < PLADD_X0 || x >= PLADD_X1 || y < y0 || y >= BAR_Y)
+        app.overlay = OV_NONE;          // beside it: closed
+    else if (y >= y0 + 20)
+    {
+        int r = app.pl_scroll + (y - y0 - 20) / 16;
+        if ((y - y0 - 20) / 16 < PLADD_ROWS && r <= pl_count())
+            pl_picker_choose(r);
+    }
+    redraw = true;
+}
+
+// The typed name: a new playlist (or the one with that name) gets the songs.
+static void pl_name_done(void)
+{
+    bool queue = app.name_for == NAME_PL_QUEUE;
+    // a new one changes the others' places (they're sorted by name)
+    char shown[PL_NAME] = "";
+    if (app.pl >= 0)
+        snprintf(shown, sizeof(shown), "%s", pl_name(app.pl));
+    int pl = pl_find(app.eq_name);
+    if (pl < 0)
+    {
+        if (pl_count() >= PL_MAX)
+        {
+            toast("%s", txt(S_PL_TOO_MANY));
+            app.overlay = queue ? OV_QUEUE : OV_NONE;
+            return;
+        }
+        pl = pl_create(app.eq_name);
+        if (shown[0])
+            app.pl = pl_find(shown);
+    }
+    app.overlay = queue ? OV_QUEUE : OV_NONE;
+    if (pl >= 0)
+        pl_add_songs(pl, queue);
+}
+
+// Deleting a playlist asks first.
+static void pl_ask_open(const Item *it)
+{
+    app.pl_item = *it;
+    app.eq_ask_sel = 0;
+    app.overlay = OV_PL_ASK;
+}
+
+static void pl_ask_answer(bool del)
+{
+    app.overlay = OV_NONE;
+    if (del)
+    {
+        pl_delete((int)app.pl_item.id);
+        refresh_list();
+    }
+}
+
 static void row_menu_choose(int option)
 {
     int i = app.menu_item;
@@ -607,6 +818,26 @@ static void row_menu_choose(int option)
     if (i < 0 || i >= app.n_items || app.items[i].kind == ITEM_UP)
         return;
     const Item *it = &app.items[i];
+    if (option == 3)
+    {
+        switch (app_row_extra(i))
+        {
+        case ROWX_ADD: pl_picker_open(it); break;
+        case ROWX_DELETE: pl_ask_open(it); break;
+        case ROWX_REMOVE:
+        {
+            char nm[PL_NAME];
+            snprintf(nm, sizeof(nm), "%s", pl_name(app.pl));
+            pl_remove(app.pl, i - 1);       // the row above the songs is ‹
+            toast(txt(S_PL_REMOVED), nm);
+            refresh_list();
+            break;
+        }
+        default: break;
+        }
+        redraw = true;
+        return;
+    }
     if (option == 0)
     {
         if (it->kind == ITEM_TRACK)
@@ -625,7 +856,7 @@ static void row_menu_choose(int option)
 static void open_row_menu(int i)
 {
     if (i < 0 || i >= app.n_items || app.items[i].kind == ITEM_UP || app.items[i].kind == ITEM_HEADER
-        || !lib_loaded())
+        || app.items[i].kind == ITEM_PLAYLISTS || !lib_loaded())
         return;
     select_index(i);
     app.menu_item = i;
@@ -1555,11 +1786,23 @@ static void tap_browser(int x, int y)
         redraw = true;
         return;
     }
+    if (app.overlay == OV_PL_ADD)
+    {
+        pl_picker_tap(x, y);
+        return;
+    }
+    if (app.overlay == OV_PL_ASK)
+    {
+        int r = y - (PLASK_Y + 20);
+        pl_ask_answer(x >= PLASK_X && x < PLASK_X + PLASK_W && r >= 0 && r < ROW_H);   // Delete, else Keep
+        redraw = true;
+        return;
+    }
     if (app.overlay == OV_ROWMENU)
     {
         int row_y = list_y() + (app.menu_item - app.scroll) * ROW_H;
         int y0 = ui_rowmenu_y(row_y);
-        if (x >= 88 && x < 240 && y >= y0 + 20 && y < y0 + 20 + 48)
+        if (x >= 88 && x < 240 && y >= y0 + 20 && y < y0 + 20 + 16 * app_row_count(app.menu_item))
             row_menu_choose((y - y0 - 20) / 16);
         else
             app.overlay = OV_NONE;
@@ -1687,16 +1930,18 @@ static void eq_save(void)
         toast("%s", txt(S_EQ_FULL));
         return;
     }
-    app.eq_name[0] = 0;
-    app.key_down = app.acc_key = -1;
-    app.shift = app.kb_num = false;
-    app.overlay = OV_EQ_NAME;
+    name_start(NAME_EQ);
 }
 
 static void eq_name_done(void)
 {
     if (!app.eq_name[0])
         return;
+    if (app.name_for != NAME_EQ)
+    {
+        pl_name_done();
+        return;
+    }
     int i = eqp_add(app.eq_name, app.set.eq_gain);
     if (i >= 0)
     {
@@ -1776,10 +2021,19 @@ static void tap_eq(int x, int y)
     }
 }
 
+// ×, B: not saved, back to where it came from
+static void name_cancel(void)
+{
+    if (app.name_for == NAME_EQ)
+        eq_open();
+    else
+        app.overlay = app.name_for == NAME_PL_QUEUE ? OV_QUEUE : OV_NONE;
+}
+
 static void tap_eq_name(int x, int y)
 {
     if (y < 20 && x >= 224)
-        eq_open();                  // ×: not saved, back to the panel
+        name_cancel();
     else if (y >= FIELD_Y && y < FIELD_Y + 20 && x >= 228)
         app.eq_name[0] = 0;
     redraw = true;
@@ -1858,6 +2112,8 @@ static void tap_player(int x, int y)
         {
             if (x >= 224)
                 app.overlay = OV_NONE;
+            else if (x >= Q_SAVE_X - 6 && x < Q_SAVE_X + 22 && queue_count() > 0)
+                name_start(NAME_PL_QUEUE);  // 💾: the queue as a playlist
         }
         else if (y < 20 + ROWS * ROW_H && x < SCROLL_X)
         {
@@ -1992,7 +2248,7 @@ static void touch_down(int x, int y)
         redraw = true;
         return;
     }
-    fdrag_from = *fpage_scroll();
+    fdrag_from = app.overlay == OV_PL_ADD ? app.pl_scroll : *fpage_scroll();
     if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
         && !(app.tab == TAB_SEARCH && app.kb_up))
     {
@@ -2044,6 +2300,16 @@ static void touch_move(int x, int y)
     if (kb_pressing)
     {
         kb_touch_move(x, y);
+        redraw = true;
+        return;
+    }
+    if (app.overlay == OV_PL_ADD && tp.moved)
+    {
+        // drag the playlists
+        int n = 1 + pl_count();
+        int max = n > PLADD_ROWS ? n - PLADD_ROWS : 0;
+        int s = fdrag_from + (tp.y0 - y) / 16;
+        app.pl_scroll = s < 0 ? 0 : (s > max ? max : s);
         redraw = true;
         return;
     }
@@ -2236,7 +2502,22 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);
         return;
     case OV_ROWMENU:
-        menu_keys(rep, down, 3, row_menu_choose);
+        menu_keys(rep, down, app_row_count(app.menu_item), row_menu_choose);
+        return;
+    case OV_PL_ADD:
+    {
+        int count = 1 + pl_count();
+        if (rep & KEY_UP) app.menu_sel = app.menu_sel <= 0 ? count - 1 : app.menu_sel - 1;
+        if (rep & KEY_DOWN) app.menu_sel = app.menu_sel + 1 >= count ? 0 : app.menu_sel + 1;
+        pl_picker_scroll_to_sel();
+        if (down & KEY_A) pl_picker_choose(app.menu_sel);
+        if (down & KEY_B) app.overlay = OV_NONE;
+        return;
+    }
+    case OV_PL_ASK:
+        if (rep & (KEY_UP | KEY_DOWN)) app.eq_ask_sel ^= 1;
+        if (down & KEY_A) pl_ask_answer(app.eq_ask_sel == 0);
+        if (down & KEY_B) pl_ask_answer(false);
         return;
     case OV_IM:
         menu_keys(rep, down, IM_COUNT, im_menu_choose);
@@ -2278,7 +2559,7 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         return;
     case OV_EQ_NAME:
         if (down & KEY_B)
-            eq_open();              // not saved
+            name_cancel();          // not saved
         if (down & KEY_A)
             eq_name_done();
         return;
@@ -2522,6 +2803,8 @@ static void app_init(void)
     search_filter_clear(&app.sf);
     app.key_down = app.acc_key = app.key_flash = -1;
     app.fpage = app.fkind = app.fbase = -1;
+    app.pl = PL_FOLDERS;
+    pl_load();
     tracks_buf = malloc(tracks_cap * sizeof(uint32_t));
     app.added = calloc((lib_track_count() + 8) / 8, 1);
     app.artist = -1;
@@ -2776,7 +3059,8 @@ static void app_tick(void)
     int menu_target = app.ov_vis == OV_SETTINGS && !presets
                       ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
                          ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)
-                      : (app.ov_vis == OV_FILTER ? (app.menu_sel - *fpage_scroll()) * 16 : app.menu_sel * 16);
+                      : (app.ov_vis == OV_FILTER ? (app.menu_sel - *fpage_scroll()) * 16
+                         : (app.ov_vis == OV_PL_ADD ? (app.menu_sel - app.pl_scroll) * 16 : app.menu_sel * 16));
     static int fpage_was = -1;
     bool page_changed = app.set_page != page_was || app.fpage != fpage_was;
     page_was = app.set_page;

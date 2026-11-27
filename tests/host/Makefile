@@ -18,7 +18,7 @@ test_eq: test_eq.c $(SRC)/eq.c $(HDRS)
 test_player: test_player.c $(CORE) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ test_player.c $(CORE)
 
-APP     := $(SRC)/search.c $(SRC)/keyboard.c $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
+APP     := $(SRC)/playlist.c $(SRC)/search.c $(SRC)/keyboard.c $(SRC)/font.c $(SRC)/gfx.c $(SRC)/builtin_font.c $(SRC)/library.c $(SRC)/queue.c \
            $(SRC)/colorpick.c $(SRC)/palette.c $(SRC)/state.c $(SRC)/stats.c $(SRC)/eqprof.c $(SRC)/ui.c $(SRC)/viz.c $(SRC)/default_cover.c
 
 screens: screens.c $(CORE) $(APP) $(SRC)/main.c $(HDRS)

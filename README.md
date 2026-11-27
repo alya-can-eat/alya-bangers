@@ -22,7 +22,7 @@ Put your music on the card with the converter on your PC, then listen to it on y
 - Browse your music by artist, album, song or folder
 - Search by name or tag (genre, …), also in Japanese, Chinese and Russian
 - A player with a turning record and a visualizer
-- A queue you can change
+- A queue you can change, and playlists
 - An equalizer with your own profiles
 - Sound settings for cleaner highs
 - Rate your songs, see how often you played them
@@ -57,7 +57,6 @@ For the technical side:
 
 ## Not there yet:
 
-- Playlists
 - A battery warning you can hear
 - Start another launcher (Pico Launcher, TWiLight Menu++, …)
 

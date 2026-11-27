@@ -16,6 +16,7 @@
 #include "font.h"
 #include "keyboard.h"
 #include "player.h"
+#include "playlist.h"
 #include "queue.h"
 #include "stats.h"
 #include "util.h"
@@ -249,7 +250,7 @@ void ui_item_label(const Item *it, char *buf, int size)
         snprintf(buf, size, "%s", lib_value(lib_album(it->id)->name));
         break;
     case ITEM_TRACK:
-        if (app.tab == TAB_FOLDER)
+        if (app.tab == TAB_FOLDER && app.pl == PL_FOLDERS)     // a playlist shows titles
             basename_no_ext(lib_path(it->id), buf, size);
         else
             track_title(it->id, buf, size);
@@ -260,8 +261,23 @@ void ui_item_label(const Item *it, char *buf, int size)
     case ITEM_TAG:
         snprintf(buf, size, "%s", lib_value(TAG_ITEM_VALUE(it->id)));
         break;
+    case ITEM_PLAYLISTS:
+        snprintf(buf, size, "%s", txt(S_PLAYLISTS));
+        break;
+    case ITEM_PLAYLIST:
+        snprintf(buf, size, "%s", pl_name((int)it->id));
+        break;
     case ITEM_UP:
     {
+        if (app.pl != PL_FOLDERS)
+        {
+            // "Playlists", "Playlists › Night drive"
+            if (app.pl >= 0)
+                snprintf(buf, size, "%s › %s", txt(S_PLAYLISTS), pl_name(app.pl));
+            else
+                snprintf(buf, size, "%s", txt(S_PLAYLISTS));
+            break;
+        }
         // "Bandcamp › Kivara"
         int n = 0;
         buf[0] = 0;
@@ -292,6 +308,12 @@ static void item_meta(const Item *it, char *buf, int size)
         break;
     case ITEM_TRACK:
         mmss(buf, size, lib_track(it->id)->duration_ms);
+        break;
+    case ITEM_PLAYLISTS:
+        snprintf(buf, size, "%d", pl_count());
+        break;
+    case ITEM_PLAYLIST:
+        snprintf(buf, size, "%d", pl_size((int)it->id));
         break;
     default:
         break;
@@ -1291,9 +1313,10 @@ static bool draw_list(int oy)
             }
             x = 28;
         }
-        if (it->kind == ITEM_FOLDER || it->kind == ITEM_UP)
+        if (it->kind == ITEM_FOLDER || it->kind == ITEM_UP || it->kind == ITEM_PLAYLISTS || it->kind == ITEM_PLAYLIST)
         {
-            icon(B, x - 2, y, it->kind == ITEM_FOLDER ? 0x1F5C0 : 0x2B9D, C_DIM);
+            uint32_t ic = it->kind == ITEM_FOLDER ? 0x1F5C0 : (it->kind == ITEM_UP ? 0x2B9D : 0x1F3B5);   // 🗀 ⮝ 🎵
+            icon(B, x - 2, y, ic, C_DIM);
             x += 18;
         }
         int mw = 0;
@@ -1524,7 +1547,7 @@ static void draw_sort_menu(int oy)
 
 int ui_rowmenu_y(int row_y)
 {
-    int h = 20 + 16 * 3 + 4;
+    int h = 20 + 16 * app_row_count(app.menu_item) + 4;
     return row_y + ROW_H + h <= BAR_Y ? row_y + ROW_H : row_y - h;
 }
 
@@ -1534,17 +1557,21 @@ static void draw_row_menu(int oy)
         return;
     int row_y = list_y() + (app.menu_item - app.scroll) * ROW_H;
     int y0 = oy + ui_rowmenu_y(row_y);
-    int x0 = 88, x1 = 240, h = 20 + 16 * 3 + 4;
+    int rows = app_row_count(app.menu_item);
+    int x0 = 88, x1 = 240, h = 20 + 16 * rows + 4;
     gfx_fill(B, x0, y0, x1 - x0, h, C_PANEL);
     gfx_rect(B, x0, y0, x1 - x0, h, C_ACC);
     char label[256];
     ui_item_label(&app.items[app.menu_item], label, sizeof(label));
     font_draw(B, x0 + 8, y0 + 2, x1 - x0 - 16, label, C_DIM);
-    static const uint32_t icons[3] = { 0x25B6, 0x21B3, '+' };
-    static const uint8_t names[3] = { S_PLAY_NOW, S_PLAY_NEXT, S_ADD_QUEUE };
+    // the fourth row: to a playlist, out of the playlist, or deleting it
+    int extra = app_row_extra(app.menu_item);
+    uint32_t icons[4] = { 0x25B6, 0x21B3, '+', extra == ROWX_ADD ? 0x1F3B5 : 0xD7 };
+    uint16_t names[4] = { S_PLAY_NOW, S_PLAY_NEXT, S_ADD_QUEUE,
+                          extra == ROWX_ADD ? S_ADD_TO_PL : (extra == ROWX_REMOVE ? S_PL_REMOVE : S_EQ_DELETE) };
     if (app.menu_sel >= 0)
-        highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * 3, C_SEL);
-    for (int i = 0; i < 3; i++)
+        highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * rows, C_SEL);
+    for (int i = 0; i < rows; i++)
     {
         int y = y0 + 20 + i * 16;
         icon(B, x0 + 4, y, icons[i], C_ACC);
@@ -1590,8 +1617,78 @@ static bool row_menu_moving(int oy)
         return false;
     }
     int y0 = oy + ui_rowmenu_y(list_y() + (app.menu_item - app.scroll) * ROW_H);
-    shifted(w_row, oy, 88, y0, 240, y0 + 72, (oy + BAR_Y - y0) * (256 - p) / 256, oy + BAR_Y);
+    int h = 20 + 16 * app_row_count(app.menu_item) + 4;
+    shifted(w_row, oy, 88, y0, 240, y0 + h, (oy + BAR_Y - y0) * (256 - p) / 256, oy + BAR_Y);
     return true;
+}
+
+// "Add to playlist": New playlist, then the playlists with their songs.
+static void draw_pl_add(int oy)
+{
+    int x0 = PLADD_X0, x1 = PLADD_X1, y0 = oy + BAR_Y - PLADD_H;
+    gfx_fill(B, x0, y0, x1 - x0, PLADD_H, C_PANEL);
+    gfx_rect(B, x0, y0, x1 - x0, PLADD_H, C_ACC);
+    text(B, x0 + 8, y0 + 2, txt(S_ADD_TO_PL), C_DIM);
+    int r0 = y0 + 20, n = 1 + pl_count();
+    if (app.menu_sel >= 0)
+        highlight(x0 + 1, r0 + app.menu_vis, x1 - x0 - 2, 16, r0, r0 + 16 * PLADD_ROWS, C_SEL);
+    for (int r = 0; r < PLADD_ROWS && app.pl_scroll + r < n; r++)
+    {
+        int i = app.pl_scroll + r, y = r0 + r * 16;
+        if (i == 0)
+        {
+            icon(B, x0 + 4, y, '+', C_ACC);
+            text(B, x0 + 24, y, txt(S_PL_NEW), C_ACC);
+            continue;
+        }
+        char c[12];
+        snprintf(c, sizeof(c), "%d", pl_size(i - 1));
+        int cw = font_text_width(c);
+        text_r(B, x1 - 10, y, c, C_DIM);
+        icon(B, x0 + 4, y, 0x1F3B5, C_DIM);
+        font_draw(B, x0 + 24, y, x1 - x0 - 40 - cw, pl_name(i - 1), C_TEXT);
+    }
+    if (n > PLADD_ROWS)
+    {
+        int h = 16 * PLADD_ROWS, th = h * PLADD_ROWS / n;
+        gfx_fill(B, x1 - 4, r0 + (h - th) * app.pl_scroll / (n - PLADD_ROWS), 2, th, C_ACC_DIM);
+    }
+}
+
+static bool w_pl_add(int oy) { draw_pl_add(oy); return false; }
+
+static bool pl_add_moving(int oy)
+{
+    int p = ov_progress();
+    if (p >= 256)
+    {
+        draw_pl_add(oy);
+        return false;
+    }
+    int y0 = oy + BAR_Y - PLADD_H;
+    shifted(w_pl_add, oy, PLADD_X0, y0, PLADD_X1, oy + BAR_Y + 1, (PLADD_H + 1) * (256 - p) / 256, oy + BAR_Y + 1);
+    return true;
+}
+
+// "Delete …?" for a playlist, like the equalizer's.
+static void draw_pl_ask(int oy)
+{
+    int x = PLASK_X, y = oy + PLASK_Y, w = PLASK_W, h = 20 + 2 * ROW_H + 4;
+    gfx_fill(B, x, y, w, h, C_ACC);
+    gfx_fill(B, x + 1, y + 1, w - 2, h - 2, C_PANEL);
+    char q[96];
+    snprintf(q, sizeof(q), txt(S_EQ_ASK), pl_name((int)app.pl_item.id));
+    font_draw(B, x + 6, y + 2, w - 12, q, C_DIM);
+    for (int i = 0; i < 2; i++)
+    {
+        int ry = y + 20 + i * ROW_H;
+        bool hi = app.eq_ask_sel == i;
+        if (hi)
+            gfx_fill(B, x + 1, ry, w - 2, ROW_H, C_SEL);
+        char a[48];
+        snprintf(a, sizeof(a), "%s %s", i ? "‹" : "×", txt(i ? S_EQ_KEEP : S_EQ_DELETE));
+        text(B, x + 6, ry, a, hi ? C_ACC : C_TEXT);
+    }
 }
 
 // ------------------------------------------------------------ search (🔍)
@@ -2197,6 +2294,10 @@ static bool draw_panel(int oy)
             anim |= sort_menu_moving(oy);
         if (app.ov_vis == OV_ROWMENU)
             anim |= row_menu_moving(oy);
+        if (app.ov_vis == OV_PL_ADD)
+            anim |= pl_add_moving(oy);
+        if (app.ov_vis == OV_PL_ASK)
+            draw_pl_ask(oy);
         if (app.ov_vis == OV_FILTER)
             anim |= filter_menu_moving(oy);
         if (app.ov_vis == OV_IM)
@@ -2422,7 +2523,9 @@ static bool draw_queue(void)
     char head[48];
     int n = queue_count();
     snprintf(head, sizeof(head), txt(n == 1 ? S_QUEUE_ONE : S_QUEUE_N), n);
-    text(B, 8, 2, head, C_TEXT);
+    font_draw(B, 8, 2, Q_SAVE_X - 14, head, C_TEXT);
+    if (n)
+        icon(B, Q_SAVE_X, 2, 0x1F4BE, C_ACC);      // 💾: the queue as a playlist
     text(B, 236, 2, "×", C_TEXT);
     bool anim = false;
     bool dragging = app.q_drag_from >= 0;
@@ -2643,7 +2746,8 @@ static bool draw_eq_name(void)
 {
     gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
-    text(B, 8, 2, txt(S_EQ_NEW), C_TEXT);
+    bool eq = app.name_for == NAME_EQ;
+    text(B, 8, 2, txt(eq ? S_EQ_NEW : (app.name_for == NAME_PL_QUEUE ? S_PL_SAVE_QUEUE : S_PL_NEW)), C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
     const char *nm = app.eq_name;
     int y = FIELD_Y;
@@ -2661,14 +2765,22 @@ static bool draw_eq_name(void)
     gfx_unclip(B);
     if (nm[0])
         text(B, 236, y + 2, "×", C_DIM);
-    // what gets saved
-    char sum[96] = "", v[8];
-    for (int b = 0; b < EQ_BANDS; b++)
+    // what gets saved: the equalizer's gains, the songs for the playlist
+    char sum[300] = "", v[8];
+    if (eq)
+        for (int b = 0; b < EQ_BANDS; b++)
+        {
+            db_label(v, sizeof(v), app.set.eq_gain[b]);
+            snprintf(sum + strlen(sum), sizeof(sum) - strlen(sum), "%s%s %s", b ? "  " : "", txt(S_EQ_BASS + b), v);
+        }
+    else if (app.name_for == NAME_PL_QUEUE)
+        snprintf(sum, sizeof(sum), txt(queue_count() == 1 ? S_QUEUE_ONE : S_QUEUE_N), queue_count());
+    else
     {
-        db_label(v, sizeof(v), app.set.eq_gain[b]);
-        snprintf(sum + strlen(sum), sizeof(sum) - strlen(sum), "%s%s %s", b ? "  " : "", txt(S_EQ_BASS + b), v);
+        icon(B, 6, CHIPS_Y + 1, 0x1F3B5, C_DIM);
+        ui_item_label(&app.pl_item, sum, sizeof(sum));
     }
-    font_draw(B, 8, CHIPS_Y + 1, 240, sum, C_DIM);
+    font_draw(B, eq || app.name_for == NAME_PL_QUEUE ? 8 : 26, CHIPS_Y + 1, 230, sum, C_DIM);
     draw_keys(KB_Y, true);
     return true;    // the cursor blinks
 }

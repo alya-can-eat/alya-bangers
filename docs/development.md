@@ -83,7 +83,6 @@ Started by hand ([Actions › release](../../../actions/workflows/release.yml) �
 
 ## Not there yet, in detail:
 
-- Playlists
 - A battery warning you can hear
 - Start another launcher from alya-bangers (Pico Launcher, TWiLight Menu++, AKMenu-Next, nds-hb-menu, YSMenu …):
   - With hbmenu's loader: it reads the `.nds` from the card, gives it alya-bangers' DLDI driver and its path, and restarts both CPUs into it. So it works on most flashcarts, not only the DSpico, and can be tested in melonDS.

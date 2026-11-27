@@ -55,7 +55,7 @@ The cover of the song on a turning record, with a visualizer.
   - A song counts as played after half of it or 4 minutes of listening, once per listen.
   - Your rating from the DS wins over the one in the file's tags. Plays add up.
   - Saved in `/_nds/alya-bangers/stats.bin`.
-- Queue (☰): tap a song to jump to it, × removes it, hold and drag to move it.
+- Queue (☰): tap a song to jump to it, × removes it, hold and drag to move it. 💾 saves it as a playlist.
 - Equalizer (the slider button next to ⓘ, lit while it changes the sound):
   - 3 bands, each −12 to +12 dB: Bass (shelf at 120 Hz), Mid (peak at 1 kHz), Treble (shelf at 5 kHz)
   - Drag a slider or tap where it should go. You hear it within half a second.

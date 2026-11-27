@@ -123,7 +123,27 @@ enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BT
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM, OV_EQ,
-               OV_EQ_NAME } Overlay;
+               OV_EQ_NAME, OV_PL_ADD, OV_PL_ASK } Overlay;
+// OV_EQ_NAME types a name: for a new equalizer profile or a playlist
+enum { NAME_EQ, NAME_PL, NAME_PL_QUEUE };
+// the row menu's fourth row, if it has one
+enum { ROWX_NONE, ROWX_ADD, ROWX_REMOVE, ROWX_DELETE };
+int app_row_extra(int i);
+int app_row_count(int i);       // rows of the row menu for item i
+// the folder tab: the folders, the playlists (PL_LIST) or one playlist (its index)
+#define PL_FOLDERS  -1
+#define PL_LIST     -2
+// "Add to playlist": rising from behind the bar
+#define PLADD_ROWS  6
+#define PLADD_H     (20 + 16 * PLADD_ROWS + 4)
+#define PLADD_X0    40
+#define PLADD_X1    240
+// the queue panel's 💾: the queue as a playlist
+#define Q_SAVE_X    208
+// "Delete …?" for a playlist
+#define PLASK_X     40
+#define PLASK_Y     64
+#define PLASK_W     176
 
 // Settings: a top page leading to pages of settings.
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_SOUND, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL,
@@ -195,6 +215,10 @@ typedef struct {
     int eq_drag_from, eq_drag_to;   // a saved profile being moved (its place), -1: none
     bool eq_ask;                // "Delete …?" is open
     int eq_ask_sel;             // its highlighted answer: 0 delete, 1 keep
+    uint8_t name_for;           // NAME_EQ, NAME_PL, NAME_PL_QUEUE
+    int pl;                     // folder tab: PL_FOLDERS, PL_LIST or a playlist
+    Item pl_item;               // what "Add to playlist" adds (or the playlist to delete)
+    int pl_scroll;              // "Add to playlist": first row shown
     char eq_name[EQP_NAME];     // a new profile's name, being typed
 
     // stylus drags

@@ -94,7 +94,9 @@ int lib_value_group(uint32_t value);            // an artist value's group, -1: 
 
 // ITEM_HEADER: a section title in search results (id: SEC_ARTISTS, ...)
 // ITEM_TAG: a tag value in search results (id: TAG_ITEM(key, value))
-typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP, ITEM_HEADER, ITEM_TAG } ItemKind;
+// ITEM_PLAYLISTS: the row leading to the playlists, ITEM_PLAYLIST: one (id: its index, playlist.h)
+typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP, ITEM_HEADER, ITEM_TAG, ITEM_PLAYLISTS,
+               ITEM_PLAYLIST } ItemKind;
 
 #define TAG_ITEM(key, value) (((uint32_t)(key) << 24) | (uint32_t)(value))
 #define TAG_ITEM_KEY(id) ((id) >> 24)
