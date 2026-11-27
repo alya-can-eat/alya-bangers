@@ -1305,6 +1305,8 @@ static void set_change(int id)
         i18n_lang = app.set.lang;
         break;
     case SET_KEYBOARD: app.set.keyboard = (app.set.keyboard + 1) % KB_LAYOUTS; break;
+    case SET_CLOCK: app.set.clock_12h ^= 1; break;
+    case SET_DATE: app.set.date_fmt = (app.set.date_fmt + 1) % DATE_FORMATS; break;
     case SET_SHUFFLE_W:
         app.set.shuffle_weighted ^= 1;
         apply_weighting();

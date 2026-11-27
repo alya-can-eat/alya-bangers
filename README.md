@@ -58,7 +58,6 @@ For the technical side:
 ## Not there yet:
 
 - Playlists
-- A date and time format of its own
 - A battery warning you can hear
 - Start another launcher (Pico Launcher, TWiLight Menu++, …)
 

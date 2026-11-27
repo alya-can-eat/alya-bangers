@@ -341,23 +341,48 @@ void ui_init(void)
     viz_init();
 }
 
+// The date in the format of Settings › Regional: 27.11.2026, 2026-11-27, 11/27/2026.
+static void ui_date(const struct tm *t, char *buf, int size)
+{
+    int d = t->tm_mday, m = t->tm_mon + 1, y = t->tm_year + 1900;
+    switch (app.set.date_fmt)
+    {
+    case DATE_YMD: snprintf(buf, size, "%04d-%02d-%02d", y, m, d); break;
+    case DATE_MDY: snprintf(buf, size, "%02d/%02d/%04d", m, d, y); break;
+    default: snprintf(buf, size, "%02d.%02d.%04d", d, m, y); break;
+    }
+}
+
+// The time: 18:40, or 6:40 pm.
+static void clock_text(const struct tm *t, char *buf, int size)
+{
+    if (app.set.clock_12h)
+    {
+        int h = t->tm_hour % 12;
+        snprintf(buf, size, "%d:%02d %s", h ? h : 12, t->tm_min, t->tm_hour < 12 ? "am" : "pm");
+    }
+    else
+        snprintf(buf, size, "%02d:%02d", t->tm_hour, t->tm_min);
+}
+
 static void header(void)
 {
     gfx_fill(T, 0, 0, SCREEN_W, 16, C_PANEL);
     time_t now = time(NULL);
     struct tm tmv;
     localtime_r(&now, &tmv);
-    char s[32];
-    snprintf(s, sizeof(s), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    char s[32], d[16];
+    clock_text(&tmv, s, sizeof(s));
     text(T, 4, 0, s, C_TEXT);
-    snprintf(s, sizeof(s), "%s %02d.%02d.%04d", txt(S_SUN + tmv.tm_wday % 7), tmv.tm_mday, tmv.tm_mon + 1,
-             tmv.tm_year + 1900);
+    int after_clock = 4 + font_text_width(s) + 8;
+    ui_date(&tmv, d, sizeof(d));
+    snprintf(s, sizeof(s), "%s %s", txt(S_SUN + tmv.tm_wday % 7), d);
     text_r(T, 252, 0, s, C_DIM);
     // the card was too slow somewhere (should never show)
     if (player_underruns())
     {
         snprintf(s, sizeof(s), txt(S_DROPS), (unsigned long)player_underruns());
-        text(T, 52, 0, s, COLOR(31, 12, 10));
+        text(T, after_clock, 0, s, COLOR(31, 12, 10));
     }
 }
 
@@ -2685,6 +2710,8 @@ static const SetItem items_player[] = {
 static const SetItem items_regional[] = {
     { S_LANGUAGE, SI_VALUE, SET_LANG, ICON_REGIONAL },
     { S_KEYBOARD, SI_VALUE, SET_KEYBOARD, ICON_KEYBOARD },
+    { S_CLOCK, SI_VALUE, SET_CLOCK, ICON_CLOCK },
+    { S_DATE, SI_VALUE, SET_DATE, ICON_DATE },
 };
 #define N_ITEMS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 static const struct {
@@ -2807,6 +2834,17 @@ static const char *set_value(int id)
     case SET_TIME_RIGHT: return txt(app.set.show_remaining ? S_LEFT : S_LENGTH);
     case SET_LANG: return lang_name(app.set.lang);
     case SET_KEYBOARD: return app.set.keyboard == KB_QWERTZ ? "QWERTZ" : "QWERTY";
+    case SET_CLOCK: return app.set.clock_12h ? "12 h" : "24 h";
+    case SET_DATE:
+    {
+        // today, the way it's shown
+        static char d[16];
+        time_t now = time(NULL);
+        struct tm tmv;
+        localtime_r(&now, &tmv);
+        ui_date(&tmv, d, sizeof(d));
+        return d;
+    }
     default: return "";
     }
 }

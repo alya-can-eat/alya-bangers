@@ -1103,8 +1103,9 @@ int main(int argc, char **argv)
     check(app.set_page == PAGE_TOP, "B leaves the Theme page");
     tap(100, SET_Y + 5 * SET_H + 10);
     run(20);
-    check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 2, "Regional: language and keyboard");
-    check(app.set.lang == LANG_EN && app.set.keyboard == KB_QWERTY, "English and QWERTY by default");
+    check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 4, "Regional: language, keyboard, time, date");
+    check(app.set.lang == LANG_EN && app.set.keyboard == KB_QWERTY && !app.set.clock_12h && app.set.date_fmt == DATE_DMY,
+          "English, QWERTY, 24 h and 27.11.2026 by default");
     {
         // findable without reading: every top row has an icon, the globe leads to Language
         bool all = true;
@@ -1114,9 +1115,10 @@ int main(int argc, char **argv)
         check(ui_set_item(PAGE_TOP, 5)->icon == 0x1F310 && ui_set_item(PAGE_REGIONAL, 0)->icon == 0x1F310
               && ui_set_item(PAGE_REGIONAL, 0)->id == SET_LANG, "the globe: Regional, then Language");
         // the icons are glyphs the player always has
-        for (int i = 0; i < ui_set_count(PAGE_TOP); i++)
+        for (int i = 0; i < ui_set_count(PAGE_TOP) + ui_set_count(PAGE_REGIONAL); i++)
         {
-            uint32_t cp = ui_set_item(PAGE_TOP, i)->icon;
+            uint32_t cp = i < ui_set_count(PAGE_TOP) ? ui_set_item(PAGE_TOP, i)->icon
+                          : ui_set_item(PAGE_REGIONAL, i - ui_set_count(PAGE_TOP))->icon;
             char u[8] = { 0 };
             if (cp < 0x10000)
                 u[0] = 0xE0 | cp >> 12, u[1] = 0x80 | ((cp >> 6) & 63), u[2] = 0x80 | (cp & 63);
@@ -1131,6 +1133,17 @@ int main(int argc, char **argv)
     tap(100, SET_Y + 1 * SET_H + 10);
     check(app.set.keyboard == KB_QWERTY, "tap again: QWERTY");
     shot("13h_regional");
+    tap(100, SET_Y + 2 * SET_H + 10);
+    check(app.set.clock_12h, "tap Time: 12 h");
+    tap(100, SET_Y + 3 * SET_H + 10);
+    check(app.set.date_fmt == DATE_YMD, "tap Date: 2026-11-27");
+    tap(100, SET_Y + 3 * SET_H + 10);
+    check(app.set.date_fmt == DATE_MDY, "again: 11/27/2026");
+    run(4);
+    shot("13i_regional_12h");
+    tap(100, SET_Y + 2 * SET_H + 10);
+    tap(100, SET_Y + 3 * SET_H + 10);
+    check(!app.set.clock_12h && app.set.date_fmt == DATE_DMY, "back to 24 h and 27.11.2026");
     press(KEY_B);
     run(20);
     // About

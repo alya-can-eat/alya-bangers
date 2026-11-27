@@ -145,6 +145,9 @@ bool state_load(Settings *s, Theme *t, Resume *r)
         s->lang = LANG_EN;
     if (s->keyboard >= KB_LAYOUTS)
         s->keyboard = KB_QWERTY;
+    if (s->date_fmt >= DATE_FORMATS)
+        s->date_fmt = DATE_DMY;
+    s->clock_12h = s->clock_12h != 0;
     s->play_at_start = s->play_at_start != 0;
     h.path[sizeof(h.path) - 1] = 0;
     memcpy(r->path, h.path, sizeof(r->path));

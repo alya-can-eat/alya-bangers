@@ -129,7 +129,7 @@ typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_SOUND, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL,
        PAGE_ABOUT, PAGE_COUNT };
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
-       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER };
+       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER, SET_CLOCK, SET_DATE };
 // switch, value (tap: the next one), › another page, a slider (a taller row)
 enum { SI_TOGGLE, SI_VALUE, SI_PAGE, SI_SLIDER };
 #define SET_SLIDER_H 64
@@ -150,6 +150,8 @@ typedef struct {
 #define ICON_REGIONAL 0x1F310       // 🌐, also Language
 #define ICON_ABOUT    0x24D8        // ⓘ
 #define ICON_KEYBOARD 0x1F5AE       // 🖮
+#define ICON_CLOCK    0x1F552       // 🕒
+#define ICON_DATE     0x1F4C5       // 📅
 #define ICON_EQ       0xE007        // three sliders (builtin_font.c)
 
 extern const int tab_x[TAB_COUNT + 1];
