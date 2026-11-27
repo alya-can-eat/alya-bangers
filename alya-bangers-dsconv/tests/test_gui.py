@@ -189,3 +189,20 @@ def test_no_arguments_open_the_window(monkeypatch):
     opened = []
     monkeypatch.setattr(gui, "run", lambda: opened.append(1) or 0)
     assert cli.main([]) == 0 and opened == [1]
+
+
+def test_about(app, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+    d = gui.About()
+    texts = [lb.text() for lb in d.findChildren(QLabel)]
+    assert gui.APP_NAME in texts and any("GNU GPL v3" in t for t in texts)
+    assert any(t.startswith("Version ") and gui.version_label() in t for t in texts)
+    assert any("© 2026 Alya" in t for t in texts)
+    # the link opens the repo in the browser
+    assert d.link.openExternalLinks() and 'href="https://github.com/alya-can-eat/alya-bangers"' in d.link.text()
+    # ⓘ in the window's header opens it
+    shown = []
+    monkeypatch.setattr(gui.About, "exec", lambda self: shown.append(self) or 0)
+    w = gui.Window()
+    w.about_btn.click()
+    assert len(shown) == 1 and isinstance(shown[0], gui.About)

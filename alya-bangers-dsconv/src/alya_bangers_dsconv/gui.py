@@ -27,6 +27,7 @@ from .convert import Hooks, Prepared, SetupError, execute, free_space, prepare, 
 
 APP_NAME = "alya-bangers-dsconv"
 FONT_PX = 16
+REPO_URL = "https://github.com/alya-can-eat/alya-bangers"
 
 # ------------------------------------------------------------ colours ----
 
@@ -81,6 +82,10 @@ TEXTS = {
         "quit_text": "The songs in progress get finished first. Next time it goes on from there.",
         "quit_yes": "Stop and close", "quit_no": "Keep going",
         "music_dialog": "Your music folder", "card_dialog": "The DS card (or its music folder)",
+        "about": "About", "edition": "PC converter", "tagline": "Puts your music on the DS card",
+        "licence": "Licence: GNU GPL v3", "free_sw": "Free software, no warranty",
+        "parts": "Uses FFmpeg, Qt, libsoxr, GNU Unifont and more, each under its own licence.",
+        "close": "Close",
     },
     "de": {
         "music": "Musikordner", "card": "DS-Karte", "choose": "Wählen…",
@@ -111,6 +116,10 @@ TEXTS = {
         "quit_text": "Die Songs, die gerade laufen, werden fertig. Nächstes Mal geht es dort weiter.",
         "quit_yes": "Stoppen und schliessen", "quit_no": "Weitermachen",
         "music_dialog": "Dein Musikordner", "card_dialog": "Die DS-Karte (oder ihr Musikordner)",
+        "about": "Über", "edition": "PC-Konverter", "tagline": "Bringt deine Musik auf die DS-Karte",
+        "licence": "Lizenz: GNU GPL v3", "free_sw": "Freie Software, ohne Garantie",
+        "parts": "Braucht FFmpeg, Qt, libsoxr, GNU Unifont und mehr, jedes unter seiner eigenen Lizenz.",
+        "close": "Schliessen",
     },
 }
 
@@ -339,6 +348,60 @@ class Ask(QDialog):
         self.accept()
 
 
+class About(QDialog):
+    """Like the DS app's About page: the name, the version, the licence, where
+    the code is."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"{T['about']} {APP_NAME}")
+        self.setModal(True)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 12)
+        lay.setSpacing(0)
+        lay.addWidget(header(T["about"], icon="ⓘ"))
+        body = QVBoxLayout()
+        body.setContentsMargins(24, 18, 24, 0)
+        body.setSpacing(6)
+        name = label(APP_NAME, "acc")
+        name.setStyleSheet(f"font-size: {2 * FONT_PX}px;")  # twice the size, like on the DS: 2×2 pixels
+        rows = [
+            (name, 10),
+            (label(f"Version {version_label()} · {T['edition']}", "dim"), 12),
+            (label(T["tagline"]), 0),
+            (label("© 2026 Alya (alya-can-eat)"), 12),
+            (label(T["licence"]), 0),
+            (label(T["free_sw"], "dim"), 12),
+        ]
+        for w, gap in rows:
+            w.setAlignment(Qt.AlignHCenter)
+            body.addWidget(w)
+            body.addSpacing(gap)
+        shown = REPO_URL.split("://", 1)[1]
+        self.link = QLabel(f'<a href="{REPO_URL}" style="color:{C["acc"]}; text-decoration:none">{shown}</a>')
+        self.link.setTextFormat(Qt.RichText)
+        self.link.setOpenExternalLinks(True)
+        self.link.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.link.setCursor(Qt.PointingHandCursor)
+        self.link.setAlignment(Qt.AlignHCenter)
+        body.addWidget(self.link)
+        body.addSpacing(14)
+        parts = label(T["parts"], "dim", wrap=True)
+        parts.setAlignment(Qt.AlignHCenter)
+        body.addWidget(parts)
+        body.addSpacing(10)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        ok = QPushButton(T["close"])
+        ok.setObjectName("primary")
+        ok.setDefault(True)
+        ok.clicked.connect(self.accept)
+        row.addWidget(ok)
+        body.addLayout(row)
+        lay.addLayout(body)
+        self.setMinimumWidth(520)
+
+
 def ask_clash(parent, dest_rel: str, options: list[str]) -> tuple[int, bool]:
     """Which file goes on the card (index into options), and whether to take
     the suggestion for all the others too. Tests replace this."""
@@ -432,7 +495,16 @@ class Window(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(header(APP_NAME, version_label(), "♪"))
+        top = header(APP_NAME, version_label(), "♪")
+        # ⓘ: About, like on the DS
+        self.about_btn = QPushButton("ⓘ")
+        self.about_btn.setObjectName("link")
+        self.about_btn.setToolTip(T["about"])
+        self.about_btn.setCursor(Qt.PointingHandCursor)
+        self.about_btn.clicked.connect(self._about)
+        top.layout().addSpacing(10)
+        top.layout().addWidget(self.about_btn)
+        root.addWidget(top)
 
         body = QVBoxLayout()
         body.setContentsMargins(16, 10, 16, 14)
@@ -493,6 +565,9 @@ class Window(QWidget):
         self.setMinimumWidth(600)
         self._load()
         self._refresh()
+
+    def _about(self) -> None:
+        About(self).exec()
 
     # -- layout helpers
     @staticmethod

@@ -30,6 +30,7 @@ Next time only new and changed songs get converted.
 - *Remove songs that are gone from the music folder*: also deletes the songs on the card you don't have anymore.
 - Stop finishes the songs in progress. Next time it goes on from there.
 - English or German, like the computer.
+- ⓘ (top right): the version, the licence and a link to this repo, like the DS app's About page.
 - It also works on the command line, more in [alya-bangers-dsconv](../alya-bangers-dsconv/).
 
 ## SD card:
