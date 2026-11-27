@@ -393,7 +393,7 @@ static void header(void)
     time_t now = time(NULL);
     struct tm tmv;
     localtime_r(&now, &tmv);
-    char s[32], d[16];
+    char s[64], d[40];
     clock_text(&tmv, s, sizeof(s));
     text(T, 4, 0, s, C_TEXT);
     int after_clock = 4 + font_text_width(s) + 8;
@@ -2950,7 +2950,7 @@ static const char *set_value(int id)
     case SET_DATE:
     {
         // today, the way it's shown
-        static char d[16];
+        static char d[40];
         time_t now = time(NULL);
         struct tm tmv;
         localtime_r(&now, &tmv);
