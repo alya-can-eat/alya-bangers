@@ -39,6 +39,11 @@ bool fifoSendDatamsg(u32 channel, u32 num_bytes, u8 *data)
             sim_hw.played = 0;
             sim_hw.starts++;
             break;
+        case STREAM_CMD_CHIME:
+            sim_hw.chimes++;
+            sim_hw.chime = (const int16_t *)(uintptr_t)c.left;
+            sim_hw.chime_bytes = c.ring_bytes;
+            break;
         case STREAM_CMD_STOP:
             sim_hw.running = false;
             sim_hw.stops++;
@@ -84,6 +89,7 @@ void sim_set_keys(uint32_t down, uint32_t held) { keys_down = down; keys_held = 
 void sim_set_touch(int x, int y) { touch_x = x; touch_y = y; }
 void touchRead(touchPosition *t) { t->px = touch_x; t->py = touch_y; }
 int sim_backlight = -1;
+u32 sim_battery = BATTERY_LEVEL_DS_HIGH;
 int sim_brightness;
 u32 systemSetBacklightLevel(u32 level) { sim_backlight = level; return level; }
 void scanKeys(void) {}

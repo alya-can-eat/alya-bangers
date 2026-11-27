@@ -57,7 +57,6 @@ For the technical side:
 
 ## Not there yet:
 
-- A battery warning you can hear
 - Start another launcher (Pico Launcher, TWiLight Menu++, …)
 
 More about these in [Development](docs/development.md#not-there-yet-in-detail).

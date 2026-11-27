@@ -6,7 +6,7 @@
 
 ⋮ in the bottom bar opens the settings.
 
-- Playback: what happens when you switch on or close the lid
+- Playback: what happens when you switch on or close the lid, and a sound when the battery gets low
 - Sound: two settings for very high sounds (cymbals, hi-hats) that can sound harsh on the DS
 - Browsing and Player: small choices for the lists and the player
 - Theme: your own colours
@@ -35,7 +35,8 @@ Every page has an icon, so you can find the language without being able to read 
 - Settings (⋮): the pages slide in from the right. ‹, B or Left go back, A or Right open one.
 - The globe (🌐) leads to Regional, then Language.
 - Pages:
-  - Playback: ReplayGain, play on launch, pause when the lid closes, L/R skip with the lid closed
+  - Playback: ReplayGain, play on launch, pause when the lid closes, L/R skip with the lid closed, low battery sound
+    - Low battery sound (on by default): when the battery gets low (the red LED), a short two-note chime plays over the music, then again every 5 minutes while it stays low. Not on the charger. A toast says it too, and 🪫 shows next to the date. Paused, the chime waits until the music plays again. Turning the setting on plays it once, so you know it.
   - Sound: for the harsh sound very high parts (cymbals, hi-hats) can get on the DS. Both off by default, try what helps with your headphones.
     - High cut: a steep filter on the very highs. The slider's right end is off, the further left the lower it cuts (15.5 down to 12.0 kHz). The line under it says below what nothing gets mirrored.
     - Dither (10 bits): the DS's rounding becomes a quiet hiss instead of a harsh edge.

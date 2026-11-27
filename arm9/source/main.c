@@ -1604,6 +1604,11 @@ static void set_change(int id)
         break;
     case SET_PAUSE_LID: app.set.pause_on_lid ^= 1; break;
     case SET_AUTOPLAY: app.set.play_at_start ^= 1; break;
+    case SET_BATT:
+        app.set.batt_sound_off ^= 1;
+        if (!app.set.batt_sound_off)
+            player_chime();         // on: what it sounds like
+        break;
     case SET_DITHER:
         app.set.dither ^= 1;
         eq_set_output(app.set.highcut, app.set.dither);
@@ -2964,6 +2969,46 @@ static bool glide(int *v, int target, uint32_t elapsed, int far)
 // One step of the app, once per vblank: input, playback, then one screen
 // drawn (they take turns). Animations follow the vblank counter, so they
 // keep their speed even when drawing takes longer than a frame.
+// ---- low battery: a chime over the music (the DS is often closed in a
+// pocket, where the red LED isn't seen), when it gets low and again every
+// few minutes while it stays low, and a toast.
+
+#define BATT_EVERY      300                 // vblanks between looks: 5 s
+#define BATT_AGAIN      (5 * 60 * 60)       // the warning again after 5 minutes
+
+static uint32_t batt_looked, batt_warned;
+static bool batt_pending;                   // warned while nothing played: the chime when it does
+
+static void battery_look(void)
+{
+    if (!batt_looked || ticks - batt_looked >= BATT_EVERY)
+    {
+        batt_looked = ticks ? ticks : 1;
+        u32 lvl = getBatteryLevel();
+        bool low = !(lvl & BATTERY_CHARGER_CONNECTED) && (lvl & BATTERY_LEVEL_MASK) <= BATTERY_LEVEL_DS_LOW;
+        if (low != app.batt_low)
+        {
+            app.batt_low = low;
+            batt_pending = false;
+            redraw = true;
+            if (low)
+                batt_warned = ticks - BATT_AGAIN;   // right away
+        }
+        if (low && ticks - batt_warned >= BATT_AGAIN)
+        {
+            batt_warned = ticks;
+            toast("%s", txt(S_BATT_LOW));
+            batt_pending = true;
+        }
+    }
+    if (batt_pending && player_state() == PLAYER_PLAYING)
+    {
+        batt_pending = false;
+        if (!app.set.batt_sound_off)
+            player_chime();
+    }
+}
+
 static void app_tick(void)
 {
     uint32_t now = vblank_count;
@@ -2971,6 +3016,7 @@ static void app_tick(void)
     last_vblank = now;
     ticks = now;
     player_tick(elapsed);
+    battery_look();
     scanKeys();
     uint32_t down = keysDown(), rep = keysDownRepeat(), held = keysHeld();
 

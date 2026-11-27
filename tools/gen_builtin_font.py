@@ -20,6 +20,7 @@ UI = (
     "\U0001f50a\U0001f3a8\U0001f310\U0001f5ae\U0001f3a7"   # 🔊 🎨 🌐 🖮 🎧 settings icons (with ⓘ, U+E005, U+E006)
     "\U0001f552\U0001f4c5"     # 🕒 📅 Settings › Regional: time, date
     "\U0001f3b5\U0001f4be\U0001f589"   # 🎵 💾 🖉 playlists, the queue as one, renaming
+    "\U0001faab"                 # 🪫 the battery is low
     "⇧⌫拼音小゛゜ー"       # search keyboards
     "−“”«»"             # equalizer: minus (dB), the quotes of "Delete …?"
 )

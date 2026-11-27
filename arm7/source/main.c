@@ -16,6 +16,8 @@
 
 #define CH_LEFT         0
 #define CH_RIGHT        1
+#define CH_CHIME        2   // the low battery sound, over the music
+#define CNT_ONE_SHOT    (2u << 27)  // SOUNDXCNT repeat mode: play once
 #define STREAM_TIMER    1   // timer 0 is used by Maxmod, 2/3 by Wi-Fi/RTC (unused here)
 #define FADE_STEP       8   // samples per volume step while fading out
 
@@ -162,6 +164,15 @@ static void stream_cmd_handler(int bytes, void *userdata)
             cur_volume = c.volume;
             REG_SOUNDXVOL(CH_LEFT) = c.volume;
             REG_SOUNDXVOL(CH_RIGHT) = c.volume;
+            break;
+        case STREAM_CMD_CHIME:
+            REG_SOUNDXCNT(CH_CHIME) = 0;
+            REG_SOUNDXSAD(CH_CHIME) = c.left;
+            REG_SOUNDXTMR(CH_CHIME) = (uint16_t)(0x10000 - c.timer_divider);
+            REG_SOUNDXPNT(CH_CHIME) = 0;
+            REG_SOUNDXLEN(CH_CHIME) = c.ring_bytes / 4;
+            REG_SOUNDXCNT(CH_CHIME) = SOUNDXCNT_VOL_MUL(c.volume) | SOUNDXCNT_VOL_DIV_1 | CNT_ONE_SHOT
+                                    | SOUNDXCNT_FORMAT_16BIT | SOUNDXCNT_PAN(64) | SOUNDXCNT_ENABLE;
             break;
         default:
             break;

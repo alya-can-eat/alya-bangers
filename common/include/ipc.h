@@ -20,6 +20,9 @@ typedef enum {
     STREAM_CMD_STOP   = 2, // stop (after fading out, if fade_frames); ARM7 answers with
                            // STREAM_EVT_FRAME, then STREAM_EVT_STOPPED
     STREAM_CMD_VOLUME = 3, // change channel volume while playing
+    STREAM_CMD_CHIME  = 4, // play a short sound once on a channel of its own, over the music:
+                           // left = its 16-bit samples (main RAM), ring_bytes = their size,
+                           // timer_divider, volume
 } StreamCmdType;
 
 typedef struct {

@@ -528,6 +528,76 @@ const uint16_t *player_cover(void)
     return (state != PLAYER_IDLE && has_cover) ? cover : NULL;
 }
 
+// ---- the chime: two bell-like notes, A5 then F5, as 16-bit samples at the
+// mixer's rate. Made once, without floating point: each partial a resonator
+// (y[n] = 2 cos(w) y[n-1] - y[n-2]), times a fast rise and an exponential decay.
+
+#define CHIME_FRAMES    22912               // 0.7 s (a multiple of 2: whole words)
+#define CHIME_SECOND    9819                // where the second note starts (0.3 s)
+#define CHIME_RISE      164                 // 5 ms
+#define CHIME_DECAY     1073523129          // per sample, Q30: a time constant of 0.15 s
+#define CHIME_PEAK      14000
+
+static int16_t chime[CHIME_FRAMES] __attribute__((aligned(32)));
+static bool chime_made;
+
+typedef struct { int64_t c; int64_t y1, y2; } Osc;     // Q30 coefficient, Q24 samples
+
+static Osc osc(int64_t c, int64_t sin_w)
+{
+    return (Osc){ c, sin_w, 0 };      // y[0] = 0, y[1] = sin(w): a sine from the start
+}
+
+static int64_t osc_next(Osc *o)
+{
+    int64_t y = ((o->c * o->y1) >> 30) - o->y2;
+    o->y2 = o->y1;
+    o->y1 = y;
+    return o->y2;
+}
+
+static void chime_make(void)
+{
+    // 2 cos(w) in Q30 and sin(w) in Q24 for 880, 1760, 698.46 and 1396.91 Hz at 32728.5 Hz
+    Osc notes[2][2] = {
+        { osc(2116910538, 2820905), osc(2026061731, 5561490) },
+        { osc(2128206636, 2242916), osc(2070722775, 4445534) },
+    };
+    for (int n = 0; n < 2; n++)
+    {
+        int start = n ? CHIME_SECOND : 0;
+        int64_t env = 0;
+        for (int i = start; i < CHIME_FRAMES; i++)
+        {
+            int k = i - start;
+            env = k < CHIME_RISE ? ((int64_t)k << 30) / CHIME_RISE
+                                 : (k == CHIME_RISE ? (1 << 30) : (env * CHIME_DECAY) >> 30);
+            int64_t tone = (osc_next(&notes[n][0]) * 4 + osc_next(&notes[n][1])) / 5;    // Q24
+            int64_t e = env;
+            if (CHIME_FRAMES - i < 656)
+                e = e * (CHIME_FRAMES - i) / 656;           // the last 20 ms: down to silence
+            int32_t v = (int32_t)(((tone * e) >> 30) * CHIME_PEAK >> 24);
+            int32_t sum = chime[i] + v;
+            chime[i] = (int16_t)(sum > 32767 ? 32767 : (sum < -32768 ? -32768 : sum));
+        }
+    }
+    DC_FlushRange(chime, sizeof(chime));
+    chime_made = true;
+}
+
+void player_chime(void)
+{
+    if (!chime_made)
+        chime_make();
+    StreamCmd c = { 0 };
+    c.cmd = STREAM_CMD_CHIME;
+    c.left = c.right = (uint32_t)(uintptr_t)chime;
+    c.ring_bytes = sizeof(chime);
+    c.timer_divider = 512;
+    c.volume = 127;
+    send_cmd(&c);
+}
+
 uint32_t player_underruns(void)
 {
     return underruns;

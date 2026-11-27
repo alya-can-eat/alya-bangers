@@ -402,6 +402,8 @@ static void header(void)
     ui_date(&tmv, d, sizeof(d));
     snprintf(s, sizeof(s), "%s %s", txt(S_SUN + tmv.tm_wday % 7), d);
     text_r(T, 252, 0, s, C_DIM);
+    if (app.batt_low)
+        icon(T, 252 - font_text_width(s) - 22, 0, 0x1FAAB, COLOR(31, 12, 10));     // 🪫 next to the date
     // the card was too slow somewhere (should never show)
     if (player_underruns())
     {
@@ -2839,6 +2841,7 @@ static const SetItem items_playback[] = {
     { S_PLAY_AT_START, SI_TOGGLE, SET_AUTOPLAY, 0 },
     { S_PAUSE_LID, SI_TOGGLE, SET_PAUSE_LID, 0 },
     { S_LR_LID, SI_TOGGLE, SET_LR_LID, 0 },
+    { S_BATT_SOUND, SI_TOGGLE, SET_BATT, 0 },
 };
 static const SetItem items_sound[] = {
     { S_HIGHCUT, SI_SLIDER, SET_HIGHCUT, 0 },
@@ -2966,6 +2969,7 @@ static bool set_on(int id)
     case SET_COVER_BG: return !app.set.plain_bg;
     case SET_SHUFFLE_W: return app.set.shuffle_weighted;
     case SET_AUTOPLAY: return app.set.play_at_start;
+    case SET_BATT: return !app.set.batt_sound_off;
     case SET_DITHER: return app.set.dither;
     default: return false;
     }

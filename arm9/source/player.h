@@ -64,4 +64,8 @@ const DsaTags *player_tags(void);
 const uint16_t *player_cover(void);
 uint32_t player_underruns(void);
 
+// A short two-note sound over the music (the low battery warning), on a
+// sound channel of its own: heard whether a song plays or not.
+void player_chime(void);
+
 #endif

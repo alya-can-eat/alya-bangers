@@ -149,7 +149,8 @@ int app_row_count(int i);               // rows of the row menu for item i
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_SOUND, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL,
        PAGE_ABOUT, PAGE_COUNT };
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
-       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER, SET_CLOCK, SET_DATE };
+       SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER, SET_CLOCK, SET_DATE,
+       SET_BATT };
 // switch, value (tap: the next one), › another page, a slider (a taller row)
 enum { SI_TOGGLE, SI_VALUE, SI_PAGE, SI_SLIDER };
 #define SET_SLIDER_H 64
@@ -220,6 +221,7 @@ typedef struct {
     Item pl_item;               // what "Add to playlist" adds (or the playlist to delete)
     int pl_scroll;              // "Add to playlist": first row shown
     int pl_drag_from, pl_drag_to;   // a playlist's song held and moved: list rows, -1: none
+    bool batt_low;              // the battery is low (and no charger)
     char eq_name[EQP_NAME];     // a new profile's name, being typed
 
     // stylus drags

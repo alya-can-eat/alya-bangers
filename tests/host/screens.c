@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define DSPLAYER_NO_MAIN
 #include "../../arm9/source/main.c"
@@ -2244,6 +2245,57 @@ int main(int argc, char **argv)
         app.pl = PL_FOLDERS;
         show_tab(TAB_ARTIST);
         run(30);
+    }
+
+    // ---- low battery: a chime over the music, a toast, 🪫 next to the date
+    {
+        check(app.set.batt_sound_off == 0 && !app.batt_low, "the low battery sound is on by default");
+        if (player_state() != PLAYER_PLAYING)
+            toggle_pause();
+        run(10);
+        int c0 = sim_hw.chimes;
+        sim_battery = BATTERY_LEVEL_DS_LOW;
+        run(BATT_EVERY + 2);
+        check(app.batt_low && sim_hw.chimes == c0 + 1 && strcmp(app.toast, txt(S_BATT_LOW)) == 0,
+              "low: the chime and a toast");
+        const int16_t *ch = sim_hw.chime;
+        int n = (int)(sim_hw.chime_bytes / 2), peak = 0;
+        for (int i = 0; i < n; i++)
+            peak = abs(ch[i]) > peak ? abs(ch[i]) : peak;
+        check(n > 20000 && peak > 10000 && peak < 32000 && abs(ch[n - 1]) < 100 && abs(ch[0]) < 2000,
+              "the chime: 0.7 s, loud but not clipping, ends in silence");
+        run(10);
+        shot("60_battery_low");
+        run(3 * BATT_EVERY);
+        check(sim_hw.chimes == c0 + 1, "not again right away");
+        batt_warned -= BATT_AGAIN;              // 5 minutes later
+        run(BATT_EVERY + 2);
+        check(sim_hw.chimes == c0 + 2, "still low 5 minutes later: again");
+        // paused: the toast now, the chime when it plays again
+        toggle_pause();
+        run(10);
+        batt_warned -= BATT_AGAIN;
+        run(BATT_EVERY + 2);
+        check(sim_hw.chimes == c0 + 2 && batt_pending, "paused: no chime yet");
+        toggle_pause();
+        run(4);
+        check(sim_hw.chimes == c0 + 3, "playing again: the chime");
+        // charging: no warning
+        sim_battery = BATTERY_LEVEL_DS_LOW | BATTERY_CHARGER_CONNECTED;
+        run(BATT_EVERY + 2);
+        check(!app.batt_low, "on the charger: not low");
+        // the setting: off, then on again (it plays once to be heard)
+        set_change(SET_BATT);
+        check(app.set.batt_sound_off && sim_hw.chimes == c0 + 3, "Settings › Playback: the sound off");
+        sim_battery = BATTERY_LEVEL_DS_LOW;
+        run(BATT_EVERY + 2);
+        check(app.batt_low && sim_hw.chimes == c0 + 3 && strcmp(app.toast, txt(S_BATT_LOW)) == 0,
+              "off: only the toast");
+        set_change(SET_BATT);
+        check(!app.set.batt_sound_off && sim_hw.chimes == c0 + 4, "on again: it plays once, to be heard");
+        sim_battery = BATTERY_LEVEL_DS_HIGH;
+        run(BATT_EVERY + 2);
+        check(!app.batt_low, "full again");
     }
 
     // ---- the German interface: every text there, every screen drawn, the texts fit
