@@ -10,7 +10,7 @@ Find your music by artist, album, song title or folder.
 - Pick an artist to see their albums, an album to see its songs.
 - Tap a song to play the list it's in.
 - Hold a song for *Play now*, *Play next*, *Add to queue* or *Add to playlist*.
-- Your playlists are on top of the Folder tab.
+- Your playlists are on top of the Folder tab. Playlists from your PC come along when you convert.
 - The bar at the bottom: play/pause, next, add to queue, ⮟ the player, sort, brightness, ⋮ settings
 - Japanese, Chinese, Cyrillic and Vietnamese names and even emoji show up correctly.
 
@@ -55,4 +55,5 @@ Find your music by artist, album, song title or folder.
   - Folder tab › Playlists: tap one for its songs, tap a song to play the playlist from there.
   - Hold a song in a playlist › *Remove*. Hold a playlist › *Rename* or *Delete* (asks first).
   - Up to 64 playlists, 4'000 songs each.
+  - From the PC: `.m3u` and `.m3u8` files in your music folder go onto the card when you convert, if the card doesn't have one with that name yet. After that the card's copy is the one that counts: what you change on the DS stays, changes on the PC don't come along.
   - Kept as `.m3u` files in `/_nds/alya-bangers/playlists/`, the songs as paths below the music folder. They stay when you convert your music again; a song that's gone stays in the file, in case it comes back.

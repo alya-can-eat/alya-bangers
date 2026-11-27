@@ -11,7 +11,7 @@ import sys
 import time
 import zlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +23,7 @@ from .dsa import DsaWriter, encode_tags, replaygain
 from .fat32 import fat_key
 from .manifest import Manifest
 from .plan import Plan, Source, build_plan
+from .playlists import bring_over, card_dir
 from .report import Report
 from .tags import best_picture, read_tags
 
@@ -296,6 +297,8 @@ class Prepared:
     orphans: list[str]                  # on the card without a source
     temps: list[Path]                   # leftovers of an interrupted run
     t0: float
+    playlists: list[Path] = field(default_factory=list)     # .m3u files in the music folder
+    dest_by_rel: dict[str, str] = field(default_factory=dict)  # every song: source rel -> on the card
 
     @property
     def new(self) -> list[Source]:
@@ -350,7 +353,9 @@ def prepare(src_root: Path, dst_root: Path, *, dry_run: bool = False, yes: bool 
     orphans += sorted(k for k in manifest.files
                       if fat_key(k) not in wanted and k not in orphans and (dst_root / k).exists())
     report.orphans = orphans
-    return Prepared(src_root, dst_root, report, manifest, selected, todo, orphans, temps, t0)
+    report.playlists_found = len(plan.playlists)
+    return Prepared(src_root, dst_root, report, manifest, selected, todo, orphans, temps, t0,
+                    plan.playlists, {s.rel: s.dest_rel for s in plan.sources})
 
 
 # Bytes of output per second of stereo audio, plus the header and covers of one file.
@@ -491,6 +496,16 @@ def execute(prep: Prepared, *, delete: bool = False, jobs: int | None = None,
             report.index_stats = stats
         except Exception as e:
             report.warn("(index)", f"index/font not built: {type(e).__name__}: {e}")
+
+    if prep.playlists:
+        hooks.say("Playlists…")
+        if card_dir(dst_root) is None:
+            report.warn("(playlists)", "not put on the card: the output isn't a card's music folder")
+        else:
+            try:
+                report.playlists = bring_over(prep.playlists, src_root, dst_root, prep.dest_by_rel)
+            except OSError as e:
+                report.warn("(playlists)", f"not put on the card: {e}")
 
     report.finish(time.monotonic() - prep.t0, delete=delete)
     (dst_root / DATA_DIR).mkdir(exist_ok=True)

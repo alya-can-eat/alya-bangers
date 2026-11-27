@@ -31,6 +31,8 @@ class Report:
         self.deleted: list[str] = []
         self.to_convert: list[str] = []
         self.index_stats: dict | None = None
+        self.playlists_found = 0
+        self.playlists: dict | None = None     # playlists.bring_over()
         self.ignored = {}
         self.images = 0
         self.hidden = 0
@@ -110,6 +112,12 @@ class Report:
             head.append(f"Index: {s['tracks']} tracks, {s['albums']} albums, {s['values']} distinct tag values, "
                         f"{s.get('readings', 0)} names with readings for search; "
                         f"font: {s['glyphs']} glyphs ({s['missing']} characters without a glyph).")
+        if self.playlists_found and self.dry_run:
+            head.append(f"Playlists in the music folder: {self.playlists_found} (new ones go on the card).")
+        elif self.playlists:
+            pl = self.playlists
+            head.append(f"Playlists: {len(pl['added'])} new on the card, {len(pl['kept'])} already there "
+                        f"(the card's copy stays).")
         self.lines = list(head)
         screen += head
 
@@ -127,6 +135,12 @@ class Report:
                 hint = "run with --delete to remove them"
             self._section(f"Files on the card without a source ({hint})", self.orphans, screen)
         self._section("Deleted (source gone)", sorted(self.deleted), screen)
+        if self.playlists:
+            pl = self.playlists
+            self._section("Playlists put on the card", [
+                f"{n}: {k} songs" + (f" ({m} not found in the music folder)" if m else "")
+                for n, k, m in pl["added"]], screen)
+            self._section("Playlists not put on the card", [f"{n}: {why}" for n, why in pl["skipped"]], screen)
         self._section("Warnings", [f"{r}: {w}" for r, w in sorted(self.warnings)], screen)
         self._section("No cover found", sorted(self.no_cover), screen)
         if self.turned_down:  # details only in the report file

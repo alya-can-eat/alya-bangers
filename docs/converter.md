@@ -27,6 +27,7 @@ Next time only new and changed songs get converted.
 - Pre-release builds are in [GitHub Actions](../../../actions/workflows/release.yml).
 - A card that already has music from it is found by itself.
 - Two files that would become the same song (like a FLAC and an Opus of it): it asks which one goes on the card and suggests the better one. The answer is remembered.
+- Playlists (`.m3u`, `.m3u8`) in your music folder go onto the card for the DS app, if the card doesn't have one with that name yet. Songs are found by their path, also in playlists made on another computer. More in [Browsing](browsing.md#details).
 - *Remove songs that are gone from the music folder*: also deletes the songs on the card you don't have anymore.
 - Stop finishes the songs in progress. Next time it goes on from there.
 - English or German, like the computer.

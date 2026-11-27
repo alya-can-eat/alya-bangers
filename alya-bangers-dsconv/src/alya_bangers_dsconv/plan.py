@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from .constants import AUDIO_EXTS, DATA_DIR, DISC_DIR_PATTERN, IMAGE_EXTS, OUT_EXT
 from .cover import find_folder_cover
 from .fat32 import fat_key, safe_component
+from .playlists import PLAYLIST_EXTS
 
 
 @dataclass
@@ -33,6 +34,7 @@ class Plan:
     hidden: int = 0
     renamed: list[tuple[str, str]] = field(default_factory=list)
     merged_dirs: list[tuple[str, str]] = field(default_factory=list)  # (source dir, merged into)
+    playlists: list[Path] = field(default_factory=list)  # .m3u files, for the DS app's playlists
 
     @property
     def collisions(self) -> dict[str, list[Source]]:
@@ -108,6 +110,9 @@ def build_plan(src_root: Path, dst_root: Path | None) -> Plan:
         for name in visible:
             p = here / name
             ext = p.suffix.lower()
+            if ext in PLAYLIST_EXTS:
+                plan.playlists.append(p)
+                continue
             if ext in IMAGE_EXTS:
                 plan.images += 1
                 continue
