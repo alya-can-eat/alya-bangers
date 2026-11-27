@@ -58,11 +58,7 @@ For the technical side:
 ## Not there yet:
 
 - Playlists
-- Genres and other tags as tabs
-- Colours from the cover
-- Gapless playback
 - A date and time format of its own
-- Arabic, Persian and Urdu
 - A battery warning you can hear
 - Start another launcher (Pico Launcher, TWiLight Menu++, …)
 

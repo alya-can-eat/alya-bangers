@@ -84,11 +84,7 @@ Started by hand ([Actions › release](../../../actions/workflows/release.yml) �
 ## Not there yet, in detail:
 
 - Playlists
-- Genre and other tags as tabs
-- Colours from the cover
-- Gapless playback
 - A date and time format of its own (right now it follows the language)
-- Arabic script (right to left, joined letters; Persian and Urdu with it)
 - A battery warning you can hear
 - Start another launcher from alya-bangers (Pico Launcher, TWiLight Menu++, AKMenu-Next, nds-hb-menu, YSMenu …):
   - With hbmenu's loader: it reads the `.nds` from the card, gives it alya-bangers' DLDI driver and its path, and restarts both CPUs into it. So it works on most flashcarts, not only the DSpico, and can be tested in melonDS.
