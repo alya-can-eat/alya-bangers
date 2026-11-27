@@ -91,3 +91,8 @@ Started by hand ([Actions › release](../../../actions/workflows/release.yml) �
 - A date and time format of its own (right now it follows the language)
 - Arabic script (right to left, joined letters; Persian and Urdu with it)
 - A battery warning you can hear
+- Start another launcher from alya-bangers (Pico Launcher, TWiLight Menu++, AKMenu-Next, nds-hb-menu, YSMenu …):
+  - With hbmenu's loader: it reads the `.nds` from the card, gives it alya-bangers' DLDI driver and its path, and restarts both CPUs into it. So it works on most flashcarts, not only the DSpico, and can be tested in melonDS.
+  - Only launchers that are a `.nds` file, no flashcart menus like `_DS_MENU.DAT`, no games directly (that stays the launcher's job).
+  - Settings › Launcher picks the `.nds`, a button fades the music out, saves the position and starts it.
+  - Together with alya-bangers as `_picoboot.nds` on the DSpico: the music player first, the games one tap away.

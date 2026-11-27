@@ -64,6 +64,7 @@ For the technical side:
 - A date and time format of its own
 - Arabic, Persian and Urdu
 - A battery warning you can hear
+- Start another launcher (Pico Launcher, TWiLight Menu++, …)
 
 More about these in [Development](docs/development.md#not-there-yet-in-detail).
 
