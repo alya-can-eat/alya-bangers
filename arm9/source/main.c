@@ -149,15 +149,32 @@ static void select_index(int i)
     redraw = true;
 }
 
+uint8_t *app_sort_of(int slot)
+{
+    return slot == SLOT_PLAYLIST ? &app.set.pl_sort : &app.set.sort[slot < SORT_SLOTS ? slot : 0];
+}
+
+// A playlist's songs sorted for showing: 1 name A→Z, 2 Z→A, 3 year old→new.
+static int pl_sort_mode;
+static int cmp_pl_songs(const void *pa, const void *pb)
+{
+    const LibTrack *a = lib_track(((const Item *)pa)->id), *b = lib_track(((const Item *)pb)->id);
+    if (pl_sort_mode == 3 && a->year != b->year)
+        return a->year < b->year ? -1 : 1;
+    if (a->title_sort != b->title_sort)
+        return (a->title_sort < b->title_sort ? -1 : 1) * (pl_sort_mode == 2 ? -1 : 1);
+    return ((const Item *)pa)->id < ((const Item *)pb)->id ? -1 : 1;
+}
+
 static void rebuild_list(void)
 {
     app.n_items = 0;
     if (!lib_loaded())
         return;
     int slot = ui_sort_slot();
-    if (app.set.sort[slot] >= ui_sort_option_count(slot))
-        app.set.sort[slot] = 0;     // an option that's gone (saved by an older version)
-    int sort = app.set.sort[slot];
+    if (*app_sort_of(slot) >= ui_sort_option_count(slot))
+        *app_sort_of(slot) = 0;     // an option that's gone (saved by an older version)
+    int sort = *app_sort_of(slot);
     switch (app.tab)
     {
     case TAB_ARTIST:
@@ -180,15 +197,23 @@ static void rebuild_list(void)
         {
             app.items[n++] = (Item){ ITEM_UP, 0 };
             for (int i = 0; i < pl_count(); i++)
-                app.items[n++] = (Item){ ITEM_PLAYLIST, (uint32_t)i };
+            {
+                int k = sort == SORT_NAME_DOWN ? pl_count() - 1 - i : i;   // (the folders' sort)
+                app.items[n++] = (Item){ ITEM_PLAYLIST, (uint32_t)k };
+            }
         }
         else if (app.pl >= 0)
         {
-            // its songs in its order
+            // its songs: in its order, or sorted for showing (the order it keeps doesn't change)
             app.items[n++] = (Item){ ITEM_UP, 0 };
             const uint32_t *t = pl_tracks(app.pl);
             for (int i = 0; i < pl_size(app.pl) && n < item_cap; i++)
                 app.items[n++] = (Item){ ITEM_TRACK, t[i] };
+            if (sort > 0)
+            {
+                pl_sort_mode = sort;
+                qsort(app.items + 1, n - 1, sizeof(Item), cmp_pl_songs);
+            }
         }
         else
         {
@@ -688,6 +713,13 @@ int app_row_count(int i)
     return 3 + row_extras(i, x);
 }
 
+// A playlist's song that can be moved by holding it: in its own order only.
+static bool pl_draggable(int i)
+{
+    return app.tab == TAB_FOLDER && app.pl >= 0 && app.set.pl_sort == 0 && i >= 1 && i < app.n_items
+           && app.items[i].kind == ITEM_TRACK;
+}
+
 // The list again after a playlist changed, staying where it was.
 static void refresh_list(void)
 {
@@ -874,7 +906,13 @@ static void row_menu_choose(int option)
         {
             char nm[PL_NAME];
             snprintf(nm, sizeof(nm), "%s", pl_name(app.pl));
-            pl_remove(app.pl, i - 1);       // the row above the songs is ‹
+            const uint32_t *t = pl_tracks(app.pl);
+            for (int k = 0; k < pl_size(app.pl); k++)
+                if (t[k] == it->id)
+                {
+                    pl_remove(app.pl, k);   // its place in the playlist (the list may be sorted)
+                    break;
+                }
             toast(txt(S_PL_REMOVED), nm);
             refresh_list();
             break;
@@ -916,7 +954,7 @@ static void open_sort_menu(void)
     if (app.tab == TAB_SEARCH)
         return;
     app.overlay = app.overlay == OV_SORT ? OV_NONE : OV_SORT;
-    app.menu_sel = app.set.sort[ui_sort_slot()];
+    app.menu_sel = *app_sort_of(ui_sort_slot());
     redraw = true;
 }
 
@@ -926,7 +964,7 @@ static void choose_sort(int option)
     app.overlay = OV_NONE;
     if (option < 0 || option >= ui_sort_option_count(slot))
         return;
-    app.set.sort[slot] = option;
+    *app_sort_of(slot) = (uint8_t)option;
     uint32_t keep = app.sel < app.n_items ? app.items[app.sel].id : LIB_NONE;
     ItemKind kind = app.sel < app.n_items ? app.items[app.sel].kind : ITEM_TRACK;
     rebuild_list();
@@ -2393,6 +2431,16 @@ static void touch_move(int x, int y)
         if (to < 0) to = 0;
         app.q_drag_to = to;
     }
+    else if (app.pl_drag_from >= 0)
+    {
+        int rows = list_rows();
+        if (y < list_y() + 8 && app.scroll > 1)
+            app.scroll--;
+        if (y >= list_y() + rows * ROW_H - 8 && app.scroll + rows < app.n_items)
+            app.scroll++;
+        int to = app.scroll + (y < list_y() ? 0 : (y - list_y()) / ROW_H);
+        app.pl_drag_to = to < 1 ? 1 : (to >= app.n_items ? app.n_items - 1 : to);    // below ‹
+    }
     else if (app.overlay == OV_QUEUE && x >= SCROLL_X)
     {
         int max = queue_count() > ROWS ? queue_count() - ROWS : 0;
@@ -2405,7 +2453,17 @@ static void touch_move(int x, int y)
         int oy = app_panel_offset();
         if (oy == 0 && app.overlay == OV_NONE && tp.y0 >= list_y() && tp.y0 < BAR_Y && tp.x0 < SCROLL_X
             && !(app.tab == TAB_SEARCH && app.kb_up))
-            open_row_menu(app.scroll + (tp.y0 - list_y()) / ROW_H);
+        {
+            int i = app.scroll + (tp.y0 - list_y()) / ROW_H;
+            if (pl_draggable(i))
+            {
+                // a playlist's song: lifted; moved, it goes to another place, let go, its menu
+                select_index(i);
+                app.pl_drag_from = app.pl_drag_to = i;
+            }
+            else
+                open_row_menu(i);
+        }
         else if (oy == PANEL_DOWN && app.overlay == OV_QUEUE && tp.y0 >= 20 && tp.y0 < 20 + ROWS * ROW_H)
         {
             int i = queue_row_at(tp.y0);
@@ -2447,6 +2505,20 @@ static void touch_up(void)
         app.q_drag_from = app.q_drag_to = -1;
         app.thumb_track = LIB_NONE;
         touch_state();
+    }
+    else if (app.pl_drag_from >= 0)
+    {
+        int from = app.pl_drag_from, to = app.pl_drag_to;
+        app.pl_drag_from = app.pl_drag_to = -1;
+        if (to != from)
+        {
+            pl_move(app.pl, from - 1, to - 1);      // the row above the songs is ‹
+            refresh_list();
+            select_index(to);
+            app.sel_vis = (app.sel - app.scroll) * ROW_H;
+        }
+        else
+            open_row_menu(from);
     }
     else if (app.eq_drag_band >= 0)
         app.eq_drag_band = -1;
@@ -2856,6 +2928,7 @@ static void app_init(void)
     app.artist = -1;
     app.album = LIB_NONE;
     app.q_drag_from = app.q_drag_to = -1;
+    app.pl_drag_from = app.pl_drag_to = -1;
     app.eq_drag_band = app.eq_drag_from = app.eq_drag_to = -1;
     app.thumb_track = LIB_NONE;
     app.menu_item = -1;

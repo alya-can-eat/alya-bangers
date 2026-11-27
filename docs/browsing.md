@@ -53,7 +53,8 @@ Find your music by artist, album, song title or folder.
   - Typing the name of one you have adds to that one.
   - The queue as a playlist: 💾 on the queue panel.
   - Folder tab › Playlists: tap one for its songs, tap a song to play the playlist from there.
-  - Hold a song in a playlist › *Remove*. Hold a playlist › *Rename* or *Delete* (asks first).
+  - Hold a song in a playlist and move it: it goes to that place. Hold and let go without moving: its menu, with *Remove*. Hold a playlist › *Rename* or *Delete* (asks first).
+  - The sort button (⇅) sorts a playlist for showing (A→Z, Z→A, by year); its own order stays and comes back with *Playlist order*. Moving songs works in its own order.
   - Up to 64 playlists, 4'000 songs each.
   - From the PC: `.m3u` and `.m3u8` files in your music folder go onto the card when you convert, if the card doesn't have one with that name yet. After that the card's copy is the one that counts: what you change on the DS stays, changes on the PC don't come along.
   - Kept as `.m3u` files in `/_nds/alya-bangers/playlists/`, the songs as paths below the music folder. They stay when you convert your music again; a song that's gone stays in the file, in case it comes back.

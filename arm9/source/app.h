@@ -219,6 +219,7 @@ typedef struct {
     int pl;                     // folder tab: PL_FOLDERS, PL_LIST or a playlist
     Item pl_item;               // what "Add to playlist" adds (or the playlist to delete)
     int pl_scroll;              // "Add to playlist": first row shown
+    int pl_drag_from, pl_drag_to;   // a playlist's song held and moved: list rows, -1: none
     char eq_name[EQP_NAME];     // a new profile's name, being typed
 
     // stylus drags
@@ -331,6 +332,7 @@ bool ui_draw_bottom(void);
 // Text for list rows and the current song (shared by drawing and input).
 void ui_item_label(const Item *it, char *buf, int size);
 int ui_sort_slot(void);
+uint8_t *app_sort_of(int slot);     // the setting of a sort slot
 int ui_sort_option_count(int slot);
 const char *ui_sort_option(int slot, int i);
 

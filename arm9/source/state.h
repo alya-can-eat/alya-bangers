@@ -15,6 +15,7 @@ enum { RG_OFF, RG_TRACK, RG_ALBUM, RG_AUTO, RG_MODES };
 enum { KB_QWERTY, KB_QWERTZ, KB_LAYOUTS };
 enum { DATE_DMY, DATE_YMD, DATE_MDY, DATE_FORMATS };   // 27.11.2026, 2026-11-27, 11/27/2026
 enum { SLOT_ARTIST, SLOT_ALBUM, SLOT_TITLE, SLOT_TITLE_IN_ALBUM, SLOT_FOLDER, SORT_SLOTS };
+#define SLOT_PLAYLIST SORT_SLOTS    // a playlist's songs (kept in Settings.pl_sort)
 
 typedef struct {
     uint8_t scroll_all;       // scroll every long row, not just the selected one
@@ -37,7 +38,9 @@ typedef struct {
     uint8_t dither;           // dither to the DS's 10 bits
     uint8_t clock_12h;        // the clock: 12 h with am/pm instead of 24 h
     uint8_t date_fmt;         // DATE_DMY, ...
-    uint8_t reserved[7];      // room for more settings without a new file version
+    uint8_t pl_sort;          // a playlist's songs: 0 its own order, else like the Title tab
+    uint8_t batt_sound_off;   // no sound when the battery gets low (0: the sound is on)
+    uint8_t reserved[5];      // room for more settings without a new file version
 } Settings;
 
 _Static_assert(sizeof(Settings) == 32, "settings are 32 bytes in the file");

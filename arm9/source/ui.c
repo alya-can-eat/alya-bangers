@@ -327,16 +327,18 @@ int ui_sort_slot(void)
     case TAB_ARTIST: return SLOT_ARTIST;
     case TAB_ALBUM: return SLOT_ALBUM;
     case TAB_TITLE: return app.album != LIB_NONE ? SLOT_TITLE_IN_ALBUM : SLOT_TITLE;
+    case TAB_FOLDER: return app.pl >= 0 ? SLOT_PLAYLIST : SLOT_FOLDER;
     default: return SLOT_FOLDER;
     }
 }
 
-static const uint8_t sort_names[SORT_SLOTS][4] = {
+static const uint8_t sort_names[SORT_SLOTS + 1][4] = {
     { S_SORT_NAME_UP, S_SORT_NAME_DOWN },
     { S_SORT_NAME_UP, S_SORT_NAME_DOWN, S_SORT_YEAR_UP, S_SORT_YEAR_DOWN },
     { S_SORT_NAME_UP, S_SORT_NAME_DOWN, S_SORT_YEAR_UP },
     { S_SORT_TRACK, S_SORT_NAME_UP, S_SORT_NAME_DOWN },
     { S_SORT_NAME_UP, S_SORT_NAME_DOWN },
+    { S_SORT_PL_ORDER, S_SORT_NAME_UP, S_SORT_NAME_DOWN, S_SORT_YEAR_UP },   // SLOT_PLAYLIST
 };
 
 int ui_sort_option_count(int slot)
@@ -1279,19 +1281,28 @@ static bool draw_list(int oy)
     if (app.tab == TAB_SEARCH)
         return draw_search_page(oy);
     bool numbers = app.tab == TAB_TITLE && (app.album != LIB_NONE || app.add_mode);
+    // a playlist's song held and moved: the others close up, a gap where it lands
+    bool dragging = app.pl_drag_from >= 0 && app.pl_drag_to != app.pl_drag_from;
     for (int r = 0; r < ROWS; r++)
     {
         int i = app.scroll + r;
         int y = y0 + r * ROW_H;
-        bool sel = i == app.sel && i < app.n_items;
         if (r == 0)
         {
             // all row backgrounds first, then the highlight gliding to the selection
             for (int k = 0; k < ROWS; k++)
                 gfx_fill(B, 0, y0 + k * ROW_H, SCROLL_X, ROW_H, k % 2 ? C_ZEBRA : C_BG);
-            if (app.sel >= 0 && app.sel < app.n_items)
+            if (app.sel >= 0 && app.sel < app.n_items && !dragging)
                 highlight(0, y0 + app.sel_vis, SCROLL_X, ROW_H, y0, y0 + ROWS * ROW_H, C_SEL);
         }
+        if (dragging)
+        {
+            if (i == app.pl_drag_to)
+                continue;
+            int k = i > app.pl_drag_to ? i - 1 : i;
+            i = k >= app.pl_drag_from ? k + 1 : k;
+        }
+        bool sel = i == app.sel && i < app.n_items && !dragging;
         if (i >= app.n_items)
             continue;
         const Item *it = &app.items[i];
@@ -1336,6 +1347,20 @@ static bool draw_list(int oy)
             font_draw(B, x, y, w, label, col);
     }
     scrollbar(y0, ROWS, app.scroll, app.n_items, app.scroll_drag);
+    if (app.pl_drag_from >= 0 && app.pl_drag_to >= app.scroll && app.pl_drag_to < app.scroll + ROWS)
+    {
+        // the song held, lifted, where it would land
+        int y = y0 + (app.pl_drag_to - app.scroll) * ROW_H - 1;
+        uint32_t t = app.items[app.pl_drag_from].id;
+        char title[200], dur[16];
+        gfx_fill(B, 2, y, SCROLL_X - 4, 18, C_PANEL);
+        gfx_rect(B, 2, y, SCROLL_X - 4, 18, C_ACC);
+        icon(B, 4, y + 1, 0x21C5, C_ACC);       // ⇅
+        track_title(t, title, sizeof(title));
+        mmss(dur, sizeof(dur), lib_track(t)->duration_ms);
+        text_r(B, 238, y + 1, dur, C_DIM);
+        font_draw(B, 24, y + 1, 238 - 24 - font_text_width(dur) - 8, title, C_TEXT);
+    }
 
     if (app.scroll_drag && app.n_items > 0)
     {
@@ -1532,14 +1557,15 @@ static void draw_sort_menu(int oy)
     int y0 = oy + BAR_Y - h;
     gfx_fill(B, x0, y0, x1 - x0, h + 1, C_PANEL);
     gfx_rect(B, x0, y0, x1 - x0, h + 1, C_LINE);
-    static const uint8_t titles[SORT_SLOTS] = { S_SORT_ARTISTS, S_SORT_ALBUMS, S_SORT_SONGS, S_SORT_SONGS, S_SORT_FOLDERS };
+    static const uint8_t titles[SORT_SLOTS + 1] = { S_SORT_ARTISTS, S_SORT_ALBUMS, S_SORT_SONGS, S_SORT_SONGS,
+                                                    S_SORT_FOLDERS, S_SORT_SONGS };
     text(B, x0 + 8, y0 + 2, txt(titles[slot]), C_DIM);
     if (app.menu_sel >= 0)
         highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * n, C_SEL);
     for (int i = 0; i < n; i++)
     {
         int y = y0 + 20 + i * 16;
-        bool cur = app.set.sort[slot] == i;
+        bool cur = *app_sort_of(slot) == i;
         icon(B, x0 + 4, y, cur ? 0x25CF : 0x25CB, cur ? C_ACC : C_DIM);
         text(B, x0 + 24, y, ui_sort_option(slot, i), C_TEXT);
     }

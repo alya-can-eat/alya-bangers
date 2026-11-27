@@ -291,6 +291,19 @@ void pl_remove(int i, int pos)
     save(p);
 }
 
+void pl_move(int i, int from, int to)
+{
+    if (i < 0 || i >= n_pls || from == to || from < 0 || to < 0 || from >= pls[i].n || to >= pls[i].n)
+        return;
+    uint32_t *t = pls[i].tracks, x = t[from];
+    if (from < to)
+        memmove(&t[from], &t[from + 1], (to - from) * sizeof(uint32_t));
+    else
+        memmove(&t[to + 1], &t[to], (from - to) * sizeof(uint32_t));
+    t[to] = x;
+    save(&pls[i]);
+}
+
 int pl_rename(int i, const char *name)
 {
     int other = pl_find(name);

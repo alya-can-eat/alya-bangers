@@ -2103,6 +2103,46 @@ int main(int argc, char **argv)
         check(pl_size(0) == before - 1 && app.n_items == pl_size(0) + 1 && app.items[1].id != song,
               "Remove: out of the playlist");
         run(20);
+
+        // hold and move: another place in the playlist
+        uint32_t first = pl_tracks(0)[0], second = pl_tracks(0)[1];
+        hold(100, LIST_Y + ROW_H + 8, 35);
+        check(app.pl_drag_from == 1 && app.overlay == OV_NONE, "hold a song in a playlist: it's lifted");
+        drag_to(100, LIST_Y + 3 * ROW_H + 8, 6);
+        check(app.pl_drag_to == 3, "moved two rows down");
+        shot("51d_pl_move");
+        release();
+        check(pl_tracks(0)[0] == second && pl_tracks(0)[2] == first && app.items[3].id == first
+              && app.overlay == OV_NONE, "let go: in its new place, saved");
+        hold(100, LIST_Y + 2 * ROW_H + 8, 35);
+        release();
+        check(app.overlay == OV_ROWMENU && app_row_action(app.menu_item, 3) == ROWX_REMOVE,
+              "hold and let go without moving: its menu");
+        press(KEY_B);
+        run(OV_TICKS + 2);
+
+        // sorted for showing: the playlist keeps its order, no moving then
+        check(ui_sort_slot() == SLOT_PLAYLIST && ui_sort_option_count(SLOT_PLAYLIST) == 4, "a playlist has its own sort");
+        uint32_t order[64];
+        int on = pl_size(0);
+        memcpy(order, pl_tracks(0), on * sizeof(uint32_t));
+        choose_sort(1);
+        run(TAB_TICKS + 4);
+        bool az = true;
+        for (int k = 2; k < app.n_items; k++)
+            az &= lib_track(app.items[k - 1].id)->title_sort <= lib_track(app.items[k].id)->title_sort;
+        check(az && app.set.pl_sort == 1 && memcmp(order, pl_tracks(0), on * sizeof(uint32_t)) == 0,
+              "sorted A→Z: shown that way, the playlist's order stays");
+        shot("51e_pl_sorted");
+        hold(100, LIST_Y + 2 * ROW_H + 8, 35);
+        check(app.pl_drag_from < 0 && app.overlay == OV_ROWMENU, "sorted: holding gives the menu, no moving");
+        release();
+        press(KEY_B);
+        run(OV_TICKS + 2);
+        choose_sort(0);
+        run(TAB_TICKS + 4);
+        check(app.items[1].id == pl_tracks(0)[0], "back to the playlist's order");
+        app.scroll = 0;
         tap(100, LIST_Y + 8);       // ‹ Playlists
         run(TAB_TICKS + 4);
         check(app.pl == PL_LIST && app.sel == 1, "‹: the playlists, on Bus");
