@@ -63,6 +63,19 @@ const char *lib_tag(uint32_t track, const char *key);
 int lib_tag_ids(uint32_t track, const char *key, uint32_t *out, int max);
 // All values joined with sep (empty: none); returns how many.
 int lib_tag_joined(uint32_t track, const char *key, const char *sep, char *out, size_t size);
+// The same with the key's id (see lib_key_id).
+int lib_tag_ids_k(uint32_t track, int key, uint32_t *out, int max);
+
+// ---- tag keys: every key some song has (sorted by name, the id is the position) ----
+
+int lib_key_count(void);
+uint32_t lib_value_count(void);
+const char *lib_key_name(int key);         // "" for an id that isn't one
+int lib_key_id(const char *name);           // -1: no song has it
+int lib_key_songs(int key);                 // songs with this tag
+// The values of a key in sort order, with how many songs have each; returns how many.
+int lib_key_values(int key, uint32_t *out, int *counts, int max);
+
 // Track id for a path relative to the music root, or LIB_NONE.
 uint32_t lib_find_path(const char *rel);
 
@@ -80,7 +93,12 @@ int lib_value_group(uint32_t value);            // an artist value's group, -1: 
 // ---- lists for the browser ----
 
 // ITEM_HEADER: a section title in search results (id: SEC_ARTISTS, ...)
-typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP, ITEM_HEADER } ItemKind;
+// ITEM_TAG: a tag value in search results (id: TAG_ITEM(key, value))
+typedef enum { ITEM_ARTIST, ITEM_ALBUM, ITEM_TRACK, ITEM_FOLDER, ITEM_UP, ITEM_HEADER, ITEM_TAG } ItemKind;
+
+#define TAG_ITEM(key, value) (((uint32_t)(key) << 24) | (uint32_t)(value))
+#define TAG_ITEM_KEY(id) ((id) >> 24)
+#define TAG_ITEM_VALUE(id) ((id) & 0xFFFFFFu)
 
 typedef struct {
     uint8_t kind;

@@ -20,7 +20,7 @@ Put your music on the card with the converter on your PC, then listen to it on y
 
 ## Features:
 - Browse your music by artist, album, song or folder
-- Search, also in Japanese, Chinese and Russian
+- Search by name or tag (genre, …), also in Japanese, Chinese and Russian
 - A player with a turning record and a visualizer
 - A queue you can change
 - An equalizer with your own profiles
@@ -58,7 +58,7 @@ For the technical side:
 ## Not there yet:
 
 - Playlists
-- Genres and other tags as tabs and in search
+- Genres and other tags as tabs
 - Colours from the cover
 - Gapless playback
 - A date and time format of its own

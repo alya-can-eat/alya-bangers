@@ -257,6 +257,9 @@ void ui_item_label(const Item *it, char *buf, int size)
     case ITEM_FOLDER:
         lib_folder_name(it, app.folder, buf, size);
         break;
+    case ITEM_TAG:
+        snprintf(buf, size, "%s", lib_value(TAG_ITEM_VALUE(it->id)));
+        break;
     case ITEM_UP:
     {
         // "Bandcamp › Kivara"
@@ -1736,16 +1739,23 @@ static bool result_row(Canvas *c, int y, int i, int right, bool sel)
     if (it->kind == ITEM_HEADER)
     {
         static const uint8_t names[3] = { S_SEC_ARTISTS, S_SEC_ALBUMS, S_SEC_SONGS };
-        char n[12];
+        char n[12], name[64];
         snprintf(n, sizeof(n), "%u", (unsigned)m->count);
-        text(c, 4, y, txt(names[it->id < 3 ? it->id : 2]), C_DIM);
+        if (it->id >= SEC_TAG)
+            search_tag_name((int)(it->id - SEC_TAG), name, sizeof(name));
+        else
+            snprintf(name, sizeof(name), "%s", txt(names[it->id < 3 ? it->id : 2]));
+        text(c, 4, y, name, C_DIM);
         text_r(c, right, y, n, C_DIM);
         gfx_fill(c, 4, y + 15, right - 4, 1, C_LINE);
         return false;
     }
     static char name[256], meta[200];
     ui_item_label(it, name, sizeof(name));
-    search_meta(it, meta, sizeof(meta));
+    if (it->kind == ITEM_TAG)
+        snprintf(meta, sizeof(meta), "%u", (unsigned)m->count);     // its songs
+    else
+        search_meta(it, meta, sizeof(meta));
     bool playing = item_playing(it);
     int mw = 0;
     if (meta[0])
@@ -2045,9 +2055,9 @@ static bool im_menu_moving(int oy)
     return true;
 }
 
-static const uint8_t filter_names[F_COUNT] = { S_SEARCH_IN, S_GENRE, S_INFO_RATING, S_INFO_YEAR, S_PLAYED, S_FOLDER };
+static const uint8_t filter_names[FM_COUNT] = { S_SEARCH_IN, S_TAGS, S_INFO_RATING, S_INFO_YEAR, S_PLAYED, S_FOLDER };
 
-// The filters (kind -1) or a filter's choices, with the left edge at dx.
+// The filters (kind -1), the tags (F_TAGS) or a filter's choices, with the left edge at dx.
 static void filter_page(int kind, int dx, int oy)
 {
     int y0 = oy + FMENU_Y;
@@ -2057,17 +2067,17 @@ static void filter_page(int kind, int dx, int oy)
     gfx_clip(B, x0, y0, x1, SCREEN_H);
     gfx_fill(B, dx, y0, SCREEN_W, SCREEN_H - FMENU_Y, C_PANEL);
     gfx_rect(B, dx, y0, SCREEN_W, SCREEN_H - FMENU_Y, C_ACC);
-    bool active = (kind < 0) == (app.fpage < 0);
+    bool active = kind == app.fpage;
     int r0 = y0 + 20;
     if (kind < 0)
     {
         text(B, dx + 8, y0 + 2, txt(S_ADD_FILTER), C_DIM);
         if (active && app.menu_sel >= 0)
             highlight(dx + 1, r0 + app.menu_vis, SCREEN_W - 2, 16, r0, r0 + 16 * FMENU_ROWS, C_SEL);
-        for (int k = 0; k < F_COUNT; k++)
+        for (int r = 0; r < FM_COUNT; r++)
         {
-            int y = r0 + k * 16;
-            text(B, dx + 8, y, txt(filter_names[k]), C_TEXT);
+            int y = r0 + r * 16, k = search_menu_kind(r);
+            text(B, dx + 8, y, txt(filter_names[r]), C_TEXT);
             if (k == F_IN || search_filter_on(&app.sf, k))
             {
                 char v[96];
@@ -2082,35 +2092,41 @@ static void filter_page(int kind, int dx, int oy)
     }
     else
     {
-        char title[64];
-        snprintf(title, sizeof(title), "‹ %s", txt(filter_names[kind]));
+        // "‹ Tags", "‹ Genre", "‹ Rating", ...
+        char title[96], name[64];
+        if (F_IS_TAG(kind))
+            search_tag_name(app.fkey, name, sizeof(name));
+        else
+            snprintf(name, sizeof(name), "%s", txt(filter_names[search_menu_row(kind)]));
+        snprintf(title, sizeof(title), "‹ %s", name);
         text(B, dx + 8, y0 + 2, title, C_DIM);
         if (active && app.menu_sel >= 0)
             highlight(dx + 1, r0 + app.menu_vis, SCREEN_W - 2, 16, r0, r0 + 16 * FMENU_ROWS, C_SEL);
-        char cur[96];
-        bool on = search_filter_on(&app.sf, kind);
-        search_chip_label(&app.sf, kind, cur, sizeof(cur));
+        const SearchOpt *opts = kind == F_TAGS ? app.tkeys : app.fopts;
+        int n = kind == F_TAGS ? app.n_tkeys : app.n_fopts;
+        int scroll = kind == F_TAGS ? app.tscroll : app.fscroll;
         for (int r = 0; r < FMENU_ROWS; r++)
         {
-            int i = app.fscroll + r;
-            if (i >= app.n_fopts)
+            int i = scroll + r;
+            if (i >= n)
                 break;
             int y = r0 + r * 16;
             char label[96], count[12];
-            search_option_label(kind, app.fopts[i].value, label, sizeof(label));
-            snprintf(count, sizeof(count), "%d", app.fopts[i].count);
+            search_option_label(kind, opts[i].value, label, sizeof(label));
+            snprintf(count, sizeof(count), "%d", opts[i].count);
             int cw = font_text_width(count);
             text_r(B, dx + SCREEN_W - 12, y, count, C_DIM);
-            font_draw(B, dx + 8, y, SCREEN_W - 28 - cw, label, on && strcmp(label, cur) == 0 ? C_ACC : C_TEXT);
+            bool on = search_option_on(&app.sf, kind, app.fkey, opts[i].value);
+            font_draw(B, dx + 8, y, SCREEN_W - 28 - cw, label, on ? C_ACC : C_TEXT);
         }
-        if (app.n_fopts > FMENU_ROWS)
+        if (n > FMENU_ROWS)
         {
             // where in the choices this is
-            int h = 16 * FMENU_ROWS, th = h * FMENU_ROWS / app.n_fopts;
-            int ty = r0 + (h - th) * app.fscroll / (app.n_fopts - FMENU_ROWS);
+            int h = 16 * FMENU_ROWS, th = h * FMENU_ROWS / n;
+            int ty = r0 + (h - th) * scroll / (n - FMENU_ROWS);
             gfx_fill(B, dx + SCREEN_W - 5, ty, 2, th, C_ACC_DIM);
         }
-        if (app.n_fopts == 0)
+        if (n == 0)
             text(B, dx + 8, r0, "–", C_DIM);
     }
     gfx_clip(B, 0, oy, SCREEN_W, SCREEN_H);
@@ -2122,7 +2138,7 @@ static bool draw_filter_menu(int oy)
     int q = ease_out(clamp256(app.fpage_t * 256 / TAB_TICKS));
     int dx = SCREEN_W - SCREEN_W * q / 256;
     if (dx > 0)
-        filter_page(-1, dx - SCREEN_W, oy);
+        filter_page(app.fbase, dx - SCREEN_W, oy);
     if (dx < SCREEN_W && app.fkind >= 0)
         filter_page(app.fkind, dx, oy);
     return app.fpage_t > 0 && app.fpage_t < TAB_TICKS;

@@ -263,12 +263,20 @@ typedef struct {
     int acc_vis;                // x of its highlight (glides)
     SearchFilter sf;
     SearchMark *marks;          // per result row
-    int fpage;                  // filter menu: -1 the filters, else the F_... whose choices show
-    int fkind;                  // the filter whose choices are loaded (they stay while sliding back)
-    int fpage_t;                // the choices push in: 0 .. TAB_TICKS
+    // filter menu: the filters, Tags (the list of tags), a filter's choices.
+    // Two pages show while one pushes the other out: fbase on the left, fkind
+    // on the right; fpage is the one in front.
+    int fpage;                  // -1 the filters, F_TAGS, else the F_... whose choices show
+    int fkind;                  // the page on the right (its choices stay while sliding back)
+    int fbase;                  // the page on the left: -1 the filters, or F_TAGS
+    int fpage_t;                // the right page pushes in: 0 .. TAB_TICKS
     int fscroll;                // first choice shown
+    int fkey;                   // a tag chip's page: the tag key whose values show
     SearchOpt *fopts;
     int n_fopts;
+    SearchOpt *tkeys;           // the Tags page: the tags, with how many songs
+    int n_tkeys;
+    int tscroll;
     int chip_w[F_COUNT];        // chips grow in and shrink away: their width now
 } App;
 
@@ -324,6 +332,7 @@ int ui_chip_full_w(int kind);   // its width when it's in
 // the filter menu: the y of its first row
 #define FMENU_Y     64
 #define FMENU_ROWS  6
+#define FOPTS_MAX   1024     // choices of one filter (the most common values of a tag)
 // the input methods menu
 int ui_im_menu_y(void);
 // equalizer: a profile's gains (0: Flat), whether the sliders differ from the

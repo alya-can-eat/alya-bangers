@@ -441,7 +441,10 @@ static int demo(void)
             px = x;
     tap(px + 10, CHIPS_Y + 8);
     run(OV_TICKS + 4);
-    tap(100, FMENU_Y + 20 + F_GENRE * 16 + 8);
+    tap(100, FMENU_Y + 20 + FM_TAGS * 16 + 8);
+    run(TAB_TICKS + 4);
+    shot("search_tags");
+    tap(100, FMENU_Y + 20 + 8);         // Genre
     run(TAB_TICKS + 4);
     shot("search_filter");
     for (int i = 0; i < app.n_fopts; i++)
@@ -453,6 +456,15 @@ static int demo(void)
     press(KEY_DOWN);
     run(10);
     shot("search_list");
+    // the chip again: another genre, "or"
+    tap(10, CHIPS_Y + 8);
+    run(OV_TICKS + 4);
+    press(KEY_DOWN);
+    run(10);
+    shot("search_or_pick");
+    press(KEY_A);
+    run(OV_TICKS + SHEET_TICKS + 30);
+    shot("search_or");
     search_filter_clear(&app.sf);
     search_refresh();
     run(20);
@@ -1570,17 +1582,67 @@ int main(int argc, char **argv)
         check(albums_only, "search in: only albums");
         search_filter_clear(&f);
         SearchOpt opts[64];
-        int no = search_options(F_GENRE, opts, 64);
-        int voc = -1;
+        int gk = lib_key_id("genre"), ak = lib_key_id("albumartist");
+        int no = search_options(F_TAGS, 0, opts, 64);
+        check(no == 2 && (int)opts[0].value == gk && opts[0].count == 11 && (int)opts[1].value == ak
+              && opts[1].count == 16, "tags: Genre 11, Album artist 16 (not title, date, ~codec ...)");
+        char tn[64];
+        search_tag_name(ak, tn, sizeof(tn));
+        check(strcmp(tn, "Album artist") == 0, "albumartist is called Album artist");
+        no = search_options(F_TAG, gk, opts, 64);
+        int voc = -1, brk = -1;
         for (int i = 0; i < no; i++)
+        {
             if (strcmp(lib_value(opts[i].value), "Vocal Synth") == 0)
                 voc = i;
-        check(voc >= 0 && opts[voc].count == 3, "genres with counts: Vocal Synth 3");
-        search_filter_set(&f, F_GENRE, opts[voc].value);
+            if (strcmp(lib_value(opts[i].value), "Breakcore") == 0)
+                brk = i;
+        }
+        check(no == 5 && voc >= 0 && opts[voc].count == 3, "genres with counts: Vocal Synth 3");
+        search_tag_toggle(&f, gk, opts[voc].value);
         n = search_run("", IM_ABC, &f, it, mk, item_cap);
         check(n == 4 && it[0].id == SEC_SONGS && mk[0].count == 3, "genre Vocal Synth, nothing typed: its 3 songs");
         n = search_run("luo", IM_PINYIN, &f, it, mk, item_cap);
         check(n == 3, "with a filter, the query also looks at artists: 洛星涵's 2 Vocal Synth songs");
+        search_tag_toggle(&f, gk, opts[brk].value);
+        n = search_run("", IM_ABC, &f, it, mk, item_cap);
+        char chip[96];
+        search_chip_label(&f, F_TAG, chip, sizeof(chip));
+        check(f.tag[0].n == 2 && mk[0].count == 6 && strcmp(chip, "2 genres") == 0,
+              "Vocal Synth or Breakcore: 6 songs, one chip \"2 genres\"");
+        uint32_t kv;
+        int kc;
+        check(lib_key_values(ak, &kv, &kc, 1) == 1 && strcmp(lib_value(kv), "Kivara") == 0 && kc == 16,
+              "album artists: Kivara 16");
+        search_tag_toggle(&f, ak, kv);
+        n = search_run("", IM_ABC, &f, it, mk, item_cap);
+        check(search_filter_on(&f, F_TAG + 1) && mk[0].count == 3, "and Album artist Kivara: 3 songs (2 chips)");
+        search_tag_toggle(&f, gk, opts[voc].value);
+        search_tag_toggle(&f, gk, opts[brk].value);
+        check(!search_filter_on(&f, F_TAG) && search_filter_on(&f, F_TAG + 1), "a value that is on: off again");
+        search_filter_clear(&f);
+        n = search_run("vocal", IM_ABC, &f, it, mk, item_cap);
+        int vt = -1;
+        for (int i = 0; i < n; i++)
+            if (it[i].kind == ITEM_TAG)
+                vt = i;
+        check(vt == 1 && it[0].kind == ITEM_HEADER && it[0].id == (uint32_t)(SEC_TAG + gk) && mk[1].count == 3
+              && mk[1].len == 5, "typing \"vocal\": a Genre section, Vocal Synth 3");
+        n = search_run("kiva", IM_ABC, &f, it, mk, item_cap);
+        int sa = -1, sal = -1, sg = -1, ss = -1;
+        for (int i = 0; i < n; i++)
+            if (it[i].kind == ITEM_HEADER)
+            {
+                if (it[i].id == SEC_ARTISTS) sa = i;
+                if (it[i].id == SEC_ALBUMS) sal = i;
+                if (it[i].id == (uint32_t)(SEC_TAG + ak)) sg = i;
+                if (it[i].id == SEC_SONGS) ss = i;
+            }
+        check(sa == 0 && sg > sa && sg > sal && (ss < 0 || ss > sg) && mk[sg + 1].count == 16,
+              "\"kiva\": artists, then Album artist Kivara 16, before the songs");
+        uint32_t tbuf[64];
+        int tn2 = lib_item_tracks(&it[sg + 1], "", tbuf, 64);
+        check(tn2 == 16, "Kivara as album artist: its 16 songs to play");
         search_filter_clear(&f);
         search_filter_set(&f, F_YEAR, 2020);
         n = search_run("", IM_ABC, &f, it, mk, item_cap);
@@ -1741,7 +1803,7 @@ int main(int argc, char **argv)
         tap(60, ui_im_menu_y() + 20 + IM_ABC * 16 + 8);
         run(IM_TICKS + 2);
 
-        // + Filter: the menu, a genre, the chip
+        // + Filter: the menu, Tags, a genre, the chip
         bool on_x;
         int px = -1;
         for (int x = 4; x < 252 && px < 0; x++)
@@ -1751,36 +1813,109 @@ int main(int argc, char **argv)
         check(app.overlay == OV_FILTER && app.fpage < 0, "+ Filter: the filters");
         run(OV_TICKS + 2);
         shot("37_search_filter");
-        tap(100, FMENU_Y + 20 + F_GENRE * 16 + 8);
-        check(app.fpage == F_GENRE && app.n_fopts > 0, "Genre: its choices");
+        tap(100, FMENU_Y + 20 + FM_TAGS * 16 + 8);
+        check(app.fpage == F_TAGS && app.n_tkeys == 2, "Tags: the tags");
         run(TAB_TICKS / 2);
-        shot("37a_search_genre_push");
+        shot("37a_search_tags_push");
         run(TAB_TICKS);
-        shot("37b_search_genre");
-        int vi = -1;
+        shot("37b_search_tags");
+        tap(100, FMENU_Y + 20 + 8);
+        check(app.fpage == F_TAG && app.fkey == lib_key_id("genre") && app.fbase == F_TAGS && app.n_fopts == 5,
+              "Genre: its values");
+        run(TAB_TICKS / 2);
+        check(app.fpage_t > 0 && app.fpage_t < TAB_TICKS, "Genre's values push the tags out");
+        shot("37c_search_genre_push");
+        run(TAB_TICKS);
+        shot("37d_search_genre");
+        int vi = -1, bi = -1;
         for (int i = 0; i < app.n_fopts; i++)
+        {
             if (strcmp(lib_value(app.fopts[i].value), "Vocal Synth") == 0)
                 vi = i;
+            if (strcmp(lib_value(app.fopts[i].value), "Breakcore") == 0)
+                bi = i;
+        }
         tap(100, FMENU_Y + 20 + (vi - app.fscroll) * 16 + 8);
-        check(app.overlay == OV_NONE && search_filter_on(&app.sf, F_GENRE) && section_count(SEC_SONGS) == 3,
+        check(app.overlay == OV_NONE && search_filter_on(&app.sf, F_TAG) && section_count(SEC_SONGS) == 3,
               "Vocal Synth: a chip, its 3 songs");
         run(4);
-        check(app.chip_w[F_GENRE] > 0 && app.chip_w[F_GENRE] < ui_chip_full_w(F_GENRE), "the chip grows in");
+        check(app.chip_w[F_TAG] > 0 && app.chip_w[F_TAG] < ui_chip_full_w(F_TAG), "the chip grows in");
         run(OV_TICKS + SHEET_TICKS + 4);
-        shot("37c_search_filtered");
+        shot("37e_search_filtered");
+
+        // the chip again: its values; another one is "or"
+        tap(10, CHIPS_Y + 8);
+        check(app.overlay == OV_FILTER && app.fpage == F_TAG && app.fbase == F_TAGS && app.menu_sel == vi,
+              "the chip: its values, Vocal Synth highlighted");
+        run(OV_TICKS + 2);
+        shot("37f_search_chip_values");
+        tap(100, FMENU_Y + 20 + (bi - app.fscroll) * 16 + 8);
+        char chip2[96];
+        search_chip_label(&app.sf, F_TAG, chip2, sizeof(chip2));
+        check(app.overlay == OV_NONE && app.sf.tag[0].n == 2 && section_count(SEC_SONGS) == 6
+              && strcmp(chip2, "2 genres") == 0, "and Breakcore: one chip \"2 genres\", 6 songs");
+        run(OV_TICKS + SHEET_TICKS + 20);
+        shot("37g_search_or");
+
+        // back: a tag's values, the tags, the filters
+        tap(10, CHIPS_Y + 8);
+        run(OV_TICKS + 2);
+        tap(100, FMENU_Y + 8);
+        check(app.fpage == F_TAGS && app.menu_sel == 0, "‹ Genre: back to the tags, on Genre");
+        run(TAB_TICKS / 2);
+        check(app.fpage_t > 0 && app.fpage_t < TAB_TICKS, "the values slide out");
+        run(TAB_TICKS);
+        check(app.fpage_t == 0, "the tags");
+        shot("37h_search_tags_back");
+        press(KEY_RIGHT);
+        check(app.fpage == F_TAG && app.fbase == F_TAGS, "D-pad right: into Genre again");
+        run(TAB_TICKS + 2);
+        press(KEY_B);
+        run(TAB_TICKS + 2);
+        tap(100, FMENU_Y + 8);
+        check(app.fpage < 0 && app.fbase < 0 && app.menu_sel == FM_TAGS, "‹ Tags: the filters, on Tags");
+        run(TAB_TICKS / 2);
+        shot("37i_search_tags_out");
+        run(TAB_TICKS);
+        check(app.fpage_t == 0, "the filters");
+        press(KEY_B);
+        run(OV_TICKS + 2);
+        check(app.overlay == OV_NONE, "B: closed");
         tap_key(0, K_DONE);
         run(KB_TICKS + 2);
-        shot("37d_search_filtered_list");
+        shot("37j_search_filtered_list");
         int gx = -1;
         for (int x = 4; x < 252 && gx < 0; x++)
-            if (ui_chip_at(x, CHIPS_Y + 8, &on_x) == F_GENRE && on_x)
+            if (ui_chip_at(x, CHIPS_Y + 8, &on_x) == F_TAG && on_x)
                 gx = x;
         tap(gx + 4, CHIPS_Y + 8);
-        check(!search_filter_on(&app.sf, F_GENRE) && app.n_items == 0, "× on the chip: the filter is off");
+        check(!search_filter_on(&app.sf, F_TAG) && app.n_items == 0, "× on the chip: the filter is off");
         run(4);
-        check(app.chip_w[F_GENRE] > 0, "the chip shrinks away");
+        check(app.chip_w[F_TAG] > 0, "the chip shrinks away");
         run(20);
-        check(app.chip_w[F_GENRE] == 0, "gone");
+        check(app.chip_w[F_TAG] == 0, "gone");
+
+        // typing finds a tag value: picking it makes the chip
+        tap(150, FIELD_Y + 10);
+        run(KB_TICKS + 2);
+        type_text("vocal");
+        run(SHEET_TICKS + 4);
+        int tr = -1;
+        for (int i = 0; i < app.n_items; i++)
+            if (app.items[i].kind == ITEM_TAG)
+                tr = i;
+        check(tr >= 0 && app.items[tr - 1].kind == ITEM_HEADER, "typing \"vocal\": a Genre section");
+        shot("37k_search_tag_typed");
+        for (int g = 0; g < 20 && !(app.sel_on && app.sel == tr); g++)
+            press(KEY_DOWN);
+        press(KEY_A);
+        check(search_filter_on(&app.sf, F_TAG) && app.query[0] == 0 && section_count(SEC_SONGS) == 3,
+              "A on it: a chip, the query cleared, its 3 songs");
+        run(OV_TICKS + SHEET_TICKS + 20);
+        shot("37l_search_tag_chip");
+        search_filter_clear(&app.sf);
+        search_refresh();
+        run(20);
 
         // in German
         tap(150, FIELD_Y + 10);

@@ -25,7 +25,8 @@ RADIUS = 6 * SCALE
 
 # the demo mode's pictures (tests/host/screens.c, demo())
 STILLS = ["browse", "player", "info", "queue", "eq", "two_artists", "search", "search_accents", "search_kana",
-          "search_pinyin", "search_cyrillic", "search_filter", "search_list", "settings", "sound", "presets",
+          "search_pinyin", "search_cyrillic", "search_filter", "search_list", "search_tags", "search_or_pick",
+          "search_or", "settings", "sound", "presets",
           "german_search"]
 FILMS = ["rd_browse", "rd_player", "rd_search", "rd_theme"]
 

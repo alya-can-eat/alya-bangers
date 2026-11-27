@@ -206,36 +206,249 @@ const char *search_reading(const Item *it, int via)
     return via == VIA_KANA ? kana : pinyin;
 }
 
+// ------------------------------------------------------------ tags
+
+// Names of the common tags; any other key shows as itself ("Mood" for mood).
+static const struct {
+    const char *key;
+    const char *name[LANG_COUNT], *plural[LANG_COUNT];
+} tag_names[] = {
+    { "genre", { "Genre", "Genre" }, { "genres", "Genres" } },
+    { "albumartist", { "Album artist", "Albuminterpret" }, { "album artists", "Albuminterpreten" } },
+    { "composer", { "Composer", "Komponist" }, { "composers", "Komponisten" } },
+    { "lyricist", { "Lyricist", "Texter" }, { "lyricists", "Texter" } },
+    { "performer", { "Performer", "Mitwirkende" }, { "performers", "Mitwirkende" } },
+    { "conductor", { "Conductor", "Dirigent" }, { "conductors", "Dirigenten" } },
+    { "arranger", { "Arranger", "Arrangeur" }, { "arrangers", "Arrangeure" } },
+    { "remixer", { "Remixer", "Remixer" }, { "remixers", "Remixer" } },
+    { "mood", { "Mood", "Stimmung" }, { "moods", "Stimmungen" } },
+    { "style", { "Style", "Stil" }, { "styles", "Stile" } },
+    { "label", { "Label", "Label" }, { "labels", "Labels" } },
+    { "organization", { "Label", "Label" }, { "labels", "Labels" } },
+    { "grouping", { "Grouping", "Gruppierung" }, { "groupings", "Gruppierungen" } },
+    { "language", { "Language", "Sprache" }, { "languages", "Sprachen" } },
+    { "initialkey", { "Key", "Tonart" }, { "keys", "Tonarten" } },
+    { "bpm", { "BPM", "BPM" }, { "BPM", "BPM" } },
+};
+#define N_TAG_NAMES ((int)(sizeof(tag_names) / sizeof(tag_names[0])))
+
+// Tags with a place of their own (tabs, Year, Rating, Played), numbers that
+// mean nothing on their own, and the converter's own (~codec, ~#rating, ...).
+static const char *const tag_hidden[] = {
+    "title", "artist", "artists", "album", "albumartists", "date", "originaldate", "year",
+    "originalyear", "releasedate", "tracknumber", "discnumber", "tracktotal", "disctotal",
+    "totaltracks", "totaldiscs", "track", "disc", "discsubtitle", "isrc", "barcode", "upc",
+    "asin", "catalognumber", "length", "website", "copyright", "license", "compilation",
+};
+
+static int known_tag(int key)
+{
+    const char *k = lib_key_name(key);
+    for (int i = 0; i < N_TAG_NAMES; i++)
+        if (strcmp(tag_names[i].key, k) == 0)
+            return i;
+    return -1;
+}
+
+bool search_tag_shown(int key)
+{
+    const char *k = lib_key_name(key);
+    size_t l = strlen(k);
+    if (key < 0 || key > 255 || l == 0 || k[0] == '~' || (l > 4 && strcmp(k + l - 4, "sort") == 0))
+        return false;
+    for (unsigned i = 0; i < sizeof(tag_hidden) / sizeof(tag_hidden[0]); i++)
+        if (strcmp(tag_hidden[i], k) == 0)
+            return false;
+    return true;
+}
+
+void search_tag_name(int key, char *buf, int size)
+{
+    int i = known_tag(key);
+    if (i >= 0)
+    {
+        snprintf(buf, size, "%s", tag_names[i].name[i18n_lang < LANG_COUNT ? i18n_lang : 0]);
+        return;
+    }
+    snprintf(buf, size, "%s", lib_key_name(key));
+    if (buf[0] >= 'a' && buf[0] <= 'z')
+        buf[0] -= 32;
+}
+
+static void tag_plural(int key, char *buf, int size)
+{
+    int i = known_tag(key);
+    if (i >= 0)
+        snprintf(buf, size, "%s", tag_names[i].plural[i18n_lang < LANG_COUNT ? i18n_lang : 0]);
+    else
+        search_tag_name(key, buf, size);
+}
+
+// The tags that can filter, in order (the common ones first, as listed above,
+// then the others by name), and every value they have: made once per library.
+typedef struct { uint32_t value; uint16_t key, count; } TagValue;
+static struct {
+    bool made;
+    uint32_t fingerprint;
+    int n_keys;
+    uint8_t keys[256];          // shown keys in order
+    int songs[256];             // songs with each (by position)
+    uint8_t rank[256];          // a key id's position
+    TagValue *vals;
+    int n_vals;
+} tg;
+
+static void tags_make(void)
+{
+    if (!lib_loaded() || (tg.made && tg.fingerprint == lib_fingerprint()))
+        return;
+    free(tg.vals);
+    memset(&tg, 0, sizeof(tg));
+    tg.made = true;
+    tg.fingerprint = lib_fingerprint();
+    int nk = lib_key_count() < 256 ? lib_key_count() : 256;
+    bool taken[256] = { false };
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < (pass ? nk : N_TAG_NAMES); i++)
+        {
+            int k = pass ? i : lib_key_id(tag_names[i].key);
+            if (k < 0 || k >= nk || taken[k] || !search_tag_shown(k))
+                continue;
+            taken[k] = true;
+            int songs = lib_key_songs(k);
+            if (songs == 0)
+                continue;
+            tg.rank[k] = (uint8_t)tg.n_keys;
+            tg.songs[tg.n_keys] = songs;
+            tg.keys[tg.n_keys++] = (uint8_t)k;
+        }
+    // their values
+    int cap = 0;
+    uint32_t *v = malloc(lib_value_count() * sizeof(uint32_t) + 4);
+    int *c = malloc(lib_value_count() * sizeof(int) + 4);
+    for (int i = 0; v && c && i < tg.n_keys; i++)
+    {
+        int n = lib_key_values(tg.keys[i], v, c, (int)lib_value_count());
+        for (int j = 0; j < n; j++)
+        {
+            if (v[j] > 0xFFFFFF)
+                continue;
+            if (tg.n_vals == cap)
+            {
+                int ncap = cap ? cap * 2 : 256;
+                TagValue *nv = realloc(tg.vals, ncap * sizeof(TagValue));
+                if (nv == NULL)
+                    break;
+                tg.vals = nv;
+                cap = ncap;
+            }
+            tg.vals[tg.n_vals++] = (TagValue){ v[j], tg.keys[i], (uint16_t)(c[j] > 0xFFFF ? 0xFFFF : c[j]) };
+        }
+    }
+    free(v);
+    free(c);
+}
+
+int search_tag_chip(const SearchFilter *f, int key)
+{
+    for (int i = 0; i < TAG_CHIPS; i++)
+        if (f->tag[i].n && f->tag[i].key == key)
+            return F_TAG + i;
+    for (int i = 0; i < TAG_CHIPS; i++)
+        if (f->tag[i].n == 0)
+            return F_TAG + i;
+    return F_TAG + TAG_CHIPS - 1;
+}
+
+void search_tag_toggle(SearchFilter *f, int key, uint32_t value)
+{
+    SearchTag *t = &f->tag[search_tag_chip(f, key) - F_TAG];
+    if (t->n == 0 || t->key != key)
+    {
+        *t = (SearchTag){ (uint16_t)key, 1, 0, { value } };
+        return;
+    }
+    for (int i = 0; i < t->n; i++)
+        if (t->v[i] == value)
+        {
+            // on: off again
+            memmove(&t->v[i], &t->v[i + 1], (t->n - i - 1) * sizeof(uint32_t));
+            t->n--;
+            return;
+        }
+    if (t->n < TAG_VALUES)
+        t->v[t->n++] = value;
+    else
+        t->v[TAG_VALUES - 1] = value;   // full: the last one makes room
+}
+
+static bool tag_passes(uint32_t t, const SearchTag *tag)
+{
+    uint32_t ids[16];
+    int n = lib_tag_ids_k(t, tag->key, ids, 16);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < tag->n; j++)
+            if (ids[i] == tag->v[j])
+                return true;
+    return false;
+}
+
 // ------------------------------------------------------------ filters
+
+static const uint8_t menu_kinds[FM_COUNT] = { F_IN, F_TAGS, F_RATING, F_YEAR, F_PLAYED, F_FOLDER };
+
+int search_menu_kind(int row)
+{
+    return row >= 0 && row < FM_COUNT ? menu_kinds[row] : -1;
+}
+
+int search_menu_row(int kind)
+{
+    if (F_IS_TAG(kind))
+        return FM_TAGS;
+    for (int r = 0; r < FM_COUNT; r++)
+        if (menu_kinds[r] == kind)
+            return r;
+    return -1;
+}
 
 void search_filter_clear(SearchFilter *f)
 {
     memset(f, 0, sizeof(*f));
     f->rating = f->played = -1;
     f->decade = -1;
-    f->genre = LIB_NONE;
 }
 
 bool search_filter_on(const SearchFilter *f, int kind)
 {
+    if (F_IS_TAG(kind))
+        return f->tag[kind - F_TAG].n > 0;
     switch (kind)
     {
     case F_IN: return f->in != IN_ALL;
-    case F_GENRE: return f->genre != LIB_NONE;
     case F_RATING: return f->rating >= 0;
     case F_YEAR: return f->decade >= 0;
     case F_PLAYED: return f->played >= 0;
     case F_FOLDER: return f->folder[0] != 0;
+    case F_TAGS:
+        for (int i = 0; i < TAG_CHIPS; i++)
+            if (f->tag[i].n)
+                return true;
+        return false;
     default: return false;
     }
 }
 
 void search_filter_off(SearchFilter *f, int kind)
 {
+    if (F_IS_TAG(kind))
+    {
+        f->tag[kind - F_TAG].n = 0;
+        return;
+    }
     switch (kind)
     {
     case F_IN: f->in = IN_ALL; break;
-    case F_GENRE: f->genre = LIB_NONE; break;
     case F_RATING: f->rating = -1; break;
     case F_YEAR: f->decade = -1; break;
     case F_PLAYED: f->played = -1; break;
@@ -246,18 +459,8 @@ void search_filter_off(SearchFilter *f, int kind)
 
 bool search_songs_filtered(const SearchFilter *f)
 {
-    for (int k = F_GENRE; k < F_COUNT; k++)
+    for (int k = F_TAG; k < F_COUNT; k++)
         if (search_filter_on(f, k))
-            return true;
-    return false;
-}
-
-static bool has_genre(uint32_t t, uint32_t genre)
-{
-    uint32_t ids[8];
-    int n = lib_tag_ids(t, "genre", ids, 8);
-    for (int i = 0; i < n; i++)
-        if (ids[i] == genre)
             return true;
     return false;
 }
@@ -281,8 +484,9 @@ static bool in_folder(uint32_t t, const char *folder)
 
 static bool song_passes(uint32_t t, const SearchFilter *f)
 {
-    if (f->genre != LIB_NONE && !has_genre(t, f->genre))
-        return false;
+    for (int i = 0; i < TAG_CHIPS; i++)
+        if (f->tag[i].n && !tag_passes(t, &f->tag[i]))
+            return false;
     if (f->decade >= 0)
     {
         int y = lib_track(t)->year;
@@ -301,15 +505,24 @@ static bool song_passes(uint32_t t, const SearchFilter *f)
 // ------------------------------------------------------------ results
 
 typedef struct {
-    uint8_t rank, sec;
+    uint8_t rank;
+    uint16_t sec;
     uint32_t key, id;
     SearchMark m;
 } Hit;
 
+// Sections in order: artists, albums, the tags, songs.
+static int sec_order(int sec)
+{
+    if (sec >= SEC_TAG)
+        return 2 + tg.rank[sec - SEC_TAG];
+    return sec == SEC_SONGS ? 0x7FFF : sec;
+}
+
 static int cmp_hits(const void *pa, const void *pb)
 {
     const Hit *a = pa, *b = pb;
-    if (a->sec != b->sec) return a->sec < b->sec ? -1 : 1;
+    if (a->sec != b->sec) return sec_order(a->sec) < sec_order(b->sec) ? -1 : 1;
     if (a->rank != b->rank) return a->rank < b->rank ? -1 : 1;
     if (a->key != b->key) return a->key < b->key ? -1 : 1;
     return a->id < b->id ? -1 : (a->id > b->id);
@@ -410,6 +623,20 @@ int search_run(const char *query, int im, const SearchFilter *f, Item *out, Sear
                 if (match_value(v, lib_value(v), &rank, &m))
                     hits[nh++] = (Hit){ (uint8_t)rank, SEC_ALBUMS, a, a, m };
             }
+        if (f->in == IN_ALL)
+        {
+            tags_make();
+            for (int i = 0; i < tg.n_vals && nh < max_hits; i++)
+            {
+                const TagValue *tv = &tg.vals[i];
+                if (match_value(tv->value, lib_value(tv->value), &rank, &m))
+                {
+                    m.count = tv->count;
+                    hits[nh++] = (Hit){ (uint8_t)rank, (uint16_t)(SEC_TAG + tv->key), tv->value,
+                                        TAG_ITEM(tv->key, tv->value), m };
+                }
+            }
+        }
         if (f->in == IN_ALL || f->in == IN_SONGS)
         {
             char title[256];
@@ -436,7 +663,7 @@ int search_run(const char *query, int im, const SearchFilter *f, Item *out, Sear
         for (; i < j && n < cap; i++)
         {
             marks[n] = hits[i].m;
-            out[n++] = (Item){ kinds[sec], hits[i].id };
+            out[n++] = (Item){ sec >= SEC_TAG ? ITEM_TAG : kinds[sec], hits[i].id };
         }
         i = j;
     }
@@ -455,32 +682,36 @@ static int cmp_count_desc(const void *pa, const void *pb)
     return strcmp(lib_value(a->value), lib_value(b->value));
 }
 
-int search_options(int kind, SearchOpt *out, int max)
+int search_options(int kind, int key, SearchOpt *out, int max)
 {
     int n = 0;
     uint32_t tc = lib_track_count();
+    if (F_IS_TAG(kind))
+    {
+        // the values (of a tag that can filter), the most common first
+        tags_make();
+        int k = 0;
+        for (int i = 0; i < tg.n_vals; i++)
+            k += tg.vals[i].key == key;
+        SearchOpt *all = malloc(k * sizeof(SearchOpt) + 8);
+        if (all == NULL)
+            return 0;
+        k = 0;
+        for (int i = 0; i < tg.n_vals; i++)
+            if (tg.vals[i].key == key)
+                all[k++] = (SearchOpt){ tg.vals[i].value, tg.vals[i].count };
+        qsort(all, k, sizeof(SearchOpt), cmp_count_desc);
+        n = k < max ? k : max;
+        memcpy(out, all, n * sizeof(SearchOpt));
+        free(all);
+        return n;
+    }
     switch (kind)
     {
-    case F_GENRE:
-        for (uint32_t t = 0; t < tc; t++)
-        {
-            uint32_t ids[8];
-            int k = lib_tag_ids(t, "genre", ids, 8);
-            for (int i = 0; i < k; i++)
-            {
-                int j = 0;
-                while (j < n && out[j].value != ids[i])
-                    j++;
-                if (j == n)
-                {
-                    if (n == max)
-                        continue;
-                    out[n++] = (SearchOpt){ ids[i], 0 };
-                }
-                out[j].count++;
-            }
-        }
-        qsort(out, n, sizeof(SearchOpt), cmp_count_desc);
+    case F_TAGS:
+        tags_make();
+        for (int i = 0; i < tg.n_keys && n < max; i++)
+            out[n++] = (SearchOpt){ tg.keys[i], tg.songs[i] };
         break;
     case F_RATING:
     case F_PLAYED:
@@ -541,13 +772,18 @@ int search_options(int kind, SearchOpt *out, int max)
 
 void search_option_label(int kind, uint32_t value, char *buf, int size)
 {
+    if (F_IS_TAG(kind))
+    {
+        snprintf(buf, size, "%s", lib_value(value));
+        return;
+    }
     static const char *const stars[RATE_COUNT - 1] = { "★★★★★", "★★★★+", "★★★+", "★★+", "★+" };
     static const uint8_t played[PLAYED_COUNT] = { S_PLAYED_NEVER, S_PLAYED_ONCE, S_PLAYED_10 };
     static const uint8_t in[IN_COUNT] = { S_IN_ALL, S_ONLY_ARTISTS, S_ONLY_ALBUMS, S_ONLY_SONGS };
     switch (kind)
     {
     case F_IN: snprintf(buf, size, "%s", txt(in[value < IN_COUNT ? value : 0])); break;
-    case F_GENRE: snprintf(buf, size, "%s", lib_value(value)); break;
+    case F_TAGS: search_tag_name((int)value, buf, size); break;
     case F_RATING: snprintf(buf, size, "%s", value < RATE_NONE ? stars[value] : txt(S_UNRATED)); break;
     case F_PLAYED: snprintf(buf, size, "%s", txt(played[value < PLAYED_COUNT ? value : 0])); break;
     case F_YEAR:
@@ -570,16 +806,66 @@ void search_option_label(int kind, uint32_t value, char *buf, int size)
 
 void search_chip_label(const SearchFilter *f, int kind, char *buf, int size)
 {
+    if (F_IS_TAG(kind))
+    {
+        const SearchTag *t = &f->tag[kind - F_TAG];
+        if (t->n == 1)
+            snprintf(buf, size, "%s", lib_value(t->v[0]));
+        else
+        {
+            char p[64];
+            tag_plural(t->key, p, sizeof(p));
+            snprintf(buf, size, "%d %s", t->n, p);     // "2 genres"
+        }
+        return;
+    }
     switch (kind)
     {
     case F_IN: search_option_label(F_IN, f->in, buf, size); break;
-    case F_GENRE: search_option_label(F_GENRE, f->genre, buf, size); break;
     case F_RATING: search_option_label(F_RATING, (uint32_t)f->rating, buf, size); break;
     case F_YEAR: search_option_label(F_YEAR, (uint32_t)f->decade, buf, size); break;
     case F_PLAYED: search_option_label(F_PLAYED, (uint32_t)f->played, buf, size); break;
     case F_FOLDER: snprintf(buf, size, "%s", f->folder); break;
+    case F_TAGS:
+    {
+        // the menu's Tags row: the one chip, or how many
+        int on = 0, last = -1;
+        for (int i = 0; i < TAG_CHIPS; i++)
+            if (f->tag[i].n)
+                on++, last = F_TAG + i;
+        if (on == 1)
+            search_chip_label(f, last, buf, size);
+        else
+            snprintf(buf, size, txt(S_N_TAGS), on);
+        break;
+    }
     default: buf[0] = 0; break;
     }
+}
+
+bool search_option_on(const SearchFilter *f, int kind, int key, uint32_t value)
+{
+    if (F_IS_TAG(kind))
+    {
+        const SearchTag *t = &f->tag[kind - F_TAG];
+        for (int i = 0; t->key == key && i < t->n; i++)
+            if (t->v[i] == value)
+                return true;
+        return false;
+    }
+    if (kind == F_TAGS)
+    {
+        for (int i = 0; i < TAG_CHIPS; i++)
+            if (f->tag[i].n && f->tag[i].key == value)
+                return true;
+        return false;
+    }
+    if (!search_filter_on(f, kind))
+        return false;
+    char a[96], b[96];
+    search_option_label(kind, value, a, sizeof(a));
+    search_chip_label(f, kind, b, sizeof(b));
+    return strcmp(a, b) == 0;
 }
 
 void search_filter_set(SearchFilter *f, int kind, uint32_t value)
@@ -587,12 +873,11 @@ void search_filter_set(SearchFilter *f, int kind, uint32_t value)
     switch (kind)
     {
     case F_IN: f->in = (uint8_t)(value < IN_COUNT ? value : IN_ALL); break;
-    case F_GENRE: f->genre = value; break;
     case F_RATING: f->rating = (int8_t)value; break;
     case F_YEAR: f->decade = (int16_t)value; break;
     case F_PLAYED: f->played = (int8_t)value; break;
     case F_FOLDER: search_option_label(F_FOLDER, value, f->folder, sizeof(f->folder)); break;
-    default: break;
+    default: break;     // tags: search_tag_toggle
     }
 }
 

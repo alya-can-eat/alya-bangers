@@ -85,7 +85,6 @@ Started by hand ([Actions › release](../../../actions/workflows/release.yml) �
 
 - Playlists
 - Genre and other tags as tabs
-- Search: genre and other tags (composer, label, mood …) found while typing, the other tags in + Filter, two of the same tag meaning "or"
 - Colours from the cover
 - Gapless playback
 - A date and time format of its own (right now it follows the language)

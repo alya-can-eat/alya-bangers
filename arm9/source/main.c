@@ -531,6 +531,8 @@ static void play_from_list(int index)
     play_tracks(tracks_buf, n, start, app.tab == TAB_TITLE && app.album != LIB_NONE, anim);
 }
 
+static void query_clear(void);
+
 static void activate(int i)
 {
     if (i < 0 || i >= app.n_items)
@@ -557,6 +559,11 @@ static void activate(int i)
         break;
     case ITEM_TRACK:
         play_from_list(i);
+        break;
+    case ITEM_TAG:
+        // a chip for it, the query cleared: its songs
+        search_tag_toggle(&app.sf, (int)TAG_ITEM_KEY(it->id), TAG_ITEM_VALUE(it->id));
+        query_clear();
         break;
     case ITEM_FOLDER:
     {
@@ -1026,34 +1033,72 @@ static void kb_touch_up(void)
     redraw = true;
 }
 
-// ---- filter menu: the filters, then a filter's choices
+// ---- filter menu: the filters, Tags (the tags), then a filter's choices
+
+// The page in front: its list, how many rows, where it's scrolled to.
+static int fpage_count(void)
+{
+    return app.fpage < 0 ? FM_COUNT : (app.fpage == F_TAGS ? app.n_tkeys : app.n_fopts);
+}
+
+static int *fpage_scroll(void)
+{
+    static int none;
+    none = 0;
+    return app.fpage < 0 ? &none : (app.fpage == F_TAGS ? &app.tscroll : &app.fscroll);
+}
+
+static const SearchOpt *fpage_opts(void)
+{
+    return app.fpage == F_TAGS ? app.tkeys : app.fopts;
+}
+
+// The highlight on the choice that's on, in view.
+static void fpage_select_on(void)
+{
+    app.menu_sel = -1;
+    const SearchOpt *o = fpage_opts();
+    int *scroll = fpage_scroll();
+    *scroll = 0;
+    for (int i = 0; i < fpage_count(); i++)
+        if (search_option_on(&app.sf, app.fpage, app.fkey, o[i].value))
+        {
+            app.menu_sel = i;
+            *scroll = i >= FMENU_ROWS ? i - FMENU_ROWS + 1 : 0;
+            break;
+        }
+}
+
+static void tags_load(void)
+{
+    app.n_tkeys = search_options(F_TAGS, 0, app.tkeys, 256);
+    app.tscroll = 0;
+}
 
 static void fpage_open(int kind)
 {
     app.fpage = app.fkind = kind;
-    app.n_fopts = search_options(kind, app.fopts, 256);
-    app.fscroll = 0;
-    app.menu_sel = -1;
-    // the current choice is highlighted and in view
-    for (int i = 0; i < app.n_fopts; i++)
-    {
-        char a[96], b[96];
-        search_option_label(kind, app.fopts[i].value, a, sizeof(a));
-        search_chip_label(&app.sf, kind, b, sizeof(b));
-        if (search_filter_on(&app.sf, kind) && strcmp(a, b) == 0)
-        {
-            app.menu_sel = i;
-            app.fscroll = i >= FMENU_ROWS ? i - FMENU_ROWS + 1 : 0;
-        }
-    }
+    if (kind == F_TAGS)
+        tags_load();
+    else
+        app.n_fopts = search_options(kind, app.fkey, app.fopts, FOPTS_MAX);
+    fpage_select_on();
 }
 
 static void filter_menu(int page)
 {
     app.overlay = OV_FILTER;
     app.fpage = -1;
+    app.fbase = -1;
     app.fpage_t = 0;
     app.menu_sel = -1;
+    if (F_IS_TAG(page))
+    {
+        // a tag chip: its values, with the list of tags behind them
+        app.fkey = app.sf.tag[page - F_TAG].key;
+        tags_load();
+        app.fbase = F_TAGS;
+    }
     if (page > F_IN)
     {
         fpage_open(page);
@@ -1072,30 +1117,66 @@ static void filter_choose(int i)
 {
     if (i < 0 || i >= app.n_fopts)
         return;
-    char a[96], b[96];
-    search_option_label(app.fkind, app.fopts[i].value, a, sizeof(a));
-    search_chip_label(&app.sf, app.fkind, b, sizeof(b));
-    if (search_filter_on(&app.sf, app.fkind) && strcmp(a, b) == 0)
+    uint32_t v = app.fopts[i].value;
+    if (F_IS_TAG(app.fkind))
+        search_tag_toggle(&app.sf, app.fkey, v);    // another value: "or"; one that's on: off
+    else if (search_option_on(&app.sf, app.fkind, app.fkey, v))
         search_filter_off(&app.sf, app.fkind);      // the one that's on: off again
     else
-        search_filter_set(&app.sf, app.fkind, app.fopts[i].value);
+        search_filter_set(&app.sf, app.fkind, v);
     app.overlay = OV_NONE;
     search_refresh();
 }
 
+// Tags: a tag's values push the list of tags out.
+static void tags_choose(int i)
+{
+    if (i < 0 || i >= app.n_tkeys)
+        return;
+    app.fkey = (int)app.tkeys[i].value;
+    app.fbase = F_TAGS;
+    app.fpage_t = 0;
+    fpage_open(search_tag_chip(&app.sf, app.fkey));
+}
+
 static void filter_list_choose(int r)
 {
-    if (r == 0)
+    int kind = search_menu_kind(r);
+    if (kind == F_IN)
         filter_in_cycle();
-    else if (r > 0 && r < F_COUNT)
-        fpage_open(r);
+    else if (kind > F_IN)
+    {
+        app.fbase = -1;
+        fpage_open(kind);
+    }
 }
+
+static void filter_scroll_to_sel(void);
 
 static void filter_back(void)
 {
-    if (app.fpage >= 0)
+    if (app.fpage >= 0 && app.fpage != F_TAGS && app.fbase == F_TAGS)
     {
-        app.menu_sel = app.fpage;   // back on its row
+        // a tag's values: back to the tags, on its row
+        app.fpage = F_TAGS;
+        app.menu_sel = -1;
+        for (int i = 0; i < app.n_tkeys; i++)
+            if ((int)app.tkeys[i].value == app.fkey)
+                app.menu_sel = i;
+        filter_scroll_to_sel();
+    }
+    else if (app.fpage == F_TAGS && app.fbase == F_TAGS)
+    {
+        // the tags (on the left, after a tag's values): now on the right, sliding out
+        app.fbase = -1;
+        app.fkind = F_TAGS;
+        app.fpage_t = TAB_TICKS;
+        app.fpage = -1;
+        app.menu_sel = FM_TAGS;
+    }
+    else if (app.fpage >= 0)
+    {
+        app.menu_sel = search_menu_row(app.fpage);  // back on its row
         app.fpage = -1;
     }
     else
@@ -1107,10 +1188,21 @@ static void filter_scroll_to_sel(void)
 {
     if (app.fpage < 0 || app.menu_sel < 0)
         return;
-    if (app.menu_sel < app.fscroll)
-        app.fscroll = app.menu_sel;
-    if (app.menu_sel >= app.fscroll + FMENU_ROWS)
-        app.fscroll = app.menu_sel - FMENU_ROWS + 1;
+    int *scroll = fpage_scroll();
+    if (app.menu_sel < *scroll)
+        *scroll = app.menu_sel;
+    if (app.menu_sel >= *scroll + FMENU_ROWS)
+        *scroll = app.menu_sel - FMENU_ROWS + 1;
+}
+
+static void filter_pick(int i)
+{
+    if (app.fpage < 0)
+        filter_list_choose(i);
+    else if (app.fpage == F_TAGS)
+        tags_choose(i);
+    else
+        filter_choose(i);
 }
 
 static void filter_tap(int x, int y)
@@ -1130,10 +1222,7 @@ static void filter_tap(int x, int y)
     int r = (y - FMENU_Y - 20) / 16;
     if (r >= FMENU_ROWS)
         return;
-    if (app.fpage < 0)
-        filter_list_choose(r);
-    else
-        filter_choose(app.fscroll + r);
+    filter_pick(*fpage_scroll() + r);
 }
 
 static void im_menu_choose(int i)
@@ -1901,7 +1990,7 @@ static void touch_down(int x, int y)
         redraw = true;
         return;
     }
-    fdrag_from = app.fscroll;
+    fdrag_from = *fpage_scroll();
     if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
         && !(app.tab == TAB_SEARCH && app.kb_up))
     {
@@ -1959,9 +2048,10 @@ static void touch_move(int x, int y)
     if (app.overlay == OV_FILTER && app.fpage >= 0 && tp.moved)
     {
         // drag the choices
-        int max = app.n_fopts > FMENU_ROWS ? app.n_fopts - FMENU_ROWS : 0;
+        int n = fpage_count();
+        int max = n > FMENU_ROWS ? n - FMENU_ROWS : 0;
         int s = fdrag_from + (tp.y0 - y) / 16;
-        app.fscroll = s < 0 ? 0 : (s > max ? max : s);
+        *fpage_scroll() = s < 0 ? 0 : (s > max ? max : s);
         redraw = true;
         return;
     }
@@ -2151,7 +2241,7 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         return;
     case OV_FILTER:
     {
-        int count = app.fpage < 0 ? F_COUNT : app.n_fopts;
+        int count = fpage_count();
         if ((rep & (KEY_UP | KEY_DOWN)) && count > 0)
         {
             if (app.menu_sel < 0)
@@ -2164,10 +2254,10 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
         }
         if ((down & (KEY_A | KEY_RIGHT)) && app.menu_sel >= 0)
         {
-            if (app.fpage < 0 && ((down & KEY_A) || app.menu_sel > 0))
-                filter_list_choose(app.menu_sel);
-            else if (app.fpage >= 0 && (down & KEY_A))
-                filter_choose(app.menu_sel);
+            // Right goes into a page (not "Search in", not a choice)
+            bool into = app.fpage < 0 ? app.menu_sel != FM_IN : app.fpage == F_TAGS;
+            if ((down & KEY_A) || into)
+                filter_pick(app.menu_sel);
         }
         if (down & (KEY_B | KEY_LEFT))
             filter_back();
@@ -2425,10 +2515,11 @@ static void app_init(void)
     tracks_cap = (int)lib_track_count() + 1;
     app.items = malloc(item_cap * sizeof(Item));
     app.marks = malloc(item_cap * sizeof(SearchMark));
-    app.fopts = malloc(256 * sizeof(SearchOpt));
+    app.fopts = malloc(FOPTS_MAX * sizeof(SearchOpt));
+    app.tkeys = malloc(256 * sizeof(SearchOpt));
     search_filter_clear(&app.sf);
     app.key_down = app.acc_key = app.key_flash = -1;
-    app.fpage = app.fkind = -1;
+    app.fpage = app.fkind = app.fbase = -1;
     tracks_buf = malloc(tracks_cap * sizeof(uint32_t));
     app.added = calloc((lib_track_count() + 8) / 8, 1);
     app.artist = -1;
@@ -2638,7 +2729,7 @@ static void app_tick(void)
             kb_forms_box(k, forms_count(k), &bx, &by, &bw);
             redraw |= glide(&app.acc_vis, bx + 2 + app.acc_sel * 25, elapsed, 1000);
         }
-        int fp_target = app.fpage >= 0 ? TAB_TICKS : 0;
+        int fp_target = app.fpage >= 0 && app.fpage == app.fkind ? TAB_TICKS : 0;
         if (app.fpage_t != fp_target)
         {
             app.fpage_t += app.fpage_t < fp_target ? (int)elapsed : -(int)elapsed;
@@ -2683,7 +2774,7 @@ static void app_tick(void)
     int menu_target = app.ov_vis == OV_SETTINGS && !presets
                       ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
                          ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)
-                      : (app.ov_vis == OV_FILTER && app.fpage >= 0 ? (app.menu_sel - app.fscroll) * 16 : app.menu_sel * 16);
+                      : (app.ov_vis == OV_FILTER ? (app.menu_sel - *fpage_scroll()) * 16 : app.menu_sel * 16);
     static int fpage_was = -1;
     bool page_changed = app.set_page != page_was || app.fpage != fpage_was;
     page_was = app.set_page;

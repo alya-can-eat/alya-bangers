@@ -252,11 +252,77 @@ const char *lib_tag(uint32_t track, const char *key)
     return lib_tag_ids(track, key, &id, 1) ? strings + values[id] : NULL;
 }
 
+uint32_t lib_value_count(void)
+{
+    return n_values;
+}
+
+int lib_key_count(void)
+{
+    return (int)n_keys;
+}
+
+const char *lib_key_name(int key)
+{
+    return key >= 0 && (uint32_t)key < n_keys ? strings + keys[key] : "";
+}
+
+int lib_key_id(const char *name)
+{
+    return key_index(name);
+}
+
+int lib_key_songs(int key)
+{
+    int n = 0;
+    for (uint32_t t = 0; t < n_tracks; t++)
+        for (uint32_t i = 0; i < tracks[t].ref_count; i++)
+            if (refs[tracks[t].first_ref + i].key == key)
+            {
+                n++;
+                break;
+            }
+    return n;
+}
+
+int lib_key_values(int key, uint32_t *out, int *counts, int max)
+{
+    // a counter per value id, then the values that have one, in value (= sort) order
+    uint16_t *c = calloc(n_values ? n_values : 1, sizeof(uint16_t));
+    if (c == NULL)
+        return 0;
+    for (uint32_t t = 0; t < n_tracks; t++)
+    {
+        uint32_t last = LIB_NONE;
+        for (uint32_t i = 0; i < tracks[t].ref_count; i++)
+        {
+            const LibRef *r = &refs[tracks[t].first_ref + i];
+            if (r->key == key && r->value != last && c[r->value] < 0xFFFF)
+                c[r->value]++;      // (a song with the same value twice counts once)
+            if (r->key == key)
+                last = r->value;
+        }
+    }
+    int n = 0;
+    for (uint32_t v = 0; v < n_values && n < max; v++)
+        if (c[v])
+        {
+            out[n] = v;
+            counts[n++] = c[v];
+        }
+    free(c);
+    return n;
+}
+
 int lib_tag_ids(uint32_t track, const char *key, uint32_t *out, int max)
 {
-    int k = key_index(key), n = 0;
-    if (k < 0)
-        return 0;
+    int k = key_index(key);
+    return k < 0 ? 0 : lib_tag_ids_k(track, k, out, max);
+}
+
+int lib_tag_ids_k(uint32_t track, int k, uint32_t *out, int max)
+{
+    int n = 0;
     const LibTrack *t = &tracks[track];
     for (uint32_t i = 0; i < t->ref_count && n < max; i++)
     {
@@ -695,6 +761,23 @@ int lib_item_tracks(const Item *it, const char *dir, uint32_t *out, int max)
                 out[n++] = i;
         qsort(out, n, sizeof(uint32_t), cmp_artist_tracks);
         break;
+    case ITEM_TAG:
+    {
+        int key = (int)TAG_ITEM_KEY(it->id);
+        uint32_t value = TAG_ITEM_VALUE(it->id);
+        for (uint32_t i = 0; i < n_tracks && n < max; i++)
+            for (uint32_t k = 0; k < tracks[i].ref_count; k++)
+            {
+                const LibRef *r = &refs[tracks[i].first_ref + k];
+                if (r->key == key && r->value == value)
+                {
+                    out[n++] = i;
+                    break;
+                }
+            }
+        qsort(out, n, sizeof(uint32_t), cmp_artist_tracks);
+        break;
+    }
     case ITEM_FOLDER:
     {
         char name[256], sub[1024];
