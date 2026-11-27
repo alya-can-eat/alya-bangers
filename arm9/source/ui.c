@@ -1547,8 +1547,11 @@ static void draw_sort_menu(int oy)
 
 int ui_rowmenu_y(int row_y)
 {
+    // under the row, else over it, else (no room either way) on the bar
     int h = 20 + 16 * app_row_count(app.menu_item) + 4;
-    return row_y + ROW_H + h <= BAR_Y ? row_y + ROW_H : row_y - h;
+    if (row_y + ROW_H + h <= BAR_Y)
+        return row_y + ROW_H;
+    return row_y - h >= 0 ? row_y - h : BAR_Y - h;
 }
 
 static void draw_row_menu(int oy)
@@ -1564,11 +1567,15 @@ static void draw_row_menu(int oy)
     char label[256];
     ui_item_label(&app.items[app.menu_item], label, sizeof(label));
     font_draw(B, x0 + 8, y0 + 2, x1 - x0 - 16, label, C_DIM);
-    // the fourth row: to a playlist, out of the playlist, or deleting it
-    int extra = app_row_extra(app.menu_item);
-    uint32_t icons[4] = { 0x25B6, 0x21B3, '+', extra == ROWX_ADD ? 0x1F3B5 : 0xD7 };
-    uint16_t names[4] = { S_PLAY_NOW, S_PLAY_NEXT, S_ADD_QUEUE,
-                          extra == ROWX_ADD ? S_ADD_TO_PL : (extra == ROWX_REMOVE ? S_PL_REMOVE : S_EQ_DELETE) };
+    // then: to a playlist, out of the playlist, renaming or deleting it
+    uint32_t icons[5] = { 0x25B6, 0x21B3, '+' };
+    uint16_t names[5] = { S_PLAY_NOW, S_PLAY_NEXT, S_ADD_QUEUE };
+    for (int r = 3; r < rows && r < 5; r++)
+    {
+        int a = app_row_action(app.menu_item, r);
+        icons[r] = a == ROWX_ADD ? 0x1F3B5 : (a == ROWX_RENAME ? 0x1F589 : 0xD7);   // 🎵 🖉 ×
+        names[r] = a == ROWX_ADD ? S_ADD_TO_PL : (a == ROWX_REMOVE ? S_PL_REMOVE : (a == ROWX_RENAME ? S_PL_RENAME : S_EQ_DELETE));
+    }
     if (app.menu_sel >= 0)
         highlight(x0 + 1, y0 + 20 + app.menu_vis, x1 - x0 - 2, 16, y0 + 20, y0 + 20 + 16 * rows, C_SEL);
     for (int i = 0; i < rows; i++)
@@ -2747,7 +2754,8 @@ static bool draw_eq_name(void)
     gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
     gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
     bool eq = app.name_for == NAME_EQ;
-    text(B, 8, 2, txt(eq ? S_EQ_NEW : (app.name_for == NAME_PL_QUEUE ? S_PL_SAVE_QUEUE : S_PL_NEW)), C_TEXT);
+    text(B, 8, 2, txt(eq ? S_EQ_NEW : (app.name_for == NAME_PL_QUEUE ? S_PL_SAVE_QUEUE
+                                       : (app.name_for == NAME_PL_RENAME ? S_PL_RENAME : S_PL_NEW))), C_TEXT);
     text(B, 236, 2, "×", C_TEXT);
     const char *nm = app.eq_name;
     int y = FIELD_Y;

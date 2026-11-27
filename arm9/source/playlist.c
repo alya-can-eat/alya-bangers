@@ -112,16 +112,19 @@ static void file_name(const char *name, char *out, size_t size)
         base[--n] = 0;      // FAT drops these
     if (n == 0)
         snprintf(base, sizeof(base), "Playlist");
-    snprintf(out, size, "%s.m3u", base);
+    // (built here: out may be the file name of the playlist being renamed)
+    char f[64];
+    snprintf(f, sizeof(f), "%s.m3u", base);
     for (int k = 2; k < 1000; k++)
     {
         bool taken = false;
         for (int i = 0; i < n_pls && !taken; i++)
-            taken = casefold_equal(pls[i].file, out);
+            taken = pls[i].file != out && casefold_equal(pls[i].file, f);
         if (!taken)
-            return;
-        snprintf(out, size, "%s %d.m3u", base, k);
+            break;
+        snprintf(f, sizeof(f), "%s %d.m3u", base, k);
     }
+    snprintf(out, size, "%s", f);
 }
 
 static bool save(const Playlist *p)
@@ -286,6 +289,27 @@ void pl_remove(int i, int pos)
     memmove(&p->tracks[pos], &p->tracks[pos + 1], (p->n - pos - 1) * sizeof(uint32_t));
     p->n--;
     save(p);
+}
+
+int pl_rename(int i, const char *name)
+{
+    int other = pl_find(name);
+    if (i < 0 || i >= n_pls || !name[0] || (other >= 0 && other != i))
+        return -1;
+    Playlist *p = &pls[i];
+    char old_file[sizeof(p->file)], old_path[400];
+    snprintf(old_file, sizeof(old_file), "%s", p->file);
+    snprintf(old_path, sizeof(old_path), "%s/%s", dir_path, p->file);
+    snprintf(p->name, sizeof(p->name), "%s", name);
+    utf8_trim_partial(p->name);
+    file_name(p->name, p->file, sizeof(p->file));     // (its own file name is free for it)
+    if (!save(p))
+        return i;
+    // (only case changed: on FAT that's the same file, already replaced)
+    if (!casefold_equal(old_file, p->file))
+        remove(old_path);
+    sort_all();
+    return pl_find(name);
 }
 
 void pl_delete(int i)

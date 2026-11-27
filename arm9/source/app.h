@@ -125,11 +125,11 @@ typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COU
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM, OV_EQ,
                OV_EQ_NAME, OV_PL_ADD, OV_PL_ASK } Overlay;
 // OV_EQ_NAME types a name: for a new equalizer profile or a playlist
-enum { NAME_EQ, NAME_PL, NAME_PL_QUEUE };
-// the row menu's fourth row, if it has one
-enum { ROWX_NONE, ROWX_ADD, ROWX_REMOVE, ROWX_DELETE };
-int app_row_extra(int i);
-int app_row_count(int i);       // rows of the row menu for item i
+enum { NAME_EQ, NAME_PL, NAME_PL_QUEUE, NAME_PL_RENAME };
+// the row menu: Play now, Play next, Add to queue, then for some rows more
+enum { ROWX_NONE, ROWX_ADD, ROWX_REMOVE, ROWX_RENAME, ROWX_DELETE };
+int app_row_action(int i, int row);     // ROWX_... for row 3 and on
+int app_row_count(int i);               // rows of the row menu for item i
 // the folder tab: the folders, the playlists (PL_LIST) or one playlist (its index)
 #define PL_FOLDERS  -1
 #define PL_LIST     -2

@@ -2027,7 +2027,7 @@ int main(int argc, char **argv)
         uint32_t song = app.items[app.scroll + r].id;
         hold(100, LIST_Y + r * ROW_H + 8, 35);
         release();
-        check(app.overlay == OV_ROWMENU && app_row_count(app.menu_item) == 4 && app_row_extra(app.menu_item) == ROWX_ADD,
+        check(app.overlay == OV_ROWMENU && app_row_count(app.menu_item) == 4 && app_row_action(app.menu_item, 3) == ROWX_ADD,
               "hold a song: a fourth row, Add to playlist");
         run(OV_TICKS + 2);
         shot("50_pl_rowmenu");
@@ -2095,7 +2095,7 @@ int main(int argc, char **argv)
               "tap a song: the playlist plays from it");
         hold(100, LIST_Y + ROW_H + 8, 35);
         release();
-        check(app_row_extra(app.menu_item) == ROWX_REMOVE, "a song in a playlist: Remove");
+        check(app_row_action(app.menu_item, 3) == ROWX_REMOVE, "a song in a playlist: Remove");
         run(OV_TICKS + 2);
         shot("51c_pl_song_menu");
         int before = pl_size(0);
@@ -2136,22 +2136,64 @@ int main(int argc, char **argv)
         check(pl_count() == 2 && pl_size(pl_find("bus")) == nb && pl_size(pl_find("all")) == na
               && strcmp(pl_name(0), "all") == 0, "read again from the card: the same");
 
-        // deleting asks first
+        // renaming: the keyboard with its name; a name another one has isn't taken
         app.pl = PL_LIST;
         show_tab(TAB_FOLDER);
         run(TAB_TICKS + 4);
-        hold(100, LIST_Y + ROW_H + 8, 35);
+        int bus = find_row("Bus");
+        hold(100, LIST_Y + (bus - app.scroll) * ROW_H + 8, 35);
         release();
-        check(app_row_extra(app.menu_item) == ROWX_DELETE, "hold a playlist: Delete");
-        tap(150, ui_rowmenu_y(LIST_Y + ROW_H) + 20 + 3 * 16 + 8);
+        check(app_row_count(app.menu_item) == 5 && app_row_action(app.menu_item, 3) == ROWX_RENAME
+              && app_row_action(app.menu_item, 4) == ROWX_DELETE, "hold a playlist: Rename, Delete");
+        int my = ui_rowmenu_y(LIST_Y + (bus - app.scroll) * ROW_H);
+        check(my >= 0 && my + 20 + 5 * 16 + 4 <= BAR_Y, "its menu fits on the screen");
+        run(OV_TICKS + 2);
+        shot("54_pl_menu");
+        tap(150, my + 20 + 3 * 16 + 8);
+        check(app.overlay == OV_EQ_NAME && app.name_for == NAME_PL_RENAME && strcmp(app.eq_name, "Bus") == 0,
+              "Rename: the keyboard, with its name");
+        run(OV_TICKS + 2);
+        tap(240, FIELD_Y + 10);     // × in the field: empty
+        type_text("all");
+        tap_key(0, K_DONE);
+        check(app.overlay == OV_EQ_NAME && pl_find("Bus") >= 0, "\"all\" is taken: not renamed, the keyboard stays");
+        tap(240, FIELD_Y + 10);
+        tap_key(0, K_SHIFT);
+        type_text("Night");
+        tap_key(0, K_SPACE);
+        type_text("bus");
+        shot("54a_pl_rename");
+        tap_key(0, K_DONE);
+        char renamed[1300], old_file[1300];
+        snprintf(renamed, sizeof(renamed), "%s/Night bus.m3u", pl_dir);
+        snprintf(old_file, sizeof(old_file), "%s/Bus.m3u", pl_dir);
+        FILE *rf = fopen(renamed, "rb"), *of = fopen(old_file, "rb");
+        int nbus = pl_find("Night bus");
+        check(app.overlay == OV_NONE && nbus >= 0 && pl_find("Bus") < 0 && pl_size(nbus) == nb && rf && !of
+              && app.items[app.sel].kind == ITEM_PLAYLIST && app.items[app.sel].id == (uint32_t)nbus,
+              "OK: \"Night bus\", its file too, still selected");
+        if (rf) fclose(rf);
+        if (of) fclose(of);
+        run(OV_TICKS + 2);
+        pl_load();
+        check(pl_find("Night bus") >= 0 && pl_size(pl_find("Night bus")) == nb, "read again: the new name");
+
+        // deleting asks first
+        refresh_list();
+        int ar = find_row("all");
+        hold(100, LIST_Y + (ar - app.scroll) * ROW_H + 8, 35);
+        release();
+        check(app_row_action(app.menu_item, 4) == ROWX_DELETE, "hold a playlist: Delete");
+        int dy = ui_rowmenu_y(LIST_Y + (ar - app.scroll) * ROW_H);
+        tap(150, dy + 20 + 4 * 16 + 8);
         check(app.overlay == OV_PL_ASK, "Delete asks first");
         run(OV_TICKS + 2);
         shot("53_pl_delete_ask");
         tap(PLASK_X + 40, PLASK_Y + 20 + ROW_H + 8);
         check(app.overlay == OV_NONE && pl_count() == 2, "Keep: still there");
-        hold(100, LIST_Y + ROW_H + 8, 35);
+        hold(100, LIST_Y + (ar - app.scroll) * ROW_H + 8, 35);
         release();
-        tap(150, ui_rowmenu_y(LIST_Y + ROW_H) + 20 + 3 * 16 + 8);
+        tap(150, dy + 20 + 4 * 16 + 8);
         tap(PLASK_X + 40, PLASK_Y + 20 + 8);
         char gone[1300];
         snprintf(gone, sizeof(gone), "%s/all.m3u", pl_dir);
@@ -2186,6 +2228,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 3; i++)
                 fit &= font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4;       // the row menu
             fit &= font_text_width(txt(S_ADD_TO_PL)) <= 240 - 88 - 24 - 4 && font_text_width(txt(S_PL_REMOVE)) <= 240 - 88 - 24 - 4
+                   && font_text_width(txt(S_PL_RENAME)) <= 240 - 88 - 24 - 4
                    && font_text_width(txt(S_PL_NEW)) <= PLADD_X1 - PLADD_X0 - 28
                    && font_text_width(txt(S_ADD_TO_PL)) <= PLADD_X1 - PLADD_X0 - 16;
             for (int i = S_SORT_ARTISTS; i <= S_SORT_FOLDERS; i++)

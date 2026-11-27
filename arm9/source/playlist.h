@@ -33,6 +33,9 @@ int pl_create(const char *name);
 // -1 if it's full.
 int pl_add(int i, const uint32_t *tracks, int n);
 void pl_remove(int i, int pos);
+// A new name (its file too): its new index, -1 if another one has the name
+// or it's empty.
+int pl_rename(int i, const char *name);
 void pl_delete(int i);
 
 #endif

@@ -657,21 +657,35 @@ static void activate(int i)
 
 // ---- playlists
 
-int app_row_extra(int i)
+// The rows after Play now, Play next, Add to queue: how many, which.
+static int row_extras(int i, int *out)
 {
     if (i < 0 || i >= app.n_items)
-        return ROWX_NONE;
+        return 0;
     const Item *it = &app.items[i];
     if (it->kind == ITEM_PLAYLIST)
-        return ROWX_DELETE;
-    if (it->kind == ITEM_TRACK && app.tab == TAB_FOLDER && app.pl >= 0)
-        return ROWX_REMOVE;
-    return it->kind == ITEM_UP || it->kind == ITEM_HEADER || it->kind == ITEM_PLAYLISTS ? ROWX_NONE : ROWX_ADD;
+    {
+        out[0] = ROWX_RENAME;
+        out[1] = ROWX_DELETE;
+        return 2;
+    }
+    if (it->kind == ITEM_UP || it->kind == ITEM_HEADER || it->kind == ITEM_PLAYLISTS)
+        return 0;
+    out[0] = it->kind == ITEM_TRACK && app.tab == TAB_FOLDER && app.pl >= 0 ? ROWX_REMOVE : ROWX_ADD;
+    return 1;
+}
+
+int app_row_action(int i, int row)
+{
+    int x[2];
+    int n = row_extras(i, x);
+    return row >= 3 && row - 3 < n ? x[row - 3] : ROWX_NONE;
 }
 
 int app_row_count(int i)
 {
-    return app_row_extra(i) == ROWX_NONE ? 3 : 4;
+    int x[2];
+    return 3 + row_extras(i, x);
 }
 
 // The list again after a playlist changed, staying where it was.
@@ -767,9 +781,35 @@ static void pl_picker_tap(int x, int y)
     redraw = true;
 }
 
+// A playlist's new name; one another playlist has: not taken.
+static void pl_rename_done(void)
+{
+    int pl = (int)app.pl_item.id;
+    int other = pl_find(app.eq_name);
+    if (other >= 0 && other != pl)
+    {
+        toast(txt(S_PL_EXISTS), pl_name(other));
+        return;                     // the keyboard stays, for another name
+    }
+    app.overlay = OV_NONE;
+    int now = pl_rename(pl, app.eq_name);
+    if (app.tab == TAB_FOLDER && app.pl == PL_LIST)
+    {
+        refresh_list();
+        if (now >= 0)
+            select_item(ITEM_PLAYLIST, (uint32_t)now);
+        app.sel_vis = (app.sel - app.scroll) * ROW_H;
+    }
+}
+
 // The typed name: a new playlist (or the one with that name) gets the songs.
 static void pl_name_done(void)
 {
+    if (app.name_for == NAME_PL_RENAME)
+    {
+        pl_rename_done();
+        return;
+    }
     bool queue = app.name_for == NAME_PL_QUEUE;
     // a new one changes the others' places (they're sorted by name)
     char shown[PL_NAME] = "";
@@ -818,12 +858,18 @@ static void row_menu_choose(int option)
     if (i < 0 || i >= app.n_items || app.items[i].kind == ITEM_UP)
         return;
     const Item *it = &app.items[i];
-    if (option == 3)
+    if (option >= 3)
     {
-        switch (app_row_extra(i))
+        switch (app_row_action(i, option))
         {
         case ROWX_ADD: pl_picker_open(it); break;
         case ROWX_DELETE: pl_ask_open(it); break;
+        case ROWX_RENAME:
+            // the keyboard with its name
+            app.pl_item = *it;
+            name_start(NAME_PL_RENAME);
+            snprintf(app.eq_name, sizeof(app.eq_name), "%s", pl_name((int)it->id));
+            break;
         case ROWX_REMOVE:
         {
             char nm[PL_NAME];
