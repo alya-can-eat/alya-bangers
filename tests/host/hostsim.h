@@ -41,6 +41,10 @@ void sim_set_keys(uint32_t down, uint32_t held);
 void sim_set_touch(int x, int y);
 extern int sim_backlight;
 
+// Pico Loader on the card (boot_ready), the .nds boot_nds was asked to start.
+extern bool sim_pico;
+extern char sim_booted[256];
+
 // Write a 256x192 BGR555 canvas as a binary PPM image.
 void sim_write_ppm(const char *path, const uint16_t *px);
 

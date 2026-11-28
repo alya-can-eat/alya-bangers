@@ -80,11 +80,3 @@ Between releases the version is the next one with "pre" in front: `pre-1.1` on t
 > The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.
 
 Started by hand ([Actions › release](../../../actions/workflows/release.yml) › Run workflow) it only makes the three files, without a release. Those are the pre-release builds.
-
-## Not there yet, in detail:
-
-- Start another launcher from alya-bangers (Pico Launcher, TWiLight Menu++, AKMenu-Next, nds-hb-menu, YSMenu …):
-  - With hbmenu's loader: it reads the `.nds` from the card, gives it alya-bangers' DLDI driver and its path, and restarts both CPUs into it. So it works on most flashcarts, not only the DSpico, and can be tested in melonDS.
-  - Only launchers that are a `.nds` file, no flashcart menus like `_DS_MENU.DAT`, no games directly (that stays the launcher's job).
-  - Settings › Launcher picks the `.nds`, a button fades the music out, saves the position and starts it.
-  - Together with alya-bangers as `_picoboot.nds` on the DSpico: the music player first, the games one tap away.

@@ -43,6 +43,8 @@ Next time only new and changed songs get converted.
 /_nds/alya-bangers/state.bin <- written by the player
 /_nds/alya-bangers/stats.bin <- ratings and plays from the DS
 /_nds/alya-bangers/eq.bin    <- your equalizer profiles
+/_nds/alya-bangers/paths.txt <- the launcher and the music folder, if you chose them
+/_pico/                      <- Pico Loader (on the DSpico already): to start a launcher
 /alya-bangers.nds            <- anywhere, start it from Pico Launcher
 ```
 

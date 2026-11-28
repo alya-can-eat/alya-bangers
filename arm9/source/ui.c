@@ -791,6 +791,14 @@ static bool bg_fading;
 static uint32_t bg_fade_from;           // frame (30 fps) the cross-fade began
 static int16_t bg_grid[13][17][3];
 
+// Another music folder: its songs' numbers mean other songs.
+void ui_library_changed(void)
+{
+    bg_track = 0xFFFFFFFEu;
+    bg_job = LIB_NONE;
+    bg_fading = false;
+}
+
 #define BG_SLICE 32                     // rows made per drawn frame (~2 ms)
 #define BG_FADE  12                     // frames of the cross-fade, 0.4 s
 
@@ -1274,10 +1282,15 @@ static bool draw_list(int oy)
     if (!lib_loaded())
     {
         gfx_fill(B, 0, y0, SCREEN_W, ROWS * ROW_H, C_BG);
-        static const uint8_t why[] = { S_LIB_MISSING, S_LIB_MISSING, S_LIB_DAMAGED, S_LIB_TOO_BIG, S_LIB_VERSION };
+        static const uint8_t why[] = { S_LIB_MISSING, S_LIB_MISSING, S_LIB_DAMAGED, S_LIB_TOO_BIG, S_LIB_VERSION,
+                                       S_LIB_NO_FOLDER };
         int e = app.lib_error >= 0 && app.lib_error < (int)sizeof(why) ? app.lib_error : 0;
-        centered(B, y0 + 48, txt(why[e]), C_TEXT);
-        centered(B, y0 + 72, txt(S_RUN_DSCONV), C_DIM);
+        centered(B, y0 + 16, txt(why[e]), C_TEXT);
+        // how to get music onto the card, or where else it is
+        centered(B, y0 + 48, txt(S_RUN_DSCONV), C_DIM);
+        centered(B, y0 + 64, "alya-bangers-dsconv.", C_DIM);
+        centered(B, y0 + 96, txt(S_PICK_MUSIC_HINT), C_DIM);
+        centered(B, y0 + 112, txt(S_PICK_MUSIC_WHERE), C_DIM);
         return false;
     }
     if (app.tab == TAB_SEARCH)
@@ -1613,6 +1626,8 @@ static void draw_row_menu(int oy)
         text(B, x0 + 24, y, txt(names[i]), C_TEXT);
     }
 }
+
+#define SETTINGS_TOAST  28      // over the settings: at the bottom of the screen
 
 static bool draw_toast(int oy)
 {
@@ -2835,6 +2850,7 @@ static const SetItem items_top[] = {
     { S_THEME, SI_PAGE, PAGE_THEME, ICON_THEME },
     { S_REGIONAL, SI_PAGE, PAGE_REGIONAL, ICON_REGIONAL },
     { S_ABOUT, SI_PAGE, PAGE_ABOUT, ICON_ABOUT },
+    { S_MISC, SI_PAGE, PAGE_MISC, ICON_MISC },
 };
 static const SetItem items_playback[] = {
     { S_REPLAYGAIN, SI_VALUE, SET_RG, 0 },
@@ -2850,6 +2866,12 @@ static const SetItem items_sound[] = {
 static const SetItem items_browsing[] = {
     { S_CASE, SI_TOGGLE, SET_CASE, 0 },
     { S_SCROLL_ALL, SI_TOGGLE, SET_SCROLL_ALL, 0 },
+    { S_MUSIC_FOLDER, SI_VALUE, SET_MUSIC_DIR, 0 },
+};
+static const SetItem items_misc[] = {
+    { S_LAUNCHER, SI_VALUE, SET_LAUNCHER, ICON_LAUNCH },
+    { S_LAUNCH_BUTTON, SI_TOGGLE, SET_LAUNCH_BUTTON, 0 },
+    { S_LAUNCH_HOLD, SI_TOGGLE, SET_LAUNCH_HOLD, 0 },
 };
 static const SetItem items_player[] = {
     { S_TIME_RIGHT, SI_VALUE, SET_TIME_RIGHT, 0 },
@@ -2877,7 +2899,19 @@ static const struct {
     [PAGE_THEME] = { S_THEME, NULL, 0, S_NONE },
     [PAGE_REGIONAL] = { S_REGIONAL, items_regional, N_ITEMS(items_regional), S_NONE },
     [PAGE_ABOUT] = { S_ABOUT, NULL, 0, S_NONE },
+    [PAGE_MISC] = { S_MISC, items_misc, N_ITEMS(items_misc), S_NONE },
 };
+
+int ui_set_scroll(int page)
+{
+    return app.set_scroll[page == PAGE_TOP ? 0 : 1];
+}
+
+int ui_set_max_scroll(int page)
+{
+    int h = ui_set_row_y(page, ui_set_count(page)) - SET_Y, room = SCREEN_H - SET_Y;
+    return h > room ? h - room : 0;
+}
 
 int ui_set_count(int page)
 {
@@ -2904,6 +2938,9 @@ int ui_set_row_y(int page, int i)
 
 int ui_set_row_at(int page, int y)
 {
+    if (y < 20)
+        return -1;                      // the header
+    y += ui_set_scroll(page);
     for (int i = 0, ry = SET_Y; i < ui_set_count(page); i++)
     {
         int h = ui_set_row_h(page, i);
@@ -2970,6 +3007,8 @@ static bool set_on(int id)
     case SET_SHUFFLE_W: return app.set.shuffle_weighted;
     case SET_AUTOPLAY: return app.set.play_at_start;
     case SET_BATT: return !app.set.batt_sound_off;
+    case SET_LAUNCH_BUTTON: return app.set.launch_button;
+    case SET_LAUNCH_HOLD: return app.set.launch_hold;
     case SET_DITHER: return app.set.dither;
     default: return false;
     }
@@ -2981,6 +3020,35 @@ static const char *set_value(int id)
     switch (id)
     {
     case SET_RG: return txt(rg[app.set.rg_mode]);
+    case SET_MUSIC_DIR:
+    case SET_LAUNCHER:
+    {
+        // the file's or folder's name, short
+        static char v[40];
+        const char *p = id == SET_LAUNCHER ? app.paths.launcher : app_music_root();
+        const char *base = strrchr(p, '/');
+        base = base && base[1] ? base + 1 : p;
+        if (!p[0])
+            return "–";
+        size_t l = strlen(base);
+        l = l < sizeof(v) - 4 ? l : sizeof(v) - 4;      // room for "…"
+        memcpy(v, base, l);
+        v[l] = 0;
+        utf8_trim_partial(v);
+        if (font_text_width(v) > 112)
+        {
+            while (v[0] && font_text_width(v) > 104)
+            {
+                size_t l = strlen(v);
+                do
+                    l--;
+                while (l > 0 && ((uint8_t)v[l] & 0xC0) == 0x80);   // whole characters
+                v[l] = 0;
+            }
+            strcat(v, "…");
+        }
+        return v;
+    }
     case SET_TIME_RIGHT: return txt(app.set.show_remaining ? S_LEFT : S_LENGTH);
     case SET_LANG: return lang_name(app.set.lang);
     case SET_KEYBOARD: return app.set.keyboard == KB_QWERTZ ? "QWERTZ" : "QWERTY";
@@ -3097,10 +3165,8 @@ static void theme_body(int dx)
 
 // A settings page with its left edge at dx (pages slide in from the right).
 // lit: the D-pad highlight is on this page.
-static bool settings_page(int page, int dx, bool lit)
+static void settings_header(int page, int dx)
 {
-    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
-    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
     gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
     if (page == PAGE_TOP)
         text(B, dx + 8, 2, txt(pages[page].title), C_TEXT);
@@ -3110,8 +3176,18 @@ static bool settings_page(int page, int dx, bool lit)
         icon(B, dx + 18, 2, page_icon(page), C_ACC);
         text(B, dx + 38, 2, txt(pages[page].title), C_TEXT);
     }
+    if (app.set.launch_button && app.paths.launcher[0])
+        icon(B, dx + LAUNCH_X, 2, ICON_LAUNCH, C_ACC);      // 🚀: start the launcher
     text(B, dx + 236, 2, "×", C_TEXT);
+}
+
+static bool settings_page(int page, int dx, bool lit)
+{
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
     bool anim = false;
+    int sc = ui_set_scroll(page);
+    gfx_clip(B, dx, 20, SCREEN_W, SCREEN_H);        // the rows scroll under the header
     if (page == PAGE_ABOUT)
         about_body(dx);
     else if (page == PAGE_THEME)
@@ -3125,15 +3201,17 @@ static bool settings_page(int page, int dx, bool lit)
     {
         int n = pages[page].n;
         for (int i = 0; i < n - 1; i++)
-            gfx_fill(B, dx + 8, ui_set_row_y(page, i + 1) - 1, 240, 1, C_ZEBRA);
+            gfx_fill(B, dx + 8, ui_set_row_y(page, i + 1) - 1 - sc, 240, 1, C_ZEBRA);
         if (lit && app.menu_sel >= 0 && app.menu_sel < n)
-            highlight(dx, SET_Y + app.menu_vis, SCREEN_W, ui_set_row_h(page, app.menu_sel) - 1, SET_Y,
-                      ui_set_row_y(page, n), C_SEL);
+            highlight(dx, SET_Y + app.menu_vis - sc, SCREEN_W, ui_set_row_h(page, app.menu_sel) - 1, 20,
+                      ui_set_row_y(page, n) - sc, C_SEL);
         const int ty = (SET_H - 1 - 16) / 2, gy = (SET_H - 1 - 14) / 2;     // text, switch in the row
         for (int i = 0; i < n; i++)
         {
             const SetItem *it = &pages[page].items[i];
-            int y = ui_set_row_y(page, i);
+            int y = ui_set_row_y(page, i) - sc;
+            if (y >= SCREEN_H || y + ui_set_row_h(page, i) <= 20)
+                continue;
             if (it->kind == SI_SLIDER)
             {
                 highcut_row(dx, y);
@@ -3159,26 +3237,155 @@ static bool settings_page(int page, int dx, bool lit)
                     text_r(B, dx + 232, y + ty, txt(S_LATER), C_FAINT);
             }
         }
+        int max = ui_set_max_scroll(page);
+        if (max > 0)
+        {
+            // where in the page this is
+            int room = SCREEN_H - SET_Y, h = room + max, th = room * room / h;
+            gfx_fill(B, dx + SCREEN_W - 3, SET_Y + (room - th) * sc / max, 2, th, C_ACC_DIM);
+        }
     }
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    settings_header(page, dx);
     gfx_unclip(B);
     return anim;
 }
 
+// ---- the file and folder picker: a page past the one it's for
+
+int ui_pick_first(void)
+{
+    // music: Use this folder; the launcher, once there is one: No launcher
+    return app.pick_for == PICK_MUSIC || app.paths.launcher[0] ? 1 : 0;
+}
+
+int ui_pick_rows(void)
+{
+    return ui_pick_first() + app.pick_n;
+}
+
+int ui_pick_max_scroll(void)
+{
+    int h = ui_pick_rows() * SET_H, room = SCREEN_H - SET_Y;
+    return h > room ? h - room : 0;
+}
+
+static bool pick_is_top(const char *p)
+{
+    const char *c = strchr(p, ':');
+    return strcmp(p, "/") == 0 || (c && strcmp(c, ":/") == 0);
+}
+
+static void pick_page(int dx, bool lit)
+{
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    gfx_fill(B, dx, 0, SCREEN_W, SCREEN_H, C_BG);
+    int sc = app.pick_scroll, n = ui_pick_rows(), first = ui_pick_first();
+    const int ty = (SET_H - 1 - 16) / 2;
+    gfx_clip(B, dx, 20, SCREEN_W, SCREEN_H);
+    for (int i = 0; i < n - 1; i++)
+        gfx_fill(B, dx + 8, SET_Y + (i + 1) * SET_H - 1 - sc, 240, 1, C_ZEBRA);
+    if (lit && app.menu_sel >= 0 && app.menu_sel < n)
+        highlight(dx, SET_Y + app.menu_vis - sc, SCREEN_W, SET_H - 1, 20, SET_Y + n * SET_H - sc, C_SEL);
+    for (int i = 0; i < n; i++)
+    {
+        int y = SET_Y + i * SET_H - sc;
+        if (y >= SCREEN_H || y + SET_H <= 20)
+            continue;
+        if (i < first)
+        {
+            if (app.pick_for == PICK_MUSIC)
+            {
+                // lit where there is converted music
+                uint16_t c = app.pick_has_lib ? C_TEXT : C_FAINT;
+                icon(B, dx + 8, y + ty, ICON_CHECK, app.pick_has_lib ? C_ACC : C_FAINT);
+                font_draw(B, dx + 30, y + ty, 214, txt(S_PICK_USE), c);
+            }
+            else
+            {
+                icon(B, dx + 8, y + ty, ICON_LAUNCH, C_FAINT);
+                font_draw(B, dx + 30, y + ty, 214, txt(S_PICK_CLEAR), C_TEXT);
+            }
+            continue;
+        }
+        const PickEntry *e = &app.pick[i - first];
+        const char *name = app.pick_names + e->name;
+        icon(B, dx + 8, y + ty, e->dir ? ICON_FOLDER : ICON_GAME, C_ACC);
+        font_draw(B, dx + 30, y + ty, e->dir ? 196 : 214, name, C_TEXT);
+        if (e->dir)
+            text_r(B, dx + 244, y + ty, "›", C_DIM);
+    }
+    if (app.pick_n == 0)
+        centered_at(dx + SCREEN_W / 2, SET_Y + first * SET_H + 24,
+                    txt(app.pick_for == PICK_MUSIC ? S_PICK_NO_DIRS : S_PICK_NONE), C_DIM, 1);
+    int max = ui_pick_max_scroll();
+    if (max > 0)
+    {
+        int room = SCREEN_H - SET_Y, th = room * room / (room + max);
+        gfx_fill(B, dx + SCREEN_W - 3, SET_Y + (room - th) * sc / max, 2, th, C_ACC_DIM);
+    }
+
+    // the header: ‹ (up a folder), the folder (the end of its path, if long), ×
+    gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
+    gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
+    text(B, dx + 6, 2, "‹", C_TEXT);
+    icon(B, dx + 18, 2, ICON_FOLDER, C_ACC);
+    const char *s = pick_is_top(app.pick_dir) ? txt(S_PICK_TOP) : app.pick_dir;
+    const int room = 236 - 38 - 6;
+    if (font_text_width(s) > room)
+    {
+        int ell = font_text_width("…");
+        while (*s && font_text_width(s) + ell > room)
+        {
+            s++;
+            while (((uint8_t)*s & 0xC0) == 0x80)
+                s++;        // whole characters
+        }
+        int x = dx + 38;
+        text(B, x, 2, "…", C_TEXT);
+        text(B, x + ell, 2, s, C_TEXT);
+    }
+    else
+        text(B, dx + 38, 2, s, C_TEXT);
+    text(B, dx + 236, 2, "×", C_TEXT);
+    gfx_unclip(B);
+}
+
+static void push_left(int dx)
+{
+    // what's drawn moves left, to make room for the page coming in at dx
+    for (int y = 0; y < SCREEN_H; y++)
+        memmove(B->px + y * SCREEN_W, B->px + y * SCREEN_W + (SCREEN_W - dx), dx * 2);
+}
+
 static bool draw_settings(void)
 {
-    // a page pushes the top page out to the left (and back)
+    // a page pushes the top page out to the left (and back), the picker that page
     int q = ease_out(clamp256(app.page_t * 256 / TAB_TICKS));
     int dx = SCREEN_W - SCREEN_W * q / 256;
+    int qp = ease_out(clamp256(app.pick_t * 256 / TAB_TICKS));
+    int px = SCREEN_W - SCREEN_W * qp / 256;
     bool anim = false;
+    if (px == 0)
+    {
+        pick_page(0, true);
+        return draw_toast(SETTINGS_TOAST);
+    }
     if (dx > 0)
     {
         anim = settings_page(PAGE_TOP, 0, app.set_page == PAGE_TOP);
         if (dx < SCREEN_W)
-            for (int y = 0; y < SCREEN_H; y++)
-                memmove(B->px + y * SCREEN_W, B->px + y * SCREEN_W + (SCREEN_W - dx), dx * 2);
+            push_left(dx);
     }
     if (dx < SCREEN_W)
-        anim |= settings_page(app.set_shown, dx, app.set_page != PAGE_TOP);
+        anim |= settings_page(app.set_shown, dx, app.set_page != PAGE_TOP && !app.picking);
+    if (px < SCREEN_W)
+    {
+        push_left(px);
+        pick_page(px, app.picking);
+        anim = true;
+    }
+    anim |= draw_toast(SETTINGS_TOAST);     // what a setting has to say (no music there, …)
     return anim || (app.page_t > 0 && app.page_t < TAB_TICKS);
 }
 

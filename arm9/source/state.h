@@ -40,7 +40,9 @@ typedef struct {
     uint8_t date_fmt;         // DATE_DMY, ...
     uint8_t pl_sort;          // a playlist's songs: 0 its own order, else like the Title tab
     uint8_t batt_sound_off;   // no sound when the battery gets low (0: the sound is on)
-    uint8_t reserved[5];      // room for more settings without a new file version
+    uint8_t launch_button;    // Settings' header has 🚀: start the launcher (paths.txt)
+    uint8_t launch_hold;      // holding START for a second starts it
+    uint8_t reserved[3];      // room for more settings without a new file version
 } Settings;
 
 _Static_assert(sizeof(Settings) == 32, "settings are 32 bytes in the file");
@@ -57,5 +59,14 @@ void state_set_file(const char *path);
 // unchanged, the queue. A file from before themes gives the default theme.
 bool state_load(Settings *s, Theme *t, Resume *r);
 bool state_save(const Settings *s, const Theme *t, const Resume *r);
+
+// Paths kept next to the state file, in paths.txt (one "key=value" a line):
+// the .nds that Settings › Misc starts, and the music folder ("" for /music).
+typedef struct {
+    char launcher[256];
+    char music[256];
+} Paths;
+void paths_load(Paths *p);
+bool paths_save(const Paths *p);
 
 #endif

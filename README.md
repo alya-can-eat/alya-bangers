@@ -55,12 +55,6 @@ For the technical side:
 - [Development](docs/development.md): building, testing, releasing
 - [Licences](docs/licences.md)
 
-## Not there yet:
-
-- Start another launcher (Pico Launcher, TWiLight Menu++, …)
-
-More about these in [Development](docs/development.md#not-there-yet-in-detail).
-
 ## Pre-release builds:
 
 There are pre-release builds in [GitHub Actions](../../actions/workflows/release.yml): open the newest run, the files are at the bottom under *Artifacts* (`nds`, `converter-Windows`, `converter-Linux`). Downloading them needs a GitHub account, and they're kept for 90 days. They are less tested than a release.

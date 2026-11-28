@@ -24,6 +24,7 @@
 static volatile uint32_t blocks_played;
 static volatile uint8_t generation;
 static volatile bool exit_loop;
+static volatile bool boot_wanted;
 static bool streaming;
 static uint8_t cur_volume = 127;
 static uint16_t block_frames = 4096;
@@ -165,6 +166,9 @@ static void stream_cmd_handler(int bytes, void *userdata)
             REG_SOUNDXVOL(CH_LEFT) = c.volume;
             REG_SOUNDXVOL(CH_RIGHT) = c.volume;
             break;
+        case STREAM_CMD_BOOT:
+            boot_wanted = true;     // in the main loop, not in this interrupt
+            break;
         case STREAM_CMD_CHIME:
             REG_SOUNDXCNT(CH_CHIME) = 0;
             REG_SOUNDXSAD(CH_CHIME) = c.left;
@@ -177,6 +181,30 @@ static void stream_cmd_handler(int bytes, void *userdata)
         default:
             break;
     }
+}
+
+// Into Pico Loader (the ARM9 put it into VRAM, boot.c): everything stopped,
+// then once VRAM C/D and the card are this CPU's, to the entry point at the
+// start of its header (VRAM C, now at 0x06000000).
+__attribute__((noreturn)) static void boot_pico(void)
+{
+    REG_IME = 0;
+    REG_IE = 0;
+    REG_IF = ~0u;
+    for (int ch = 0; ch < 16; ch++)
+        REG_SOUNDXCNT(ch) = 0;
+    REG_SOUNDCNT = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        DMA_CR(i) = 0;
+        TIMER_CR(i) = 0;
+    }
+    while ((REG_VRAMSTAT & 3) != 3 || !(REG_EXMEMSTAT & ARM7_OWNS_CARD))
+        ;
+    void (*entry)(void) = *(void (*volatile *)(void))0x06000000;
+    entry();
+    for (;;)
+        ;
 }
 
 static void vblank_handler(void)
@@ -213,8 +241,10 @@ int main(int argc, char *argv[])
     irqSet(IRQ_VBLANK, vblank_handler);
     irqEnable(IRQ_VBLANK);
 
-    while (!exit_loop)
+    while (!exit_loop && !boot_wanted)
         swiWaitForVBlank();
+    if (boot_wanted)
+        boot_pico();
 
     stream_stop();
     return 0;

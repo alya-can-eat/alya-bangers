@@ -125,6 +125,16 @@ enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BT
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM, OV_EQ,
                OV_EQ_NAME, OV_PL_ADD, OV_PL_ASK } Overlay;
+// The file and folder picker, a page of the settings past the one it's for
+// (rows like theirs): the launcher's .nds or the music folder.
+enum { PICK_LAUNCHER, PICK_MUSIC };
+typedef struct { uint16_t name; uint8_t dir; uint8_t unused; } PickEntry;   // name: offset in pick_names
+#define PICK_MAX        512
+#define PICK_NAMES      16384       // bytes for their names
+int ui_pick_rows(void);             // its rows: the first (Use this folder, No launcher) and the entries
+int ui_pick_first(void);            // rows before the entries: 0 or 1
+int ui_pick_max_scroll(void);
+const char *app_music_root(void);   // the music folder in use ("" none found)
 // OV_EQ_NAME types a name: for a new equalizer profile or a playlist
 enum { NAME_EQ, NAME_PL, NAME_PL_QUEUE, NAME_PL_RENAME };
 // the row menu: Play now, Play next, Add to queue, then for some rows more
@@ -148,10 +158,12 @@ int app_row_count(int i);               // rows of the row menu for item i
 
 // Settings: a top page leading to pages of settings.
 enum { PAGE_TOP, PAGE_PLAYBACK, PAGE_SOUND, PAGE_BROWSING, PAGE_PLAYER, PAGE_THEME, PAGE_REGIONAL,
-       PAGE_ABOUT, PAGE_COUNT };
+       PAGE_ABOUT, PAGE_MISC, PAGE_COUNT };
+int ui_set_scroll(int page);        // a settings page scrolled: pixels
+int ui_set_max_scroll(int page);
 enum { SET_SCROLL_ALL, SET_CASE, SET_PAUSE_LID, SET_LR_LID, SET_RG, SET_TIME_RIGHT, SET_COVER_BG,
        SET_SHUFFLE_W, SET_LANG, SET_KEYBOARD, SET_AUTOPLAY, SET_HIGHCUT, SET_DITHER, SET_CLOCK, SET_DATE,
-       SET_BATT };
+       SET_BATT, SET_MUSIC_DIR, SET_LAUNCHER, SET_LAUNCH_BUTTON, SET_LAUNCH_HOLD };
 // switch, value (tap: the next one), › another page, a slider (a taller row)
 enum { SI_TOGGLE, SI_VALUE, SI_PAGE, SI_SLIDER };
 #define SET_SLIDER_H 64
@@ -171,10 +183,16 @@ typedef struct {
 #define ICON_THEME    0x1F3A8       // 🎨
 #define ICON_REGIONAL 0x1F310       // 🌐, also Language
 #define ICON_ABOUT    0x24D8        // ⓘ
+#define ICON_MISC     0x1F527       // 🔧
+#define ICON_LAUNCH   0x1F680       // 🚀 the launcher (Misc, the settings' header)
+#define LAUNCH_X      208           // 🚀 in the settings' header (left of ×)
 #define ICON_KEYBOARD 0x1F5AE       // 🖮
 #define ICON_CLOCK    0x1F552       // 🕒
 #define ICON_DATE     0x1F4C5       // 📅
 #define ICON_EQ       0xE007        // three sliders (builtin_font.c)
+#define ICON_FOLDER   0x1F5C0       // 🗀
+#define ICON_GAME     0x1F3AE       // 🎮 an .nds in the picker
+#define ICON_CHECK    0x2713        // ✓
 
 extern const int tab_x[TAB_COUNT + 1];
 
@@ -251,6 +269,18 @@ typedef struct {
     int set_shown;              // the page sliding in or out (kept while it slides back)
     int page_t;                 // 0 = the top page .. TAB_TICKS = set_shown (slides in from the right)
     int set_back_sel;           // the top page's highlighted row, for coming back
+    int set_scroll[2];          // the top page's and the open page's scroll, pixels
+    Paths paths;                // the launcher, the music folder (paths.txt)
+    bool picking;               // the picker is wanted (it slides in over the page, and out)
+    int pick_t;                 // 0 = the page .. TAB_TICKS = the picker
+    uint8_t pick_for;           // PICK_LAUNCHER, PICK_MUSIC
+    bool pick_has_lib;          // music: pick_dir has converted music (.dsmusic/library.idx)
+    char pick_dir[256];         // the folder it shows ("/" the card's top)
+    PickEntry *pick;            // its folders (and .nds files), sorted
+    char *pick_names;
+    int pick_n, pick_scroll;    // entries; scrolled, pixels
+    int pick_back_sel;          // the page's highlighted row, for coming back
+    int launch_t;               // starting the launcher: vblanks of its fade, 0 = not
 
     Settings set;
     Theme theme;
@@ -325,6 +355,7 @@ static inline int list_rows(void)
 
 // ui.c
 void ui_init(void);
+void ui_library_changed(void);          // another library.idx: forget what belongs to its songs
 // Keep the list as it is on screen now, to slide it out when the list changes.
 void ui_capture_list(void);
 // Draw both screens. Returns true if something on them moves by itself

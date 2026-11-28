@@ -23,6 +23,8 @@ typedef enum {
     STREAM_CMD_CHIME  = 4, // play a short sound once on a channel of its own, over the music:
                            // left = its 16-bit samples (main RAM), ring_bytes = their size,
                            // timer_divider, volume
+    STREAM_CMD_BOOT   = 5, // another .nds starts (arm9 boot.c): stop the sound, wait for VRAM C/D
+                           // and the card, then jump into Pico Loader's ARM7 part
 } StreamCmdType;
 
 typedef struct {

@@ -199,6 +199,20 @@ fail:
     return false;
 }
 
+void lib_unload(void)
+{
+    free(data);
+    data = NULL;
+    free(path_hash);
+    path_hash = NULL;
+    free(track_group);
+    track_group = NULL;
+    n_tracks = n_keys = n_values = n_albums = n_refs = 0;
+    readings = NULL;
+    n_readings = 0;
+    lib_group_artists(false);       // frees the groups (nothing loaded: none made)
+}
+
 bool lib_loaded(void) { return data != NULL; }
 uint32_t lib_fingerprint(void) { return fingerprint; }
 uint32_t lib_track_count(void) { return n_tracks; }

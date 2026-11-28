@@ -20,5 +20,6 @@ Besides the code in this repo, a built `alya-bangers.nds` also contains this:
 | picolibc (the C library of the Wonderful toolchain) | BSD-style licences | all copyright notices: `LICENSES/picolibc-COPYING.txt` |
 | libgcc | GPL v3 with the GCC Runtime Library Exception | none needed |
 | GNU Unifont glyphs | GPL-2.0-or-later with the font embedding exception | `LICENSES/GPL-2.0.txt`, `LICENSES/Unifont-NOTICE.txt` |
+| Pico Loader's API header (`arm9/source/picoLoader7.h`), © 2025 LNH team | zlib | `LICENSES/PicoLoader-zlib.txt` |
 
 If you publish an `.nds` built from this code, include `LICENSE`, the `LICENSES/` folder and where the source is (this repo) with it.

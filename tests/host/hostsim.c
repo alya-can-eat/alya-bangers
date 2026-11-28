@@ -95,6 +95,13 @@ void sim_set_touch(int x, int y) { touch_x = x; touch_y = y; }
 void touchRead(touchPosition *t) { t->px = touch_x; t->py = touch_y; }
 int sim_backlight = -1;
 u32 sim_battery = BATTERY_LEVEL_DS_HIGH;
+
+// Pico Loader (arm9 boot.c): there or not; starting an .nds only notes which
+// (and comes back, as when it couldn't start)
+bool sim_pico = true;
+char sim_booted[256];
+bool boot_ready(void) { return sim_pico; }
+bool boot_nds(const char *path) { snprintf(sim_booted, sizeof(sim_booted), "%s", path); return false; }
 int sim_brightness;
 u32 systemSetBacklightLevel(u32 level) { sim_backlight = level; return level; }
 void scanKeys(void) {}

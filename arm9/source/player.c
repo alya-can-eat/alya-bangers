@@ -60,15 +60,25 @@ static long file_pos = -1;
 static uint32_t underruns;
 static uint8_t volume = 127;
 static uint32_t fade_in_len, fade_in_t;     // a fade in: its length and how far, in vblanks
+static uint32_t fade_out_len, fade_out_t;   // a fade out (it stays silent at the end)
 static uint8_t sent_volume;                 // the volume the ARM7 has
 
-// The volume to play at now: during a fade in, rising like t², else the song's.
+// The volume to play at now: during a fade in, rising like t², during a fade
+// out falling the same way back, else the song's.
 static uint8_t out_volume(void)
 {
-    if (fade_in_t >= fade_in_len)
-        return volume;
-    uint32_t q = fade_in_t * 256 / fade_in_len;     // 0 .. 255
-    return (uint8_t)(volume * q * q / 65536);
+    uint32_t v = volume;
+    if (fade_in_t < fade_in_len)
+    {
+        uint32_t q = fade_in_t * 256 / fade_in_len;     // 0 .. 255
+        v = v * q * q / 65536;
+    }
+    if (fade_out_len)
+    {
+        uint32_t q = fade_out_t >= fade_out_len ? 0 : 256 - fade_out_t * 256 / fade_out_len;
+        v = v * q * q / 65536;
+    }
+    return (uint8_t)v;
 }
 static uint32_t tick_played, tick_frames;   // last report seen, frames since: player_peek, smooth position
 static EqState eq_st;
@@ -432,6 +442,20 @@ void player_fade_in(uint32_t vblanks)
     fade_in_t = 0;
 }
 
+void player_fade_out(uint32_t vblanks)
+{
+    fade_out_len = vblanks;
+    fade_out_t = 0;
+    if (!vblanks && state == PLAYER_PLAYING && sent_volume != out_volume())
+    {
+        // called off: the song's volume again
+        StreamCmd c = { 0 };
+        c.cmd = STREAM_CMD_VOLUME;
+        c.volume = sent_volume = out_volume();
+        send_cmd(&c);
+    }
+}
+
 void player_set_volume(uint8_t v)
 {
     if (v > 127)
@@ -445,12 +469,14 @@ void player_set_volume(uint8_t v)
 
 void player_tick(uint32_t elapsed)
 {
-    if (fade_in_len && state == PLAYER_PLAYING)
+    if ((fade_in_len || fade_out_len) && state == PLAYER_PLAYING)
     {
-        // the fade in: a step every frame (the ARM7 sets it right away)
+        // the fade: a step every frame (the ARM7 sets it right away)
         fade_in_t += elapsed;
         if (fade_in_t >= fade_in_len)
             fade_in_len = fade_in_t = 0;
+        if (fade_out_len && fade_out_t < fade_out_len)
+            fade_out_t += elapsed;
         uint8_t v = out_volume();
         if (v != sent_volume)
         {

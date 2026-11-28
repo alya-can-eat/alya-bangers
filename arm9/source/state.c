@@ -58,6 +58,48 @@ void state_set_file(const char *path)
     snprintf(file_path, sizeof(file_path), "%s", path);
 }
 
+// paths.txt in the folder of the state file
+static void paths_file(char *out, size_t size)
+{
+    const char *slash = strrchr(file_path, '/');
+    int dir = slash ? (int)(slash - file_path + 1) : 0;
+    snprintf(out, size, "%.*spaths.txt", dir, file_path);
+}
+
+void paths_load(Paths *p)
+{
+    memset(p, 0, sizeof(*p));
+    char path[300], line[300];
+    paths_file(path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (f == NULL)
+        return;
+    while (fgets(line, sizeof(line), f))
+    {
+        size_t l = strlen(line);
+        while (l && (line[l - 1] == '\n' || line[l - 1] == '\r'))
+            line[--l] = 0;
+        // a path too long for its place is left out
+        if (strncmp(line, "launcher=", 9) == 0 && l - 9 < sizeof(p->launcher))
+            memcpy(p->launcher, line + 9, l - 9 + 1);
+        else if (strncmp(line, "music=", 6) == 0 && l - 6 < sizeof(p->music))
+            memcpy(p->music, line + 6, l - 6 + 1);
+    }
+    fclose(f);
+}
+
+bool paths_save(const Paths *p)
+{
+    char path[300];
+    paths_file(path, sizeof(path));
+    make_dirs_for(path);
+    FILE *f = fopen(path, "wb");
+    if (f == NULL)
+        return false;
+    bool ok = fprintf(f, "launcher=%s\nmusic=%s\n", p->launcher, p->music) > 0;
+    return fclose(f) == 0 && ok;
+}
+
 void state_defaults(Settings *s)
 {
     memset(s, 0, sizeof(*s));

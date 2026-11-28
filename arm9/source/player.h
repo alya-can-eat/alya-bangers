@@ -67,6 +67,9 @@ uint32_t player_underruns(void);
 // The music fades in over this many vblanks (60 per second) from the next
 // start on: the volume rises from 0, slowly at first.
 void player_fade_in(uint32_t vblanks);
+// The music fades out over this many vblanks and stays silent (0: back to
+// the song's volume).
+void player_fade_out(uint32_t vblanks);
 
 // A short two-note sound over the music (the low battery warning), on a
 // sound channel of its own: heard whether a song plays or not.

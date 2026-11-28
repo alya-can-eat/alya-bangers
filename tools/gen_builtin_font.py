@@ -21,6 +21,7 @@ UI = (
     "\U0001f552\U0001f4c5"     # 🕒 📅 Settings › Regional: time, date
     "\U0001f3b5\U0001f4be\U0001f589"   # 🎵 💾 🖉 playlists, the queue as one, renaming
     "\U0001faab"                 # 🪫 the battery is low
+    "\U0001f527\U0001f680\U0001f3ae✓"   # 🔧 🚀 🎮 ✓ Settings › Misc: the launcher, the file picker
     "⇧⌫拼音小゛゜ー"       # search keyboards
     "−“”«»"             # equalizer: minus (dB), the quotes of "Delete …?"
 )

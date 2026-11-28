@@ -7,7 +7,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <dirent.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -15,6 +17,7 @@
 #include <nds.h>
 
 #include "app.h"
+#include "boot.h"
 #include "default_cover.h"
 #include "eq.h"
 #include "eqprof.h"
@@ -31,10 +34,12 @@
 #define TOAST_FRAMES    60      // 2 s at 30 fps
 #define SAVE_DELAY      120     // ticks after a change before the state is written
 #define SAVE_EVERY      (30 * 60)
+#define LAUNCH_FADE     40      // vblanks: the music and the screens fade out, then the launcher starts
+#define HOLD_START      60      // START held this long (1 s) starts it (Settings › Misc)
 
 App app;
 
-static char music_root[64];
+static char music_root[256];        // the music folder in use, "" none found
 static int item_cap;
 static uint32_t *tracks_buf;
 static int tracks_cap;
@@ -47,6 +52,14 @@ static uint32_t stats_save_at;
 static uint32_t song_starts;        // songs opened or restarted: each is a new listen
 static bool lid_closed, paused_by_lid;
 static int lid_fade, lid_fade_in = LID_IN;
+
+static void music_switch(const char *dir);
+static void launch_start(void);
+
+const char *app_music_root(void)
+{
+    return music_root;
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -1590,6 +1603,226 @@ static bool tap_search(int x, int y)
     return true;
 }
 
+// ---- the file and folder picker: the launcher's .nds (Settings › Misc),
+// the music folder (Settings › Browsing). A page past the one it's for.
+
+static bool join_path(char *out, size_t size, const char *dir, const char *name)
+{
+    size_t l = strlen(dir);
+    return (size_t)snprintf(out, size, "%s%s%s", dir, l && dir[l - 1] == '/' ? "" : "/", name) < size;
+}
+
+static bool is_dir(const char *p)
+{
+    struct stat st;
+    return stat(p, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool has_library(const char *dir)
+{
+    char p[300];
+    struct stat st;
+    return join_path(p, sizeof(p), dir, ".dsmusic/library.idx") && stat(p, &st) == 0;
+}
+
+// The folder a path is in: "/a/b" -> "/a", "/a" -> "/", "fat:/a" -> "fat:/".
+// False at the card's top.
+static bool parent_dir(char *p)
+{
+    char *s = strrchr(p, '/');
+    if (s == NULL || s[1] == 0)
+        return false;
+    if (s == p || s[-1] == ':')
+        s[1] = 0;
+    else
+        *s = 0;
+    return true;
+}
+
+static int pick_cmp(const void *a, const void *b)
+{
+    const PickEntry *x = a, *y = b;
+    if (x->dir != y->dir)
+        return x->dir ? -1 : 1;         // folders first
+    return strcasecmp(app.pick_names + x->name, app.pick_names + y->name);
+}
+
+static void keep_in_view(int *scroll, int top, int h, int max)
+{
+    int room = SCREEN_H - SET_Y;
+    if (top < *scroll)
+        *scroll = top;
+    if (top + h > *scroll + room)
+        *scroll = top + h - room;
+    *scroll = *scroll < 0 ? 0 : (*scroll > max ? max : *scroll);
+}
+
+static void pick_keep_sel(void)
+{
+    if (app.menu_sel >= 0)
+        keep_in_view(&app.pick_scroll, app.menu_sel * SET_H, SET_H, ui_pick_max_scroll());
+}
+
+// The picker shows a folder: its folders and, for the launcher, its .nds files.
+static void pick_load(const char *path)
+{
+    char dir[sizeof(app.pick_dir)];
+    snprintf(dir, sizeof(dir), "%s", path);
+    snprintf(app.pick_dir, sizeof(app.pick_dir), "%s", dir);
+    app.pick_n = app.pick_scroll = 0;
+    app.menu_sel = app.menu_sel >= 0 ? 0 : -1;      // by D-pad: from the first row
+    app.menu_vis = 0;
+    app.pick_has_lib = app.pick_for == PICK_MUSIC && has_library(dir);
+    redraw = true;
+    if (app.pick == NULL)
+        app.pick = malloc(PICK_MAX * sizeof(PickEntry));
+    if (app.pick_names == NULL)
+        app.pick_names = malloc(PICK_NAMES);
+    DIR *d = app.pick && app.pick_names ? opendir(dir) : NULL;
+    if (d == NULL)
+        return;
+    int used = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && app.pick_n < PICK_MAX)
+    {
+        const char *n = e->d_name;
+        size_t l = strlen(n);
+        if (n[0] == '.' || used + (int)l + 1 > PICK_NAMES)
+            continue;                   // ., .., hidden ones (.dsmusic)
+        bool folder;
+        if (e->d_type == DT_DIR || e->d_type == DT_REG)
+            folder = e->d_type == DT_DIR;
+        else
+        {
+            char full[300];
+            folder = join_path(full, sizeof(full), dir, n) && is_dir(full);
+        }
+        if (!folder && (app.pick_for != PICK_LAUNCHER || l < 5 || strcasecmp(n + l - 4, ".nds") != 0))
+            continue;
+        memcpy(app.pick_names + used, n, l + 1);
+        app.pick[app.pick_n++] = (PickEntry){ (uint16_t)used, folder, 0 };
+        used += (int)l + 1;
+    }
+    closedir(d);
+    qsort(app.pick, app.pick_n, sizeof(PickEntry), pick_cmp);
+}
+
+static void pick_open(int what)
+{
+    app.pick_for = (uint8_t)what;
+    app.pick_back_sel = app.menu_sel;
+    // it starts in the launcher's folder, or the one the music folder is in
+    char start[sizeof(app.pick_dir)];
+    const char *cur = what == PICK_LAUNCHER ? app.paths.launcher : music_root;
+    snprintf(start, sizeof(start), "%s", cur[0] ? cur : "/");
+    parent_dir(start);
+    if (!is_dir(start))
+        snprintf(start, sizeof(start), "/");
+    app.picking = true;
+    pick_load(start);
+}
+
+static void pick_close(void)
+{
+    app.picking = false;
+    app.menu_sel = app.pick_back_sel;
+    redraw = true;
+}
+
+// Up a folder (the one come from highlighted); at the top, back to the page.
+static void pick_up(void)
+{
+    char dir[sizeof(app.pick_dir)], child[sizeof(app.pick_dir)];
+    snprintf(dir, sizeof(dir), "%s", app.pick_dir);
+    const char *s = strrchr(dir, '/');
+    snprintf(child, sizeof(child), "%s", s ? s + 1 : "");
+    if (!parent_dir(dir))
+    {
+        pick_close();
+        return;
+    }
+    bool by_dpad = app.menu_sel >= 0;
+    pick_load(dir);
+    for (int i = 0; i < app.pick_n; i++)
+        if (app.pick[i].dir && strcmp(app.pick_names + app.pick[i].name, child) == 0)
+        {
+            int row = ui_pick_first() + i;
+            if (by_dpad)
+                app.menu_sel = row;
+            app.menu_vis = by_dpad ? row * SET_H : 0;
+            keep_in_view(&app.pick_scroll, row * SET_H, SET_H, ui_pick_max_scroll());
+        }
+}
+
+static void pick_choose(int i)
+{
+    int first = ui_pick_first();
+    if (i < 0 || i >= ui_pick_rows())
+        return;
+    if (i < first)
+    {
+        if (app.pick_for == PICK_LAUNCHER)
+        {
+            app.paths.launcher[0] = 0;      // No launcher
+            paths_save(&app.paths);
+            pick_close();
+        }
+        else if (!app.pick_has_lib)
+            toast("%s", txt(S_NO_LIBRARY_THERE));
+        else
+        {
+            char dir[sizeof(app.pick_dir)];
+            snprintf(dir, sizeof(dir), "%s", app.pick_dir);
+            pick_close();
+            music_switch(dir);
+        }
+        return;
+    }
+    const PickEntry *e = &app.pick[i - first];
+    char full[sizeof(app.pick_dir)];
+    if (!join_path(full, sizeof(full), app.pick_dir, app.pick_names + e->name))
+        return;                         // too long a path
+    if (e->dir)
+        pick_load(full);
+    else
+    {
+        snprintf(app.paths.launcher, sizeof(app.paths.launcher), "%s", full);
+        paths_save(&app.paths);
+        pick_close();
+    }
+}
+
+static void pick_tap(int x, int y)
+{
+    if (y < 20)
+    {
+        if (x >= 224)
+            app.overlay = OV_NONE;      // ×: out of the settings
+        else if (x < 112)
+            pick_up();                  // ‹
+    }
+    else if (y + app.pick_scroll >= SET_Y)
+        pick_choose((y + app.pick_scroll - SET_Y) / SET_H);
+    redraw = true;
+}
+
+static void pick_keys(uint32_t rep, uint32_t down)
+{
+    int n = ui_pick_rows(), first = ui_pick_first(), was = app.menu_sel;
+    if (down & (KEY_B | KEY_LEFT))
+        pick_up();
+    else if ((down & KEY_RIGHT) && app.menu_sel >= first && app.menu_sel < n && app.pick[app.menu_sel - first].dir)
+        pick_choose(app.menu_sel);
+    else if (n > 0)
+    {
+        if (rep & KEY_UP) app.menu_sel = app.menu_sel <= 0 ? n - 1 : app.menu_sel - 1;
+        if (rep & KEY_DOWN) app.menu_sel = app.menu_sel + 1 >= n ? 0 : app.menu_sel + 1;
+        if (down & KEY_A) pick_choose(app.menu_sel);
+    }
+    if (app.menu_sel != was)
+        pick_keep_sel();                // moved by D-pad: in sight (a dragged list stays)
+}
+
 static void set_change(int id)
 {
     switch (id)
@@ -1627,6 +1860,17 @@ static void set_change(int id)
     case SET_KEYBOARD: app.set.keyboard = (app.set.keyboard + 1) % KB_LAYOUTS; break;
     case SET_CLOCK: app.set.clock_12h ^= 1; break;
     case SET_DATE: app.set.date_fmt = (app.set.date_fmt + 1) % DATE_FORMATS; break;
+    case SET_MUSIC_DIR: pick_open(PICK_MUSIC); return;
+    case SET_LAUNCHER: pick_open(PICK_LAUNCHER); return;
+    case SET_LAUNCH_BUTTON:
+    case SET_LAUNCH_HOLD:
+    {
+        uint8_t *on = id == SET_LAUNCH_BUTTON ? &app.set.launch_button : &app.set.launch_hold;
+        *on ^= 1;
+        if (*on && !app.paths.launcher[0])
+            toast("%s", txt(S_NO_LAUNCHER));    // no use yet: which .nds
+        break;
+    }
     case SET_SHUFFLE_W:
         app.set.shuffle_weighted ^= 1;
         apply_weighting();
@@ -1741,6 +1985,7 @@ static void set_open_page(int page)
     // came by D-pad: the highlight starts on the first row (About has none)
     app.menu_sel = app.menu_sel >= 0 && ui_set_count(page) > 0 ? 0 : -1;
     app.set_page = app.set_shown = page;
+    app.set_scroll[1] = 0;
     redraw = true;
 }
 
@@ -1921,6 +2166,9 @@ static void tap_browser(int x, int y)
             app.menu_sel = app.set_back_sel = -1;
             app.set_page = app.set_shown = PAGE_TOP;
             app.page_t = 0;
+            app.set_scroll[0] = app.set_scroll[1] = 0;
+            app.picking = false;
+            app.pick_t = 0;
         }
     }
     redraw = true;
@@ -2255,10 +2503,18 @@ static void tap_player(int x, int y)
 
 static void tap_settings(int x, int y)
 {
+    if (app.picking)
+    {
+        if (app.pick_t == TAB_TICKS)
+            pick_tap(x, y);
+        return;
+    }
     if (y < 20)
     {
         if (x >= 224)
             app.overlay = OV_NONE;
+        else if (x >= LAUNCH_X - 8 && app.set.launch_button && app.paths.launcher[0])
+            launch_start();             // 🚀
         else if (x < 112)
             set_back();                 // ‹
     }
@@ -2324,6 +2580,19 @@ static void flash(int id)
 
 static int fdrag_from;              // filter choices: where the stylus started scrolling them
 
+static int *set_scroll_now(void)
+{
+    return &app.set_scroll[app.set_page == PAGE_TOP ? 0 : 1];
+}
+
+// The settings page (or the picker) is in place, not sliding.
+static bool settings_still(void)
+{
+    if (app.picking || app.pick_t)
+        return app.picking && app.pick_t == TAB_TICKS;
+    return app.page_t == (app.set_page != PAGE_TOP ? TAB_TICKS : 0);
+}
+
 static void touch_down(int x, int y)
 {
     app.press_id = button_at(x, y);
@@ -2337,7 +2606,9 @@ static void touch_down(int x, int y)
         redraw = true;
         return;
     }
-    fdrag_from = app.overlay == OV_PL_ADD ? app.pl_scroll : *fpage_scroll();
+    fdrag_from = app.overlay == OV_PL_ADD ? app.pl_scroll
+                 : (app.overlay == OV_SETTINGS ? (app.picking ? app.pick_scroll : *set_scroll_now())
+                    : *fpage_scroll());
     if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
         && !(app.tab == TAB_SEARCH && app.kb_up))
     {
@@ -2358,7 +2629,7 @@ static void touch_down(int x, int y)
     else if (app.overlay == OV_SETTINGS && app.set_page == PAGE_THEME && app.page_t == TAB_TICKS && y >= 20
              && theme_touch(x, y, true))
         tp.held = true;
-    else if (app.overlay == OV_SETTINGS && app.page_t == TAB_TICKS && ui_set_row_at(app.set_page, y) >= 0
+    else if (app.overlay == OV_SETTINGS && app.page_t == TAB_TICKS && !app.picking && ui_set_row_at(app.set_page, y) >= 0
              && ui_set_item(app.set_page, ui_set_row_at(app.set_page, y))->kind == SI_SLIDER)
     {
         // the slider: where the stylus is, then follows it
@@ -2399,6 +2670,16 @@ static void touch_move(int x, int y)
         int max = n > PLADD_ROWS ? n - PLADD_ROWS : 0;
         int s = fdrag_from + (tp.y0 - y) / 16;
         app.pl_scroll = s < 0 ? 0 : (s > max ? max : s);
+        redraw = true;
+        return;
+    }
+    if (app.overlay == OV_SETTINGS && tp.moved && !app.slider_drag && app.theme_drag == CP_NONE
+        && tp.y0 >= 20 && settings_still())
+    {
+        // drag a page that's longer than the screen (or the picker)
+        int max = app.picking ? ui_pick_max_scroll() : ui_set_max_scroll(app.set_page);
+        int s = fdrag_from + (tp.y0 - y);
+        *(app.picking ? &app.pick_scroll : set_scroll_now()) = s < 0 ? 0 : (s > max ? max : s);
         redraw = true;
         return;
     }
@@ -2567,13 +2848,95 @@ static void menu_keys(uint32_t rep, uint32_t down, int count, void (*choose)(int
     if (down & KEY_B) app.overlay = OV_NONE;
 }
 
+// The D-pad and buttons on a settings page.
+static void settings_keys(uint32_t down, uint32_t rep)
+{
+    if (app.set_page == PAGE_THEME)
+    {
+        // Up / Down: which colour, Left / Right: its hue (the triangle is for
+        // the stylus), A: the presets
+        if (app.presets_open)
+        {
+            if (down & KEY_B)
+                presets_open(false);
+            else
+                menu_keys(rep, down, THEME_PRESETS, preset_choose);
+        }
+        else if (down & KEY_A)
+            presets_open(true);
+        else if (down & KEY_B)
+            set_back();
+        else if (rep & (KEY_UP | KEY_DOWN))
+            theme_select(app.theme_sel + ((rep & KEY_DOWN) ? 1 : -1));
+        else if (rep & (KEY_LEFT | KEY_RIGHT))
+        {
+            app.theme_hsv.h = (app.theme_hsv.h + ((rep & KEY_RIGHT) ? 16 : -16) + CP_HUES) % CP_HUES;
+            theme_apply();
+        }
+    }
+    else if (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
+             && ui_set_item(app.set_page, app.menu_sel)->kind == SI_SLIDER && (rep & (KEY_LEFT | KEY_RIGHT)))
+        highcut_to(highcut_pos() + ((rep & KEY_RIGHT) ? 1 : -1));     // the slider: Left reaches lower
+    else if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
+        set_back();
+    else if (ui_set_count(app.set_page) > 0)
+    {
+        if ((down & KEY_RIGHT) && app.menu_sel >= 0
+            && ui_set_item(app.set_page, app.menu_sel)->kind == SI_PAGE)
+            set_activate(app.menu_sel);
+        else
+            menu_keys(rep, down, ui_set_count(app.set_page), set_activate);
+    }
+}
+
+// START: pause. With Settings › Misc › Hold START, held for a second it
+// starts the launcher instead: a short press pauses when it's let go.
+static void start_key(uint32_t down, uint32_t held)
+{
+    static bool pressed, used, hinted;
+    static uint32_t since;
+    if (down & KEY_START)
+    {
+        if (!(app.set.launch_hold && app.paths.launcher[0]))
+        {
+            toggle_pause();
+            flash(app.player_mode ? BTN_PPLAY : BTN_PLAY);
+            return;
+        }
+        pressed = true;
+        used = hinted = false;
+        since = ticks;
+    }
+    if (!pressed)
+        return;
+    if (!(held & KEY_START))
+    {
+        pressed = false;
+        if (!used)
+        {
+            toggle_pause();
+            flash(app.player_mode ? BTN_PPLAY : BTN_PLAY);
+        }
+    }
+    else if (!used && ticks - since >= HOLD_START)
+    {
+        used = true;
+        launch_start();
+    }
+    else if (!used && !hinted && ticks - since >= HOLD_START / 3)
+    {
+        hinted = true;
+        toast(txt(S_KEEP_HOLDING), path_basename(app.paths.launcher));
+    }
+}
+
 static uint32_t vert_since;
 
 static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
 {
     if (down & KEY_L) { previous_song(); if (app.player_mode) flash(BTN_PREV); }
     if (down & KEY_R) { next_song(false); flash(app.player_mode ? BTN_PNEXT : BTN_NEXT); }
-    if (down & KEY_START) { toggle_pause(); flash(app.player_mode ? BTN_PPLAY : BTN_PLAY); }
+    start_key(down, held);
     if (down | rep)
         redraw = true;
 
@@ -2584,43 +2947,22 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
     switch (app.overlay)
     {
     case OV_SETTINGS:
-        if (app.set_page == PAGE_THEME)
+    {
+        int sel_was = app.menu_sel, page_was = app.set_page;
+        if (app.picking)
         {
-            // Up / Down: which colour, Left / Right: its hue (the triangle is for
-            // the stylus), A: the presets
-            if (app.presets_open)
-            {
-                if (down & KEY_B)
-                    presets_open(false);
-                else
-                    menu_keys(rep, down, THEME_PRESETS, preset_choose);
-            }
-            else if (down & KEY_A)
-                presets_open(true);
-            else if (down & KEY_B)
-                set_back();
-            else if (rep & (KEY_UP | KEY_DOWN))
-                theme_select(app.theme_sel + ((rep & KEY_DOWN) ? 1 : -1));
-            else if (rep & (KEY_LEFT | KEY_RIGHT))
-            {
-                app.theme_hsv.h = (app.theme_hsv.h + ((rep & KEY_RIGHT) ? 16 : -16) + CP_HUES) % CP_HUES;
-                theme_apply();
-            }
+            if (app.pick_t == TAB_TICKS)
+                pick_keys(rep, down);
+            return;
         }
-        else if (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
-                 && ui_set_item(app.set_page, app.menu_sel)->kind == SI_SLIDER && (rep & (KEY_LEFT | KEY_RIGHT)))
-            highcut_to(highcut_pos() + ((rep & KEY_RIGHT) ? 1 : -1));     // the slider: Left reaches lower
-        else if (app.set_page != PAGE_TOP && (down & (KEY_B | KEY_LEFT)))
-            set_back();
-        else if (ui_set_count(app.set_page) > 0)
-        {
-            if ((down & KEY_RIGHT) && app.menu_sel >= 0
-                && ui_set_item(app.set_page, app.menu_sel)->kind == SI_PAGE)
-                set_activate(app.menu_sel);
-            else
-                menu_keys(rep, down, ui_set_count(app.set_page), set_activate);
-        }
+        settings_keys(down, rep);
+        // the highlighted row stays in sight on a page longer than the screen
+        if (app.overlay == OV_SETTINGS && !app.picking && app.set_page == page_was && app.menu_sel != sel_was
+            && app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page))
+            keep_in_view(set_scroll_now(), ui_set_row_y(app.set_page, app.menu_sel) - SET_Y,
+                         ui_set_row_h(app.set_page, app.menu_sel), ui_set_max_scroll(app.set_page));
         return;
+    }
     case OV_SORT:
         menu_keys(rep, down, ui_sort_option_count(ui_sort_slot()), choose_sort);
         return;
@@ -2835,6 +3177,51 @@ static void save_now(void)
     save_at = 0;
 }
 
+// ---- starting the launcher (Settings › Misc): the music and the screens
+// fade out, everything is saved, then Pico Loader starts the .nds (boot.c).
+
+static void launch_start(void)
+{
+    struct stat st;
+    if (app.launch_t)
+        return;
+    if (!app.paths.launcher[0] || stat(app.paths.launcher, &st) != 0)
+    {
+        toast("%s", txt(S_NO_LAUNCHER));
+        return;
+    }
+    if (!boot_ready())
+    {
+        toast("%s", txt(S_NO_PICO));
+        return;
+    }
+    toast(txt(S_LAUNCHING), path_basename(app.paths.launcher));
+    player_fade_out(LAUNCH_FADE);
+    app.launch_t = 1;
+}
+
+static void launch_tick(uint32_t elapsed)
+{
+    if (!app.launch_t)
+        return;
+    app.launch_t += (int)elapsed;
+    int t = app.launch_t > LAUNCH_FADE ? LAUNCH_FADE : app.launch_t;
+    setBrightness(3, -16 * t / LAUNCH_FADE);
+    if (app.launch_t <= LAUNCH_FADE + 1)
+        return;                         // a frame in black first
+    if (player_state() == PLAYER_PLAYING)
+        player_toggle_pause();          // silent already: where it was, for next time
+    save_now();
+    stats_save();
+    boot_nds(app.paths.launcher);
+    // still here: it couldn't start; the app comes back as it was
+    app.launch_t = 0;
+    player_fade_out(0);
+    lid_fade_in = 0;
+    toast("%s", txt(S_BOOT_FAILED));
+    redraw = true;
+}
+
 static void restore(void)
 {
     Resume r;
@@ -2897,34 +3284,93 @@ static void fatal_screen(const char *line1, const char *line2)
     }
 }
 
+// The music folder: the one chosen in Settings › Browsing, else /music.
 static bool find_music_root(void)
 {
     static const char *candidates[] = { "/music", "fat:/music", "sd:/music" };
-    for (unsigned i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++)
+    if (app.paths.music[0] && is_dir(app.paths.music))
     {
-        struct stat st;
-        if (stat(candidates[i], &st) == 0 && S_ISDIR(st.st_mode))
+        snprintf(music_root, sizeof(music_root), "%s", app.paths.music);
+        return true;
+    }
+    for (unsigned i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++)
+        if (is_dir(candidates[i]))
         {
             snprintf(music_root, sizeof(music_root), "%s", candidates[i]);
             return true;
         }
-    }
+    music_root[0] = 0;
     return false;
+}
+
+// The music folder's font and library (none found: the list says how to
+// get music onto the card), and room in the lists for its songs.
+static void load_library(void)
+{
+    char path[300];
+    app.lib_error = LIB_ERR_NO_FOLDER;
+    if (music_root[0])
+    {
+        snprintf(path, sizeof(path), "%s/.dsmusic/font.bin", music_root);
+        font_load(path);
+        snprintf(path, sizeof(path), "%s/.dsmusic/library.idx", music_root);
+        lib_load(path, &app.lib_error);
+    }
+    // room for any list: in search, every artist, album and song can be a result
+    item_cap = 2 * (int)lib_track_count() + (int)lib_album_count() + 8;
+    tracks_cap = (int)lib_track_count() + 1;
+    free(app.items);
+    free(app.marks);
+    free(tracks_buf);
+    free(app.added);
+    app.items = malloc(item_cap * sizeof(Item));
+    app.marks = malloc(item_cap * sizeof(SearchMark));
+    tracks_buf = malloc(tracks_cap * sizeof(uint32_t));
+    app.added = calloc((lib_track_count() + 8) / 8, 1);
+    app.n_items = 0;
+}
+
+// Another music folder (checked: it has a library.idx), right away: what
+// played stops, the settings close and the lists start over at its artists.
+static void music_switch(const char *dir)
+{
+    char d[sizeof(music_root)];
+    snprintf(d, sizeof(d), "%s", dir);
+    player_stop();
+    queue_clear();
+    stats_save();
+    lib_unload();
+    snprintf(music_root, sizeof(music_root), "%s", d);
+    snprintf(app.paths.music, sizeof(app.paths.music), "%s", d);
+    paths_save(&app.paths);
+    load_library();
+    lib_group_artists(app.set.case_sensitive);
+    apply_weighting();
+    ui_library_changed();
+    app.artist = -1;
+    app.album = LIB_NONE;
+    app.folder[0] = 0;
+    app.pl = PL_FOLDERS;
+    app.album_queue = false;
+    app.add_mode = false;
+    app.thumb_track = LIB_NONE;
+    app.menu_item = -1;
+    app.sa_kind = SA_NONE;
+    sa_captured = false;
+    search_filter_clear(&app.sf);
+    app.fpage = app.fkind = app.fbase = -1;
+    pl_load();
+    show_tab(TAB_ARTIST);
+    toast(txt(S_MUSIC_NOW), path_basename(d));
+    save_now();
 }
 
 static void app_init(void)
 {
-    char path[160];
-    snprintf(path, sizeof(path), "%s/.dsmusic/font.bin", music_root);
-    font_load(path);
-    snprintf(path, sizeof(path), "%s/.dsmusic/library.idx", music_root);
-    lib_load(path, &app.lib_error);
-
-    // room for any list: in search, every artist, album and song can be a result
-    item_cap = 2 * (int)lib_track_count() + (int)lib_album_count() + 8;
-    tracks_cap = (int)lib_track_count() + 1;
-    app.items = malloc(item_cap * sizeof(Item));
-    app.marks = malloc(item_cap * sizeof(SearchMark));
+    paths_load(&app.paths);
+    if (!music_root[0])
+        find_music_root();
+    load_library();
     app.fopts = malloc(FOPTS_MAX * sizeof(SearchOpt));
     app.tkeys = malloc(256 * sizeof(SearchOpt));
     search_filter_clear(&app.sf);
@@ -2932,8 +3378,6 @@ static void app_init(void)
     app.fpage = app.fkind = app.fbase = -1;
     app.pl = PL_FOLDERS;
     pl_load();
-    tracks_buf = malloc(tracks_cap * sizeof(uint32_t));
-    app.added = calloc((lib_track_count() + 8) / 8, 1);
     app.artist = -1;
     app.album = LIB_NONE;
     app.q_drag_from = app.q_drag_to = -1;
@@ -3028,7 +3472,8 @@ static void app_tick(void)
     uint32_t down = keysDown(), rep = keysDownRepeat(), held = keysHeld();
 
     handle_lid(held, down);
-    if (!lid_closed)
+    launch_tick(elapsed);
+    if (!lid_closed && !app.launch_t)
     {
         handle_keys(down, rep, held);
         if (held & KEY_TOUCH)
@@ -3132,6 +3577,25 @@ static void app_tick(void)
         redraw = true;
     }
 
+    // the picker slides in over its page and back out; gone with the settings
+    if (app.ov_vis != OV_SETTINGS && (app.picking || app.pick_t))
+        app.picking = false, app.pick_t = 0;
+    int pick_target = app.picking ? TAB_TICKS : 0;
+    if (app.pick_t != pick_target)
+    {
+        app.pick_t += app.pick_t < pick_target ? (int)elapsed : -(int)elapsed;
+        app.pick_t = app.pick_t < 0 ? 0 : (app.pick_t > TAB_TICKS ? TAB_TICKS : app.pick_t);
+        redraw = true;
+    }
+    if (!app.picking && app.pick_t == 0 && app.pick)
+    {
+        free(app.pick);
+        free(app.pick_names);
+        app.pick = NULL;
+        app.pick_names = NULL;
+        app.pick_n = 0;
+    }
+
     // the preset themes rise out of their button (and are closed with the page)
     if (app.presets_open && (app.overlay != OV_SETTINGS || app.set_page != PAGE_THEME))
         app.presets_open = false;
@@ -3228,15 +3692,18 @@ static void app_tick(void)
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
     bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && app.presets_open;
-    int menu_target = app.ov_vis == OV_SETTINGS && !presets
+    int menu_target = app.ov_vis == OV_SETTINGS && app.picking ? app.menu_sel * SET_H
+                      : app.ov_vis == OV_SETTINGS && !presets
                       ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
                          ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)
                       : (app.ov_vis == OV_FILTER ? (app.menu_sel - *fpage_scroll()) * 16
                          : (app.ov_vis == OV_PL_ADD ? (app.menu_sel - app.pl_scroll) * 16 : app.menu_sel * 16));
     static int fpage_was = -1;
-    bool page_changed = app.set_page != page_was || app.fpage != fpage_was;
+    static bool picking_was;
+    bool page_changed = app.set_page != page_was || app.fpage != fpage_was || app.picking != picking_was;
     page_was = app.set_page;
     fpage_was = app.fpage;
+    picking_was = app.picking;
     if (menu_opened || page_changed || app.menu_sel < 0 || menu_was < 0)
         app.menu_vis = menu_target;         // nothing to glide from
     else
@@ -3319,9 +3786,7 @@ int main(int argc, char **argv)
 
     if (!fatInitDefault())
         fatal_screen(txt(S_NO_SD), txt(S_DLDI));
-    if (!find_music_root())
-        fatal_screen(txt(S_NO_MUSIC), txt(S_MAKE_MUSIC));
-    app_init();
+    app_init();         // no music folder: it starts all the same, the list says what to do
 
     while (1)
     {

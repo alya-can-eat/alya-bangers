@@ -40,9 +40,10 @@ _Static_assert(sizeof(LibTrack) == 48, "library.idx tracks are 48 bytes");
 _Static_assert(sizeof(LibAlbum) == 32, "library.idx albums are 32 bytes");
 
 // why library.idx can't be used (*err, LIB_OK when it loaded)
-enum { LIB_OK, LIB_ERR_MISSING, LIB_ERR_DAMAGED, LIB_ERR_TOO_BIG, LIB_ERR_VERSION };
+enum { LIB_OK, LIB_ERR_MISSING, LIB_ERR_DAMAGED, LIB_ERR_TOO_BIG, LIB_ERR_VERSION, LIB_ERR_NO_FOLDER };
 bool lib_load(const char *path, int *err);
 bool lib_loaded(void);
+void lib_unload(void);      // before another library.idx is loaded
 // Changes whenever the converter rebuilt the index.
 uint32_t lib_fingerprint(void);
 

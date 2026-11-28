@@ -9,6 +9,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define DSPLAYER_NO_MAIN
 #include "../../arm9/source/main.c"
@@ -611,6 +613,9 @@ int main(int argc, char **argv)
     snprintf(state, sizeof(state), "%s/state.bin", out_dir);
     remove(state);
     state_set_file(state);
+    char paths_txt[600];
+    snprintf(paths_txt, sizeof(paths_txt), "%s/paths.txt", out_dir);
+    remove(paths_txt);                  // no launcher, the music folder found by looking
     char stats_file[600], stats_new[600];
     snprintf(stats_file, sizeof(stats_file), "%s/stats.bin", out_dir);
     snprintf(stats_new, sizeof(stats_new), "%s/stats.new", out_dir);
@@ -2341,9 +2346,8 @@ int main(int argc, char **argv)
             for (int i = S_SORT_NAME_UP; i <= S_SORT_TRACK; i++)
                 fit &= font_text_width(txt(i)) <= 248 - 96 - 24 - 4;
             fit &= font_text_width(txt(S_NEXT)) <= 48 && 248 - ui_info_value_x() >= 150;
-            fit &= font_text_width(txt(S_NO_MUSIC)) <= 240 && font_text_width(txt(S_MAKE_MUSIC)) <= 240
-                   && font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
-            for (int i = S_LIB_MISSING; i <= S_RUN_DSCONV; i++)
+            fit &= font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
+            for (int i = S_LIB_MISSING; i <= S_PICK_MUSIC_WHERE; i++)
                 fit &= font_text_width(txt(i)) <= SCREEN_W - 16;
             // equalizer: the header with "· edited", the bands under their sliders,
             // Flat in the list, the buttons side by side, the question's answers, OK on its key
@@ -2459,6 +2463,243 @@ int main(int argc, char **argv)
         press(KEY_B);
         run(20);
         tap(240, 8);
+        run(20);
+    }
+
+    // ---- Settings › Misc: a launcher (.nds) to start, Browsing: the music
+    // folder; both chosen in the picker. The top page is longer than the
+    // screen now: it scrolls.
+    {
+        static char dir[700], sub[760], music2[700], card[300], f[800], chosen[800];
+        snprintf(card, sizeof(card), "%s", music_root);
+        snprintf(dir, sizeof(dir), "%s/launchers", out_dir);
+        snprintf(sub, sizeof(sub), "%s/sub", dir);
+        mkdir(dir, 0755);
+        mkdir(sub, 0755);
+        static const char *const files[] = { "TestMenu.nds", "b.NDS", "notes.txt", ".hidden.nds", "game0.nds",
+                                             "game1.nds", "game2.nds", "game3.nds", "game4.nds", "game5.nds",
+                                             "game6.nds", "game7.nds" };
+        for (unsigned i = 0; i < sizeof(files) / sizeof(files[0]); i++)
+        {
+            snprintf(f, sizeof(f), "%s/%s", dir, files[i]);
+            FILE *nf = fopen(f, "wb");
+            fputs("nds", nf);
+            fclose(nf);
+        }
+        snprintf(music2, sizeof(music2), "%s/music2", out_dir);
+        unlink(music2);
+        check(symlink(card, music2) == 0, "(a second music folder: the same card's)");
+
+        tap(240, BAR_Y + 14);
+        run(20);
+        check(ui_set_count(PAGE_TOP) == 8 && ui_set_item(PAGE_TOP, 6)->id == PAGE_ABOUT
+              && ui_set_item(PAGE_TOP, 7)->id == PAGE_MISC && ui_set_item(PAGE_TOP, 7)->icon == ICON_MISC,
+              "Misc under About: 8 rows");
+        check(app.set_scroll[0] == 0 && ui_set_max_scroll(PAGE_TOP) == SET_H, "one row more than fits: it scrolls by 24 px");
+        hold(100, 150, 2);
+        drag_to(100, 110, 5);
+        release();
+        check(app.set_scroll[0] == SET_H && app.set_page == PAGE_TOP, "dragged up: Misc in sight, nothing opened");
+        shot("13l_settings_scrolled");
+        check(ui_set_row_at(PAGE_TOP, SET_Y + 6 * SET_H + 4) == 7 && ui_set_row_at(PAGE_TOP, 10) == -1,
+              "taps find the scrolled rows, not under the header");
+        tap(100, SET_Y + 6 * SET_H + 10);
+        run(20);
+        check(app.set_shown == PAGE_MISC && app.page_t == TAB_TICKS && ui_set_count(PAGE_MISC) == 3, "Misc in place");
+        check(!app.set.launch_button && !app.set.launch_hold && !app.paths.launcher[0], "no launcher, both off by default");
+        shot("13m_misc");
+        tap(100, SET_Y + 1 * SET_H + 10);
+        check(app.set.launch_button && strcmp(app.toast, txt(S_NO_LAUNCHER)) == 0, "🚀 on without a launcher: which .nds");
+        tap(214, 8);
+        check(app.launch_t == 0, "no 🚀 in the header yet");
+
+        // the picker: its folders and .nds files
+        tap(100, SET_Y + 0 * SET_H + 10);
+        check(app.picking && app.pick_for == PICK_LAUNCHER && app.pick_t < TAB_TICKS, "Launcher: the picker slides in");
+        shot("13n_picker_sliding");
+        run(20);
+        check(app.pick_t == TAB_TICKS, "the picker in place");
+        pick_load(dir);                     // (taps would go through the PC's own folders)
+        check(app.pick_n == 11 && ui_pick_first() == 0, "the folder, the .nds files (also .NDS); no others, no hidden ones");
+        check(app.pick[0].dir && strcmp(app.pick_names + app.pick[0].name, "sub") == 0
+              && strcmp(app.pick_names + app.pick[1].name, "b.NDS") == 0
+              && strcmp(app.pick_names + app.pick[10].name, "TestMenu.nds") == 0, "folders first, then by name");
+        shot("13o_picker");
+        check(ui_pick_max_scroll() == 11 * SET_H - (SCREEN_H - SET_Y), "longer than the screen");
+        tap(100, SET_Y + 1 * SET_H + 10);
+        snprintf(chosen, sizeof(chosen), "%s/b.NDS", dir);
+        check(!app.picking && strcmp(app.paths.launcher, chosen) == 0, "tap an .nds: chosen, the picker goes");
+        run(20);
+        check(app.pick_t == 0 && app.pick == NULL && app.set_shown == PAGE_MISC, "back on Misc (the list freed)");
+        shot("13p_misc_launcher");
+        // again: from the launcher's folder, No launcher on top; by D-pad
+        tap(100, SET_Y + 0 * SET_H + 10);
+        run(20);
+        check(app.picking && strcmp(app.pick_dir, dir) == 0 && ui_pick_first() == 1,
+              "it starts in the launcher's folder, No launcher first");
+        press(KEY_DOWN);
+        press(KEY_DOWN);
+        check(app.menu_sel == 1, "Down, Down: the folder");
+        press(KEY_RIGHT);
+        check(strcmp(app.pick_dir, sub) == 0 && app.pick_n == 0 && app.menu_sel == 0, "Right opens it: nothing in it");
+        run(10);
+        shot("13q_picker_empty");
+        press(KEY_B);
+        check(strcmp(app.pick_dir, dir) == 0 && app.menu_sel == 1, "B: up again, the folder highlighted");
+        hold(100, 150, 2);
+        drag_to(100, 20, 8);
+        release();
+        check(app.pick_scroll == ui_pick_max_scroll() && app.picking, "drag: to the end");
+        shot("13r_picker_scrolled");
+        tap(100, SCREEN_H - 10);
+        snprintf(chosen, sizeof(chosen), "%s/TestMenu.nds", dir);
+        check(!app.picking && strcmp(app.paths.launcher, chosen) == 0, "the last one, tapped");
+        run(20);
+        {
+            Paths pp;
+            paths_load(&pp);
+            check(strcmp(pp.launcher, chosen) == 0, "kept in paths.txt");
+        }
+
+        // 🚀 in the header: the music and the screens fade out, then Pico Loader
+        if (player_state() != PLAYER_PLAYING)
+            press(KEY_START);
+        check(player_state() == PLAYER_PLAYING, "(a song plays)");
+        run(30);
+        uint8_t vol = sim_hw.volume;
+        sim_pico = false;
+        tap(214, 8);
+        check(app.launch_t == 0 && strcmp(app.toast, txt(S_NO_PICO)) == 0, "no Pico Loader on the card: it says so");
+        sim_pico = true;
+        sim_booted[0] = 0;
+        tap(214, 8);
+        check(app.launch_t > 0 && strstr(app.toast, "TestMenu.nds") != NULL, "🚀: starting TestMenu.nds");
+        run(LAUNCH_FADE / 2);
+        check(sim_brightness < 0 && sim_brightness > -16 && sim_hw.volume < vol, "half way: darker, quieter");
+        uint32_t taps_before = app.set.launch_hold;
+        tap(100, SET_Y + 2 * SET_H + 10);
+        check(app.set.launch_hold == taps_before, "no taps meanwhile");
+        run(LAUNCH_FADE);
+        check(strcmp(sim_booted, chosen) == 0, "then the .nds is started");
+        check(app.launch_t == 0 && strcmp(app.toast, txt(S_BOOT_FAILED)) == 0 && player_state() == PLAYER_PAUSED,
+              "(here it comes back: it says so, the song paused)");
+        {
+            Settings ss;
+            Theme ts;
+            Resume rs;
+            state_defaults(&ss);
+            check(state_load(&ss, &ts, &rs) && rs.path[0] && ss.launch_button, "saved before");
+        }
+        run(LID_IN + 1);
+        check(sim_brightness == 0, "the screens fade back in");
+        press(KEY_START);
+        run(10);
+        check(player_state() == PLAYER_PLAYING && sim_hw.volume == vol, "and the music plays as loud as before");
+
+        // Hold START: a short press still pauses, a second starts the launcher
+        tap(100, SET_Y + 2 * SET_H + 10);
+        check(app.set.launch_hold, "Hold START on");
+        sim_set_keys(KEY_START, KEY_START);
+        vblank_count++;
+        app_tick();
+        for (int i = 0; i < 10; i++)
+            tick(KEY_START);
+        check(player_state() == PLAYER_PLAYING, "START down: nothing yet");
+        tick(0);
+        check(player_state() == PLAYER_PAUSED, "let go soon: pause");
+        press(KEY_START);
+        check(player_state() == PLAYER_PLAYING, "a press again: plays");
+        sim_booted[0] = 0;
+        sim_set_keys(KEY_START, KEY_START);
+        vblank_count++;
+        app_tick();
+        for (int i = 0; i < HOLD_START / 2; i++)
+            tick(KEY_START);
+        check(strstr(app.toast, "TestMenu.nds") != NULL && app.launch_t == 0, "held a moment: keep holding");
+        shot("13s_keep_holding");
+        for (int i = 0; i < HOLD_START / 2 + 1; i++)
+            tick(KEY_START);
+        check(app.launch_t > 0, "held a second: it starts");
+        tick(0);
+        run(LAUNCH_FADE + 4);
+        check(strcmp(sim_booted, chosen) == 0 && player_state() == PLAYER_PAUSED, "the launcher, not a pause on letting go");
+        run(LID_IN + 1);
+        tap(100, SET_Y + 2 * SET_H + 10);
+        tap(100, SET_Y + 1 * SET_H + 10);
+        check(!app.set.launch_hold && !app.set.launch_button, "both off again");
+        // No launcher
+        tap(100, SET_Y + 0 * SET_H + 10);
+        run(20);
+        tap(100, SET_Y + 0 * SET_H + 10);
+        check(!app.picking && !app.paths.launcher[0], "No launcher: none");
+        run(20);
+
+        // the music folder: Settings › Browsing
+        tap(20, 8);
+        run(20);
+        check(app.set_scroll[0] == SET_H, "the top page as it was left");
+        tap(100, SET_Y + 1 * SET_H + 10);
+        run(20);
+        check(app.set_shown == PAGE_BROWSING && ui_set_item(PAGE_BROWSING, 2)->id == SET_MUSIC_DIR, "Browsing: the music folder");
+        shot("13t_browsing_folder");
+        tap(100, SET_Y + 2 * SET_H + 10);
+        run(20);
+        check(app.picking && app.pick_for == PICK_MUSIC && ui_pick_first() == 1, "the picker, Use this folder first");
+        pick_load(dir);
+        check(!app.pick_has_lib && app.pick_n == 1, "only folders; no converted music here");
+        tap(100, SET_Y + 10);
+        check(app.picking && strcmp(app.toast, txt(S_NO_LIBRARY_THERE)) == 0, "Use this folder: not this one");
+        shot("13u_picker_no_music");
+        pick_load(music2);
+        check(app.pick_has_lib, "converted music here");
+        shot("13u_picker_music");
+        tap(100, SET_Y + 10);
+        check(!app.picking && strcmp(music_root, music2) == 0 && strcmp(app.paths.music, music2) == 0
+              && lib_loaded() && queue_count() == 0 && player_state() == PLAYER_IDLE, "chosen: loaded at once, the queue empty");
+        check(strstr(app.toast, "music2") != NULL && app.tab == TAB_ARTIST && find_row("Kivara") >= 0
+              && app.overlay == OV_NONE, "the settings close: the artists of the new library, a toast says so");
+        {
+            Paths pp;
+            paths_load(&pp);
+            music_root[0] = 0;
+            check(strcmp(pp.music, music2) == 0 && find_music_root() && strcmp(music_root, music2) == 0,
+                  "kept: the next start looks there first");
+        }
+        run(20);
+        shot("13v_music_now");
+
+        // no music folder at all: the app works, the list says what to do
+        lib_unload();
+        music_root[0] = 0;
+        load_library();
+        show_tab(TAB_ARTIST);
+        app.toast_until = 0;
+        run(30);
+        check(!lib_loaded() && app.lib_error == LIB_ERR_NO_FOLDER && app.n_items == 0, "no music folder: an empty list");
+        shot("13w_no_music");
+        tap(240, BAR_Y + 14);
+        run(20);
+        check(app.overlay == OV_SETTINGS, "the settings open all the same");
+        tap(100, SET_Y + 2 * SET_H + 10);       // Browsing
+        run(20);
+        tap(100, SET_Y + 2 * SET_H + 10);
+        run(20);
+        check(app.picking && strcmp(app.pick_dir, "/") == 0, "the picker from the card's top");
+        shot("13x_picker_top");
+        pick_load(card);
+        tap(100, SET_Y + 10);
+        check(lib_loaded() && strcmp(music_root, card) == 0 && find_row("Kivara") >= 0, "and back to the card's music");
+        run(20);
+        // by D-pad: the highlight stays in sight
+        tap(240, BAR_Y + 14);
+        run(20);
+        for (int i = 0; i < 8; i++)
+            press(KEY_DOWN);
+        check(app.menu_sel == 7 && app.set_scroll[0] == SET_H, "Down to Misc: the page scrolls with it");
+        for (int i = 0; i < 7; i++)
+            press(KEY_UP);
+        check(app.menu_sel == 0 && app.set_scroll[0] == 0, "Up to Playback: and back");
+        press(KEY_B);
         run(20);
     }
 
