@@ -56,7 +56,7 @@ The very first start asks for the language, with the DS's own one highlighted. E
     - Every other colour is mixed from these three, and the whole app changes while you drag.
     - Up / Down choose the colour, Left / Right turn its hue.
     - Presets (A): *Ultraviolet* (the default) and *Midnight Rose* (the first theme). They always show in their own fixed colours, so you can get back even if you made your theme unreadable xD
-    - Pride: a flag for the player's play button instead of the accent colour. Rainbow, Progress (intersex-inclusive), lesbian, gay, bi, pan, asexual, trans, non-binary, agender, aromantic, intersex, genderfluid, genderqueer, aroace, demisexual, demigender and the ally flag. By D-pad: Down past Text, then A.
+    - Pride: a flag for the player's play button instead of the accent colour. Rainbow, Progress (intersex-inclusive), lesbian, gay, bi, pan, asexual, trans, non-binary, agender, aromantic, intersex, genderfluid, genderqueer, aroace, demisexual, demigender, polysexual, omnisexual, bigender, demiboy, demigirl and the ally flag. By D-pad: Down past Text, then A.
     - The play/pause symbol: on the accent colour it's cut out of it, in the background colour. If your background is too close to your accent for that, it takes the text colour (or black or white). On a flag it's white with a dark edge, so it shows on every stripe.
   - Regional: the language (English, German or French; the German in Swiss spelling), the search keyboard (QWERTY, QWERTZ or AZERTY), the time (24 h or 12 h with am/pm) and the date (27.11.2026, 2026-11-27 or 11/27/2026)
   - About: name, version and edition, licence, where the code lives
