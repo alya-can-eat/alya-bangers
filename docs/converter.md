@@ -13,7 +13,7 @@ alya-bangers-dsconv puts your music on the card. Same colours and font as on the
 
 1. Download it from the [releases](../../../releases): the `.exe` for Windows, the `.AppImage` for Linux.
 2. Double-click it.
-3. Choose your music folder and the DS card.
+3. Choose your music folder and the DS card (or a custom folder).
 4. Convert: it checks what's new and whether it fits. Then Start.
 
 Next time only new and changed songs get converted.
