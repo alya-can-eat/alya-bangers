@@ -64,6 +64,10 @@ const DsaTags *player_tags(void);
 const uint16_t *player_cover(void);
 uint32_t player_underruns(void);
 
+// The music fades in over this many vblanks (60 per second) from the next
+// start on: the volume rises from 0, slowly at first.
+void player_fade_in(uint32_t vblanks);
+
 // A short two-note sound over the music (the low battery warning), on a
 // sound channel of its own: heard whether a song plays or not.
 void player_chime(void);

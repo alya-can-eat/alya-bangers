@@ -2863,6 +2863,8 @@ static void restore(void)
     // on launch: the last song at the same position, paused (or playing:
     // Settings › Playback › Play on launch)
     bool play = app.set.play_at_start;
+    if (play)
+        player_fade_in(START_FADE);     // the music fades in, like the screens
     if (queue_pos() >= 0 && queue_track(queue_pos()) == t)
     {
         open_pos(queue_pos(), r.pos_ms, play, SA_NONE);
@@ -2883,10 +2885,12 @@ static void fatal_screen(const char *line1, const char *line2)
     font_draw(c, 8, 56, 240, line2, C_DIM);
     font_draw(c, 8, 160, 240, txt(S_PRESS_START), C_DIM);
     gfx_fill(gfx_canvas(SCREEN_BOTTOM), 0, 0, SCREEN_W, SCREEN_H, C_BG);
-    while (1)
+    for (int f = 0;; f++)
     {
         swiWaitForVBlank();
         gfx_present();
+        if (f <= LID_IN)
+            setBrightness(3, -16 + 16 * f / LID_IN);    // fading in, like the app
         scanKeys();
         if (keysDown() & KEY_START)
             exit(0);
@@ -2947,6 +2951,9 @@ static void app_init(void)
     systemSetBacklightLevel(app.set.brightness);
     show_tab(TAB_ARTIST);
     last_save = ticks;
+    // the screens fade in from black, like opening the lid
+    setBrightness(3, -16);
+    lid_fade_in = 0;
 }
 
 // Moves a highlight 2/5 of the way to its target per vblank; jumps further
@@ -3302,6 +3309,7 @@ int main(int argc, char **argv)
     // the sound hardware (ARM7 side) reads the ring buffers from main RAM: give
     // it priority, so copying whole screens around can't make it wait
     REG_EXMEMCNT |= ARM7_MAIN_RAM_PRIORITY;
+    setBrightness(3, -16);      // black until the first frame is ready, then it fades in
     gfx_init();
     player_init();
     keysSetRepeat(15, 4);

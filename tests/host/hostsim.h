@@ -20,6 +20,8 @@ typedef struct {
     int starts, stops;
     uint32_t stop_frame;    // set by a test: the sample within the next block a stop reports
     uint16_t last_fade;     // fade_frames of the last stop
+    uint8_t volume;         // the channels' volume (START, VOLUME)
+    int volume_cmds;
     int chimes;             // the chime played (STREAM_CMD_CHIME)
     const int16_t *chime;
     uint32_t chime_bytes;

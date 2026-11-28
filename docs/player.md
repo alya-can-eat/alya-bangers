@@ -68,4 +68,4 @@ The cover of the song on a turning record, with a visualizer.
   - Every star doubles the chance of a song coming next (unrated counts as 3 stars). So 5 stars come up 4× as often as unrated ones.
   - A short queue still plays every song once per round, the good ones just come earlier.
 - Lid closed: the screens fade to dark and the music keeps playing. L/R change songs. (Both can be changed in the settings.)
-- Switching on loads the last song at the same position, paused. With *Play on launch* it keeps playing.
+- Switching on loads the last song at the same position, paused. With *Play on launch* it keeps playing, fading in over 1.5 s. The screens fade in from black, like when you open the lid.

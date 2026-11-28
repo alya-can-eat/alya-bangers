@@ -645,6 +645,11 @@ int main(int argc, char **argv)
     if (argc > 3 && strcmp(argv[3], "demo") == 0)
         return demo();
     check(lib_loaded(), "library.idx loads");
+    check(sim_brightness == -16, "starting: the screens black");
+    run(LID_IN / 2);
+    check(sim_brightness > -16 && sim_brightness < 0, "then fading in");
+    run(LID_IN / 2 + 1);
+    check(sim_brightness == 0, "like opening the lid");
     check(sim_backlight == 5, "backlight set at start");
 
     // ---- Artist tab: KIVARA and Kivara are one artist by default
@@ -1389,8 +1394,16 @@ int main(int argc, char **argv)
     player_stop();
     queue_clear();
     restore();
-    check(player_state() == PLAYER_PLAYING && app_current_track() == saved_track,
-          "Play on launch: launch goes on playing");
+    check(player_state() == PLAYER_PLAYING && app_current_track() == saved_track && sim_hw.volume == 0,
+          "Play on launch: launch goes on playing, from silence");
+    run(START_FADE / 3);
+    uint8_t v_third = sim_hw.volume;
+    run(START_FADE / 3);
+    uint8_t v_two = sim_hw.volume;
+    run(START_FADE / 3 + 4);
+    check(v_third > 0 && v_third < v_two && v_two < replaygain_volume() && sim_hw.volume == replaygain_volume(),
+          "and fades in over 1.5 s, slowly at first, up to the song's volume");
+    check(v_third < replaygain_volume() / 4, "(a third of the way: under a quarter)");
     player_toggle_pause();
     app.set.play_at_start = 0;
     save_now();

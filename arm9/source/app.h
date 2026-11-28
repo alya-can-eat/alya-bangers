@@ -90,7 +90,8 @@
 #define PP_TICKS    10              // play <-> pause morph
 #define KNOB_TICKS  8               // seek knob grows while dragged
 #define LID_OUT     6               // lid closing: fade to black first
-#define LID_IN      18              // lid opening: fade in from black
+#define LID_IN      18              // lid opening (and starting): fade in from black
+#define START_FADE  90              // the music on launch (Play on launch): 1.5 s
 #define KB_TICKS    18              // the keyboard up or down (the results move with it), 0.3 s
 #define SHEET_TICKS 18              // results come up on the top screen while typing, 0.3 s
 #define IM_TICKS    18              // another input method pushes the keyboard out, 0.3 s

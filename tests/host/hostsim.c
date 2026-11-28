@@ -35,9 +35,14 @@ bool fifoSendDatamsg(u32 channel, u32 num_bytes, u8 *data)
             sim_hw.ring_bytes = c.ring_bytes;
             sim_hw.block_frames = c.block_frames;
             sim_hw.timer_divider = c.timer_divider;
+            sim_hw.volume = c.volume;
             sim_hw.generation = c.generation;
             sim_hw.played = 0;
             sim_hw.starts++;
+            break;
+        case STREAM_CMD_VOLUME:
+            sim_hw.volume = c.volume;
+            sim_hw.volume_cmds++;
             break;
         case STREAM_CMD_CHIME:
             sim_hw.chimes++;
