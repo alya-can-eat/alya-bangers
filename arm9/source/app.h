@@ -189,6 +189,7 @@ typedef struct {
 #define ICON_KEYBOARD 0x1F5AE       // 🖮
 #define ICON_CLOCK    0x1F552       // 🕒
 #define ICON_DATE     0x1F4C5       // 📅
+#define TOAST_W       212           // the text in a toast, wider scrolls
 #define ICON_EQ       0xE007        // three sliders (builtin_font.c)
 #define ICON_FOLDER   0x1F5C0       // 🗀
 #define ICON_GAME     0x1F3AE       // 🎮 an .nds in the picker
@@ -222,7 +223,7 @@ typedef struct {
     bool add_mode;
     uint8_t *added;             // bit per track: added while in add mode
     char toast[128];
-    uint32_t toast_until;
+    uint32_t toast_from, toast_until;   // frames: shown from, until
 
     // queue panel
     int q_scroll, q_sel;
@@ -270,6 +271,7 @@ typedef struct {
     int page_t;                 // 0 = the top page .. TAB_TICKS = set_shown (slides in from the right)
     int set_back_sel;           // the top page's highlighted row, for coming back
     int set_scroll[2];          // the top page's and the open page's scroll, pixels
+    bool set_bar_drag;          // its scroll bar (or the picker's) under the stylus
     Paths paths;                // the launcher, the music folder (paths.txt)
     bool picking;               // the picker is wanted (it slides in over the page, and out)
     int pick_t;                 // 0 = the page .. TAB_TICKS = the picker

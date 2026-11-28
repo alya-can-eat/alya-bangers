@@ -47,6 +47,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - The converter's own tests: `cd alya-bangers-dsconv && nix develop -c pytest` (the window's tests run offscreen).
 - The tests need a gcc that can build 32-bit programs (`-m32`), e.g. `nix-shell -p gcc_multi`.
 - The screen test also draws every screen in German and checks that every text exists in both languages and fits its place. All texts of the interface are in `arm9/source/i18n.c` (English and German side by side).
+- Toasts (the short messages at the bottom) have to be readable at once: without a name in them they must fit their box (212 px), and one that would scroll even with a short name filled in ("Night bus") prints a warning. Only "Can't play …" may scroll, with the file's name and why.
 
 ### Generated stuff:
 

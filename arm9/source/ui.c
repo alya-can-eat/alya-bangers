@@ -1636,7 +1636,7 @@ static bool draw_toast(int oy)
     int y = oy + 140;
     gfx_fill(B, 8, y, 228, 20, C_PANEL);
     gfx_rect(B, 8, y, 228, 20, C_ACC);
-    marquee1(B, 16, y + 2, 212, app.toast, C_TEXT, app.frame, false);
+    marquee1(B, 16, y + 2, TOAST_W, app.toast, C_TEXT, app.frame - app.toast_from, false);
     return true;
 }
 
@@ -3165,6 +3165,20 @@ static void theme_body(int dx)
 
 // A settings page with its left edge at dx (pages slide in from the right).
 // lit: the D-pad highlight is on this page.
+// A settings page longer than the screen: the scroll bar of the lists, right
+// of the rows (they end at SCROLL_X), under the header.
+static void set_scrollbar(int dx, int scroll, int max)
+{
+    if (max <= 0)
+        return;
+    int y0 = 20, h = SCREEN_H - y0;
+    gfx_fill(B, dx + SCROLL_X, y0, SCREEN_W - SCROLL_X, h, C_PANEL);
+    int th = h * h / (h + max);
+    if (th < 12)
+        th = 12;
+    gfx_fill(B, dx + SCROLL_X + 3, y0 + (h - th) * scroll / max, 6, th, app.set_bar_drag ? C_ACC : C_ACC_DIM);
+}
+
 static void settings_header(int page, int dx)
 {
     gfx_fill(B, dx, 0, SCREEN_W, 20, C_PANEL);
@@ -3237,13 +3251,7 @@ static bool settings_page(int page, int dx, bool lit)
                     text_r(B, dx + 232, y + ty, txt(S_LATER), C_FAINT);
             }
         }
-        int max = ui_set_max_scroll(page);
-        if (max > 0)
-        {
-            // where in the page this is
-            int room = SCREEN_H - SET_Y, h = room + max, th = room * room / h;
-            gfx_fill(B, dx + SCREEN_W - 3, SET_Y + (room - th) * sc / max, 2, th, C_ACC_DIM);
-        }
+        set_scrollbar(dx, sc, ui_set_max_scroll(page));
     }
     gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);
     settings_header(page, dx);
@@ -3318,12 +3326,7 @@ static void pick_page(int dx, bool lit)
     if (app.pick_n == 0)
         centered_at(dx + SCREEN_W / 2, SET_Y + first * SET_H + 24,
                     txt(app.pick_for == PICK_MUSIC ? S_PICK_NO_DIRS : S_PICK_NONE), C_DIM, 1);
-    int max = ui_pick_max_scroll();
-    if (max > 0)
-    {
-        int room = SCREEN_H - SET_Y, th = room * room / (room + max);
-        gfx_fill(B, dx + SCREEN_W - 3, SET_Y + (room - th) * sc / max, 2, th, C_ACC_DIM);
-    }
+    set_scrollbar(dx, sc, ui_pick_max_scroll());
 
     // the header: ‹ (up a folder), the folder (the end of its path, if long), ×
     gfx_clip(B, dx, 0, SCREEN_W, SCREEN_H);

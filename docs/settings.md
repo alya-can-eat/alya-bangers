@@ -33,7 +33,7 @@ Every page has an icon, so you can find the language without being able to read 
 
 ## Details:
 
-- Settings (⋮): the pages slide in from the right. ‹, B or Left go back, A or Right open one. A page longer than the screen scrolls: drag it, or the D-pad keeps the highlight in sight.
+- Settings (⋮): the pages slide in from the right. ‹, B or Left go back, A or Right open one. A page longer than the screen gets a scroll bar on the right, like the lists; the D-pad keeps the highlight in sight.
 - The globe (🌐) leads to Regional, then Language.
 - Pages:
   - Playback: ReplayGain, play on launch, pause when the lid closes, L/R skip with the lid closed, low battery sound

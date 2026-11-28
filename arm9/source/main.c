@@ -71,7 +71,11 @@ static void toast(const char *fmt, ...)
     vsnprintf(app.toast, sizeof(app.toast), fmt, ap);
     va_end(ap);
     utf8_trim_partial(app.toast);
-    app.toast_until = app.frame + TOAST_FRAMES;
+    // longer than its box (a name in it): it scrolls through once from the
+    // start, waiting a second first, and stays until the end has been seen
+    int over = font_text_width(app.toast) - TOAST_W;
+    app.toast_from = app.frame;
+    app.toast_until = app.frame + (over > 0 ? TOAST_FRAMES / 2 + over + TOAST_FRAMES / 2 : TOAST_FRAMES);
     redraw = true;
 }
 
@@ -1868,7 +1872,7 @@ static void set_change(int id)
         uint8_t *on = id == SET_LAUNCH_BUTTON ? &app.set.launch_button : &app.set.launch_hold;
         *on ^= 1;
         if (*on && !app.paths.launcher[0])
-            toast("%s", txt(S_NO_LAUNCHER));    // no use yet: which .nds
+            toast("%s", txt(S_PICK_LAUNCHER_FIRST));    // no use yet: which .nds
         break;
     }
     case SET_SHUFFLE_W:
@@ -2585,6 +2589,22 @@ static int *set_scroll_now(void)
     return &app.set_scroll[app.set_page == PAGE_TOP ? 0 : 1];
 }
 
+static int set_max_scroll_now(void)
+{
+    return app.picking ? ui_pick_max_scroll() : ui_set_max_scroll(app.set_page);
+}
+
+// The settings page's (or the picker's) scroll bar at y: like the lists',
+// a row at a time.
+static void set_scroll_to_y(int y)
+{
+    int max = set_max_scroll_now(), steps = (max + SET_H - 1) / SET_H;
+    int s = (y - 20) * (steps + 1) / (SCREEN_H - 20);
+    s = s < 0 ? 0 : (s > steps ? steps : s);
+    *(app.picking ? &app.pick_scroll : set_scroll_now()) = s * SET_H < max ? s * SET_H : max;
+    redraw = true;
+}
+
 // The settings page (or the picker) is in place, not sliding.
 static bool settings_still(void)
 {
@@ -2606,10 +2626,15 @@ static void touch_down(int x, int y)
         redraw = true;
         return;
     }
-    fdrag_from = app.overlay == OV_PL_ADD ? app.pl_scroll
-                 : (app.overlay == OV_SETTINGS ? (app.picking ? app.pick_scroll : *set_scroll_now())
-                    : *fpage_scroll());
-    if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
+    fdrag_from = app.overlay == OV_PL_ADD ? app.pl_scroll : *fpage_scroll();
+    if (app.overlay == OV_SETTINGS && x >= SCROLL_X && y >= 20 && settings_still() && set_max_scroll_now() > 0)
+    {
+        // a page longer than the screen: its scroll bar, like the lists'
+        app.set_bar_drag = true;
+        set_scroll_to_y(y);
+        tp.held = true;             // not a tap
+    }
+    else if (app.overlay == OV_NONE && oy == 0 && x >= SCROLL_X && y >= list_y() && y < BAR_Y && app.n_items > list_rows()
         && !(app.tab == TAB_SEARCH && app.kb_up))
     {
         app.scroll_drag = true;
@@ -2673,16 +2698,6 @@ static void touch_move(int x, int y)
         redraw = true;
         return;
     }
-    if (app.overlay == OV_SETTINGS && tp.moved && !app.slider_drag && app.theme_drag == CP_NONE
-        && tp.y0 >= 20 && settings_still())
-    {
-        // drag a page that's longer than the screen (or the picker)
-        int max = app.picking ? ui_pick_max_scroll() : ui_set_max_scroll(app.set_page);
-        int s = fdrag_from + (tp.y0 - y);
-        *(app.picking ? &app.pick_scroll : set_scroll_now()) = s < 0 ? 0 : (s > max ? max : s);
-        redraw = true;
-        return;
-    }
     if (app.overlay == OV_FILTER && app.fpage >= 0 && tp.moved)
     {
         // drag the choices
@@ -2695,6 +2710,8 @@ static void touch_move(int x, int y)
     }
     if (app.scroll_drag)
         scroll_to_y(y);
+    else if (app.set_bar_drag)
+        set_scroll_to_y(y);
     else if (app.seek_drag)
         app.seek_preview_ms = seek_ms_at(x);
     else if (app.theme_drag != CP_NONE)
@@ -2779,6 +2796,8 @@ static void touch_up(void)
     }
     if (app.scroll_drag)
         app.scroll_drag = false;
+    else if (app.set_bar_drag)
+        app.set_bar_drag = false;
     else if (app.seek_drag)
     {
         app.seek_drag = false;
@@ -2926,7 +2945,7 @@ static void start_key(uint32_t down, uint32_t held)
     else if (!used && !hinted && ticks - since >= HOLD_START / 3)
     {
         hinted = true;
-        toast(txt(S_KEEP_HOLDING), path_basename(app.paths.launcher));
+        toast("%s", txt(S_KEEP_HOLDING));     // short: it shows for only 2/3 s
     }
 }
 
@@ -3187,7 +3206,7 @@ static void launch_start(void)
         return;
     if (!app.paths.launcher[0] || stat(app.paths.launcher, &st) != 0)
     {
-        toast("%s", txt(S_NO_LAUNCHER));
+        toast("%s", txt(app.paths.launcher[0] ? S_NO_LAUNCHER : S_PICK_LAUNCHER_FIRST));    // deleted, or none yet
         return;
     }
     if (!boot_ready())
@@ -3195,7 +3214,7 @@ static void launch_start(void)
         toast("%s", txt(S_NO_PICO));
         return;
     }
-    toast(txt(S_LAUNCHING), path_basename(app.paths.launcher));
+    toast("%s", txt(S_LAUNCHING));
     player_fade_out(LAUNCH_FADE);
     app.launch_t = 1;
 }

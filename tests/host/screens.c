@@ -22,6 +22,7 @@ static const char *out_dir;
 static int16_t blk_l[4096], blk_r[4096];
 static uint32_t play_clock;     // vblanks since the last simulated block
 static int failures;
+static int toast_warnings;     // toasts that scroll even with a short name in them
 static bool film_on;        // ./screens card out frames: also write every frame of the song changes
 
 // One vblank. The simulated ARM7 finishes a 4096-frame block every 7.5 vblanks.
@@ -2349,6 +2350,37 @@ int main(int argc, char **argv)
             fit &= font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
             for (int i = S_LIB_MISSING; i <= S_PICK_MUSIC_WHERE; i++)
                 fit &= font_text_width(txt(i)) <= SCREEN_W - 16;
+            // toasts: read at once, without scrolling. Without a name in them
+            // they must fit; with one (a typical short name filled in) a warning
+            // says which would scroll anyway
+            for (int i = S_CANT_PLAY; i <= S_MUSIC_NOW + 1; i++)
+            {
+                int id = i <= S_MUSIC_NOW ? i : S_EQ_FULL;
+                char filled[256] = "";
+                bool named = false;
+                for (const char *p = txt(id); *p; p++)
+                {
+                    if (p[0] == '%' && (p[1] == 's' || p[1] == 'd'))
+                    {
+                        strcat(filled, p[1] == 's' ? "Night bus" : "12");
+                        named = true;
+                        p++;
+                    }
+                    else
+                        strncat(filled, p, 1);
+                }
+                int w = font_text_width(filled);
+                if (w > TOAST_W && !named)
+                {
+                    printf("  too wide for a toast (%d px of %d): %s\n", w, TOAST_W, filled);
+                    fit = false;
+                }
+                else if (w > TOAST_W && id != S_CANT_PLAY)     // that one: the file's name and why, it may scroll
+                {
+                    printf("  warning: this toast scrolls even with a short name (%d px of %d): %s\n", w, TOAST_W, filled);
+                    toast_warnings++;
+                }
+            }
             // equalizer: the header with "· edited", the bands under their sliders,
             // Flat in the list, the buttons side by side, the question's answers, OK on its key
             fit &= 8 + font_text_width(txt(S_EQ)) + font_text_width(" · ") + font_text_width(txt(S_EQ_EDITED)) <= 224
@@ -2435,7 +2467,7 @@ int main(int argc, char **argv)
         shot("21_de_rowmenu");
         tap(150, ui_rowmenu_y(LIST_Y + 1 * ROW_H) + 20 + 2 * 16 + 8);
         check(strcmp(app.toast, "Eingereiht") == 0 || strstr(app.toast, "Titel eingereiht") != NULL
-              || strcmp(app.toast, "Die Warteschlange ist voll.") == 0, "German toast");
+              || strcmp(app.toast, txt(S_QUEUE_FULL)) == 0, "German toast");
         shot("21_de_toast");
         run(200);
         slide_to(true);
@@ -2499,8 +2531,14 @@ int main(int argc, char **argv)
         hold(100, 150, 2);
         drag_to(100, 110, 5);
         release();
-        check(app.set_scroll[0] == SET_H && app.set_page == PAGE_TOP, "dragged up: Misc in sight, nothing opened");
+        check(app.set_scroll[0] == 0 && app.set_page == PAGE_TOP, "dragging the rows doesn't scroll (only the bar does)");
+        hold(250, 40, 2);
+        check(app.set_scroll[0] == 0 && app.set_bar_drag, "the scroll bar at the top: the page's start");
+        drag_to(250, 180, 5);
+        check(app.set_scroll[0] == SET_H, "dragged down the bar: Misc in sight");
         shot("13l_settings_scrolled");
+        release();
+        check(!app.set_bar_drag && app.set_page == PAGE_TOP, "let go: nothing opened");
         check(ui_set_row_at(PAGE_TOP, SET_Y + 6 * SET_H + 4) == 7 && ui_set_row_at(PAGE_TOP, 10) == -1,
               "taps find the scrolled rows, not under the header");
         tap(100, SET_Y + 6 * SET_H + 10);
@@ -2509,7 +2547,7 @@ int main(int argc, char **argv)
         check(!app.set.launch_button && !app.set.launch_hold && !app.paths.launcher[0], "no launcher, both off by default");
         shot("13m_misc");
         tap(100, SET_Y + 1 * SET_H + 10);
-        check(app.set.launch_button && strcmp(app.toast, txt(S_NO_LAUNCHER)) == 0, "🚀 on without a launcher: which .nds");
+        check(app.set.launch_button && strcmp(app.toast, txt(S_PICK_LAUNCHER_FIRST)) == 0, "🚀 on without a launcher: which .nds");
         tap(214, 8);
         check(app.launch_t == 0, "no 🚀 in the header yet");
 
@@ -2546,10 +2584,8 @@ int main(int argc, char **argv)
         shot("13q_picker_empty");
         press(KEY_B);
         check(strcmp(app.pick_dir, dir) == 0 && app.menu_sel == 1, "B: up again, the folder highlighted");
-        hold(100, 150, 2);
-        drag_to(100, 20, 8);
-        release();
-        check(app.pick_scroll == ui_pick_max_scroll() && app.picking, "drag: to the end");
+        tap(250, SCREEN_H - 4);
+        check(app.pick_scroll == ui_pick_max_scroll() && app.picking, "the scroll bar's bottom: to the end");
         shot("13r_picker_scrolled");
         tap(100, SCREEN_H - 10);
         snprintf(chosen, sizeof(chosen), "%s/TestMenu.nds", dir);
@@ -2573,7 +2609,13 @@ int main(int argc, char **argv)
         sim_pico = true;
         sim_booted[0] = 0;
         tap(214, 8);
-        check(app.launch_t > 0 && strstr(app.toast, "TestMenu.nds") != NULL, "🚀: starting TestMenu.nds");
+        check(app.launch_t > 0 && strcmp(app.toast, txt(S_LAUNCHING)) == 0, "🚀: starting the launcher");
+        {
+            int over = font_text_width(app.toast) - TOAST_W;
+            check(over <= 0 ? app.toast_until - app.toast_from == TOAST_FRAMES
+                            : app.toast_until - app.toast_from == (uint32_t)(TOAST_FRAMES + over),
+                  "a toast too long for its box stays until it has scrolled through");
+        }
         run(LAUNCH_FADE / 2);
         check(sim_brightness < 0 && sim_brightness > -16 && sim_hw.volume < vol, "half way: darker, quieter");
         uint32_t taps_before = app.set.launch_hold;
@@ -2615,7 +2657,7 @@ int main(int argc, char **argv)
         app_tick();
         for (int i = 0; i < HOLD_START / 2; i++)
             tick(KEY_START);
-        check(strstr(app.toast, "TestMenu.nds") != NULL && app.launch_t == 0, "held a moment: keep holding");
+        check(strcmp(app.toast, txt(S_KEEP_HOLDING)) == 0 && app.launch_t == 0, "held a moment: keep holding");
         shot("13s_keep_holding");
         for (int i = 0; i < HOLD_START / 2 + 1; i++)
             tick(KEY_START);
@@ -2789,6 +2831,8 @@ int main(int argc, char **argv)
         }
     }
 
+    if (toast_warnings)
+        printf("%d toast(s) longer than their box: they scroll (see the warnings)\n", toast_warnings);
     printf("%s\n", failures ? "SOME CHECKS FAILED" : "all checks passed");
     return failures != 0;
 }
