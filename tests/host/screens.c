@@ -1257,7 +1257,7 @@ int main(int argc, char **argv)
     check(app.pride_open && !app.pride_bar_drag && app.pride_scroll == PRIDE_COUNT - PRIDE_ROWS, "dragged to the end");
     shot("13m_pride_end");
     tap(PRIDE_X0 + 60, PRIDE_Y + 20 + (PRIDE_ROWS - 1) * 16 + 8);
-    check(app.set.pride == PRIDE_DEMIGENDER, "the last one: Demigender");
+    check(app.set.pride == PRIDE_ALLY, "the last one: Ally");
     run(OV_TICKS + 2);
     // by D-pad: Pride after the three colours; A: the flags, the one in use highlighted
     theme_select(2);
@@ -1267,9 +1267,9 @@ int main(int argc, char **argv)
     press(KEY_RIGHT);
     check(app.theme_hsv.h == hue && app.theme.text == theme_default.text, "Right does nothing there");
     press(KEY_A);
-    check(app.pride_open && app.menu_sel == PRIDE_DEMIGENDER && app.pride_scroll == PRIDE_COUNT - PRIDE_ROWS,
+    check(app.pride_open && app.menu_sel == PRIDE_ALLY && app.pride_scroll == PRIDE_COUNT - PRIDE_ROWS,
           "A: the flags, the one in use highlighted");
-    for (int i = 0; i < PRIDE_DEMIGENDER - PRIDE_TRANS; i++)
+    for (int i = 0; i < PRIDE_ALLY - PRIDE_TRANS; i++)
         press(KEY_UP);
     check(app.menu_sel == PRIDE_TRANS && app.pride_scroll <= PRIDE_TRANS
           && app.pride_scroll + PRIDE_ROWS > PRIDE_TRANS, "Up to Trans: in sight");

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Pride flags: horizontal stripes, and for some a shape on the left (the
-// Progress chevron with the intersex circle, the intersex circle, the
-// demisexual triangle). Drawn at any size from their colours; small, so the
+// Pride flags: horizontal stripes, and for some a shape (the Progress
+// chevron with the intersex circle, the intersex circle, the demisexual
+// triangle, the ally flag's rainbow Λ). Drawn at any size from their colours; small, so the
 // 5-stripe lesbian flag and integer maths.
 
 #include <stdlib.h>
@@ -35,6 +35,7 @@ static const Stripes stripes[PRIDE_COUNT] = {
     [PRIDE_AROACE] = { 5, { 0 }, { 0xE28C00, 0xECCD00, 0xFFFFFF, 0x62AEDC, 0x203856 } },
     [PRIDE_DEMISEXUAL] = { 3, { 3, 1, 3 }, { 0xFFFFFF, 0x6E0070, 0xD2D2D2 } },
     [PRIDE_DEMIGENDER] = { 7, { 0 }, { 0x7F7F7F, 0xC3C3C3, 0xFBFF75, 0xFFFFFF, 0xFBFF75, 0xC3C3C3, 0x7F7F7F } },
+    [PRIDE_ALLY] = { 6, { 0 }, { 0x000000, 0xFFFFFF, 0x000000, 0xFFFFFF, 0x000000, 0xFFFFFF } },
 };
 
 #define PURPLE 0x7902AA     // the intersex circle
@@ -73,6 +74,14 @@ uint16_t pride_color(int flag, int x, int y, int w, int h)
     }
     if (flag == PRIDE_DEMISEXUAL && u + mid * 9 / 10 < 360)
         return RGB(0x000000);       // the black triangle
+    if (flag == PRIDE_ALLY && v > 60)
+    {
+        // the rainbow Λ over the stripes: red outside, violet inside
+        static const uint32_t rainbow[6] = { 0xE40303, 0xFF8C00, 0xFFED00, 0x008026, 0x24408E, 0x732982 };
+        int outer = (v - 60) * 45 / 100 + 110, x = abs(u - 500);
+        if (x <= outer && x > outer - 180)
+            return RGB(rainbow[(outer - x) / 30]);
+    }
     const Stripes *s = &stripes[flag];
     int total = 0;
     for (int i = 0; i < s->n; i++)
