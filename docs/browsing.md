@@ -57,4 +57,4 @@ Find your music by artist, album, song title or folder.
   - The sort button (⇅) sorts a playlist for showing (A→Z, Z→A, by year); its own order stays and comes back with *Playlist order*. Moving songs works in its own order.
   - Up to 64 playlists, 4'000 songs each.
   - From the PC: `.m3u` and `.m3u8` files in your music folder go onto the card when you convert, if the card doesn't have one with that name yet. After that the card's copy is the one that counts: what you change on the DS stays, changes on the PC don't come along.
-  - Kept as `.m3u` files in `/_nds/alya-bangers/playlists/`, the songs as paths below the music folder. They stay when you convert your music again; a song that's gone stays in the file, in case it comes back.
+  - Kept as `.m3u` files in the music folder's `.dsmusic/playlists/`, the songs as paths below it: each music folder (Settings › Browsing) has its own. The ones from before, in `/_nds/alya-bangers/playlists/`, move there by themselves. They stay when you convert your music again; a song that's gone stays in the file, in case it comes back.

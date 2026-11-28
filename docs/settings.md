@@ -43,7 +43,7 @@ Every page has an icon, so you can find the language without being able to read 
     - Dither (10 bits): the DS's rounding becomes a quiet hiss instead of a harsh edge.
     - How both work is under [How playback works](how-it-works.md).
   - Browsing: case-sensitive names, scroll all long rows, the music folder
-    - Music folder: where the converted music is (`/music` if you haven't chosen one). Tap it, go to the folder, then *Use this folder*. That row is only lit where there is converted music (a `.dsmusic` folder with `library.idx` in it). The new music loads right away: what played stops, the settings close and show its artists. The folder is kept in `/_nds/alya-bangers/paths.txt`.
+    - Music folder: where the converted music is (`/music` if you haven't chosen one). Tap it, go to the folder, then *Use this folder*. That row is only lit where there is converted music (a `.dsmusic` folder with `library.idx` in it). The new music loads right away: what played stops, the settings close and show its artists. Each music folder has its own playlists. The folder is kept in `/_nds/alya-bangers/paths.txt`.
   - Player: time on the right (length or time left), cover background, shuffle by rating
   - Theme:
     - The app's three colours (accent, background, text) on a colour triangle. The ring picks the hue, the triangle how strong and bright it is.

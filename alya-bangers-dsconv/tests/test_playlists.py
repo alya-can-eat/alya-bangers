@@ -19,7 +19,7 @@ def small_library(library, tmp_path):
 
 
 def card_playlists(card: Path) -> Path:
-    return card.parent / "_nds" / "alya-bangers" / "playlists"
+    return card / ".dsmusic" / "playlists"
 
 
 def test_new_playlists_go_on_the_card(library, tmp_path):
@@ -57,13 +57,14 @@ def test_new_playlists_go_on_the_card(library, tmp_path):
     assert (pl / "Night drive.m3u").read_text(encoding="utf-8").splitlines() == night
 
 
-def test_no_card_no_playlists(library, tmp_path):
+def test_any_music_folder_has_its_own(library, tmp_path):
+    # not called "music", not at the card's top: its playlists go with it
     src = small_library(library, tmp_path)
     (src / "a.m3u").write_text("Singles/Kid 🎵 Song.opus\n", encoding="utf-8")
-    out = tmp_path / "out" / "converted"
+    out = tmp_path / "card" / "Audio" / "Musik"
     assert run_convert(src, out, yes=True, jobs=2, quiet=True) == 0
-    assert not (out.parent / "_nds").exists()
-    assert "not put on the card" in (out / ".dsmusic" / "last-run.txt").read_text(encoding="utf-8")
+    assert (card_playlists(out) / "a.m3u").read_text(encoding="utf-8").splitlines()[2] == f"{SINGLES}/Kid 🎵 Song.dsa"
+    assert not (tmp_path / "card" / "_nds").exists() and not (out.parent / "_nds").exists()
 
 
 def test_names_like_the_ds():

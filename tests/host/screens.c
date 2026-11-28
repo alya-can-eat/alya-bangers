@@ -629,9 +629,9 @@ int main(int argc, char **argv)
     remove(eq_file);
     remove(eq_new);
     eqp_set_file(eq_file);
-    // playlists: a folder of their own, empty at the start
+    // playlists: the music folder's own, none at the start (not even the folder)
     static char pl_dir[600];
-    snprintf(pl_dir, sizeof(pl_dir), "%s/playlists", out_dir);
+    snprintf(pl_dir, sizeof(pl_dir), "%s/.dsmusic/playlists", argv[1]);
     DIR *pd = opendir(pl_dir);
     for (struct dirent *e; pd && (e = readdir(pd)) != NULL;)
     {
@@ -642,7 +642,7 @@ int main(int argc, char **argv)
     }
     if (pd)
         closedir(pd);
-    pl_set_dir(pl_dir);
+    rmdir(pl_dir);
 
     gfx_init();
     player_init();
@@ -651,6 +651,31 @@ int main(int argc, char **argv)
     if (argc > 3 && strcmp(argv[3], "demo") == 0)
         return demo();
     check(lib_loaded(), "library.idx loads");
+    {
+        // playlists are kept in the music folder; the ones of before (one
+        // folder for the card) move there once, if it has none yet
+        char old[700], f[800], moved[800];
+        snprintf(old, sizeof(old), "%s/old_playlists", out_dir);
+        mkdir(old, 0755);
+        snprintf(f, sizeof(f), "%s/Old one.m3u", old);
+        FILE *of = fopen(f, "wb");
+        fputs("#EXTM3U\n#PLAYLIST:Old one\n", of);
+        fclose(of);
+        pl_move_old(old);
+        snprintf(moved, sizeof(moved), "%s/Old one.m3u", pl_dir);
+        struct stat st;
+        check(stat(moved, &st) == 0 && stat(old, &st) != 0, "the old playlists folder moves into the music folder's");
+        mkdir(old, 0755);
+        of = fopen(f, "wb");
+        fclose(of);
+        pl_move_old(old);
+        check(stat(f, &st) == 0, "but only once: the music folder has its own now");
+        remove(f);
+        rmdir(old);
+        remove(moved);
+        pl_load();
+        check(pl_count() == 0, "(none left for the tests)");
+    }
     check(sim_brightness == -16, "starting: the screens black");
     run(LID_IN / 2);
     check(sim_brightness > -16 && sim_brightness < 0, "then fading in");

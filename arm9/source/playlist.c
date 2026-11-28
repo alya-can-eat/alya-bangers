@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "library.h"
 #include "playlist.h"
@@ -26,13 +27,56 @@ typedef struct {
     char *missing;              // paths not in the library, one per line (kept for the file)
 } Playlist;
 
-static char dir_path[256] = "/_nds/alya-bangers/playlists";
+static char dir_path[300];         // the music folder's (main.c): <music>/.dsmusic/playlists
 static Playlist pls[PL_MAX];
 static int n_pls;
 
 void pl_set_dir(const char *dir)
 {
     snprintf(dir_path, sizeof(dir_path), "%s", dir);
+}
+
+// Playlists from where they were kept before (one folder for the card) into
+// this music folder's, once: only if it has none yet.
+void pl_move_old(const char *old_dir)
+{
+    DIR *d = opendir(dir_path);
+    if (d != NULL)
+    {
+        closedir(d);
+        return;                         // this music folder has its own already
+    }
+    d = opendir(old_dir);
+    if (d == NULL)
+        return;
+    struct dirent *e;
+    char from[600], to[600];
+    while ((e = readdir(d)) != NULL)
+    {
+        size_t l = strlen(e->d_name);
+        if (l < 5 || !casefold_equal(e->d_name + l - 4, ".m3u"))
+            continue;
+        snprintf(from, sizeof(from), "%s/%s", old_dir, e->d_name);
+        snprintf(to, sizeof(to), "%s/%s", dir_path, e->d_name);
+        make_dirs_for(to);
+        if (rename(from, to) == 0)
+            continue;
+        // another drive: copied, then the old one goes
+        FILE *in = fopen(from, "rb"), *out = in ? fopen(to, "wb") : NULL;
+        bool ok = out != NULL;
+        char buf[512];
+        size_t n;
+        while (ok && (n = fread(buf, 1, sizeof(buf), in)) > 0)
+            ok = fwrite(buf, 1, n, out) == n;
+        if (in)
+            fclose(in);
+        if (out)
+            ok = fclose(out) == 0 && ok;
+        if (ok)
+            remove(from);
+    }
+    closedir(d);
+    rmdir(old_dir);                     // empty now (if not, it stays)
 }
 
 static void free_one(Playlist *p)

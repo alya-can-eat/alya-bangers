@@ -25,9 +25,10 @@ Next time only new and changed songs get converted.
   - Linux: allow executing it first (in the file's properties, or `chmod +x`).
   - NixOS: AppImages don't run as they are there. The flake is easier: `nix run github:alya-can-eat/alya-bangers?dir=alya-bangers-dsconv`, or `nix profile install` it for an entry in the app launcher.
 - Pre-release builds are in [GitHub Actions](../../../actions/workflows/release.yml).
-- A card that already has music from it is found by itself.
+- A card that already has music from it is found by itself: the music folder you chose on the DS (Settings › Browsing), else `/music`.
+- *Create music folder*: the songs go into a new `music` folder in the one you chose (the card's top, say). Off: straight into the chosen folder, for a music folder of your own (`/Musik`, say). It starts on, and off when you choose a folder that is a music folder already (converted before, or called `music`), so there's no `music/music`.
 - Two files that would become the same song (like a FLAC and an Opus of it): it asks which one goes on the card and suggests the better one. The answer is remembered.
-- Playlists (`.m3u`, `.m3u8`) in your music folder go onto the card for the DS app, if the card doesn't have one with that name yet. Songs are found by their path, also in playlists made on another computer. More in [Browsing](browsing.md#details).
+- Playlists (`.m3u`, `.m3u8`) in your music folder go onto the card for the DS app, into that music folder's own playlists, if it doesn't have one with that name yet. Songs are found by their path, also in playlists made on another computer. More in [Browsing](browsing.md#details).
 - *Remove songs that are gone from the music folder*: also deletes the songs on the card you don't have anymore.
 - Stop finishes the songs in progress. Next time it goes on from there.
 - English or German, like the computer.
@@ -40,6 +41,7 @@ Next time only new and changed songs get converted.
 /music/                      <- what the converter writes
 /music/.dsmusic/font.bin
 /music/.dsmusic/library.idx
+/music/.dsmusic/playlists/   <- its playlists (each music folder has its own)
 /_nds/alya-bangers/state.bin <- written by the player
 /_nds/alya-bangers/stats.bin <- ratings and plays from the DS
 /_nds/alya-bangers/eq.bin    <- your equalizer profiles

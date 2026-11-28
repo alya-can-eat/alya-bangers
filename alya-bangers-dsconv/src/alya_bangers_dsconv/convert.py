@@ -23,7 +23,7 @@ from .dsa import DsaWriter, encode_tags, replaygain
 from .fat32 import fat_key
 from .manifest import Manifest
 from .plan import Plan, Source, build_plan
-from .playlists import bring_over, card_dir
+from .playlists import bring_over
 from .report import Report
 from .tags import best_picture, read_tags
 
@@ -499,13 +499,10 @@ def execute(prep: Prepared, *, delete: bool = False, jobs: int | None = None,
 
     if prep.playlists:
         hooks.say("Playlists…")
-        if card_dir(dst_root) is None:
-            report.warn("(playlists)", "not put on the card: the output isn't a card's music folder")
-        else:
-            try:
-                report.playlists = bring_over(prep.playlists, src_root, dst_root, prep.dest_by_rel)
-            except OSError as e:
-                report.warn("(playlists)", f"not put on the card: {e}")
+        try:
+            report.playlists = bring_over(prep.playlists, src_root, dst_root, prep.dest_by_rel)
+        except OSError as e:
+            report.warn("(playlists)", f"not put on the card: {e}")
 
     report.finish(time.monotonic() - prep.t0, delete=delete)
     (dst_root / DATA_DIR).mkdir(exist_ok=True)

@@ -3335,6 +3335,9 @@ static void load_library(void)
         snprintf(path, sizeof(path), "%s/.dsmusic/library.idx", music_root);
         lib_load(path, &app.lib_error);
     }
+    // its playlists: its own, the songs are paths below it
+    snprintf(path, sizeof(path), "%s/.dsmusic/playlists", music_root[0] ? music_root : "/music");
+    pl_set_dir(path);
     // room for any list: in search, every artist, album and song can be a result
     item_cap = 2 * (int)lib_track_count() + (int)lib_album_count() + 8;
     tracks_cap = (int)lib_track_count() + 1;
@@ -3396,6 +3399,8 @@ static void app_init(void)
     app.key_down = app.acc_key = app.key_flash = -1;
     app.fpage = app.fkind = app.fbase = -1;
     app.pl = PL_FOLDERS;
+    if (lib_loaded())
+        pl_move_old("/_nds/alya-bangers/playlists");     // where they were kept before
     pl_load();
     app.artist = -1;
     app.album = LIB_NONE;

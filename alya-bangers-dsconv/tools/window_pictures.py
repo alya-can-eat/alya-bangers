@@ -30,7 +30,9 @@ def main() -> None:
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp / "settings"))
     app = gui.make_app()
     w = gui.Window()
-    w.src, w.card, w.found_card = src, tmp / "DSPICO" / "music", True
+    w.make_music.setChecked(False)      # found by itself: the card's music folder
+    w.src, w.card_dir, w.found_card = src, tmp / "DSPICO" / "music", True
+    w._set_output()
     w._options_changed()
     w.show()
 

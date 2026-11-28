@@ -15,7 +15,12 @@
 #define PL_NAME  32             // UTF-8, with its 0
 #define PL_SONGS 4000           // songs in one
 
+// Where they are kept: in the music folder, <music>/.dsmusic/playlists, so each
+// music folder has its own (the songs are paths below it).
 void pl_set_dir(const char *dir);
+// Before, one folder for the card (/_nds/alya-bangers/playlists): moved into
+// this music folder's once, if it has none yet.
+void pl_move_old(const char *old_dir);
 // Reads every playlist (after the library is loaded).
 void pl_load(void);
 

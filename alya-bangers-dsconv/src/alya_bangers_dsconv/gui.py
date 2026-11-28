@@ -59,6 +59,7 @@ TEXTS = {
         "music": "Music folder", "card": "DS card", "choose": "Choose…",
         "not_chosen": "not chosen yet", "free": "{0} free", "found": "found by itself",
         "remove": "Remove songs that are gone from the music folder",
+        "make_music": "Create music folder",
         "pick_both": "Choose your music folder and the DS card.",
         "ready": "Convert first checks what's new.",
         "convert": "Convert", "start": "Start", "stop": "Stop", "stopping": "Stopping after the songs in progress…",
@@ -91,6 +92,7 @@ TEXTS = {
         "music": "Musikordner", "card": "DS-Karte", "choose": "Wählen…",
         "not_chosen": "noch nicht gewählt", "free": "{0} frei", "found": "von selbst gefunden",
         "remove": "Songs entfernen, die nicht mehr im Musikordner sind",
+        "make_music": "Musikordner erstellen",
         "pick_both": "Wähle deinen Musikordner und die DS-Karte.",
         "ready": "Konvertieren prüft zuerst, was neu ist.",
         "convert": "Konvertieren", "start": "Start", "stop": "Stopp",
@@ -146,10 +148,37 @@ def minutes(sec: float) -> str:
 
 # --------------------------------------------------------------- card ----
 
-def output_for(chosen: Path) -> Path:
-    """Where the songs go when this folder was chosen: its music folder,
-    unless it is one already."""
-    return chosen if chosen.name.lower() == "music" else chosen / "music"
+def output_for(chosen: Path, make_music: bool) -> Path:
+    """Where the songs go when this folder was chosen: a music folder made in
+    it (Create music folder), or the folder itself."""
+    return chosen / "music" if make_music else chosen
+
+
+def wants_music_folder(chosen: Path) -> bool:
+    """Create music folder, as it starts when a folder is chosen: not in one
+    that is a music folder already (converted before, or called music), so
+    there's no music/music."""
+    return not (chosen.name.lower() == "music" or (chosen / DATA_DIR).is_dir())
+
+
+DS_PATHS = ("_nds", "alya-bangers", "paths.txt")
+
+
+def ds_music_folder(top: Path) -> Path | None:
+    """The music folder the DS app was told to use (Settings › Browsing),
+    from its paths.txt on the card; None if it uses the usual /music."""
+    try:
+        text = top.joinpath(*DS_PATHS).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("music="):
+            # "/Musik", or with the DS's drive: "fat:/Musik", "sd:/Musik"
+            rel = line[6:].strip().split(":/", 1)[-1].strip("/")
+            d = top / rel if rel else None
+            if d is not None and (d / DATA_DIR).is_dir():
+                return d
+    return None
 
 
 def _mount_points() -> list[Path]:
@@ -178,6 +207,10 @@ def find_cards() -> list[Path]:
     found = []
     for m in _mount_points():
         try:
+            chosen_on_ds = ds_music_folder(m)
+            if chosen_on_ds is not None:
+                found.append(chosen_on_ds)
+                continue
             for name in ("music", "Music", "MUSIC"):
                 if (m / name / DATA_DIR).is_dir():
                     found.append(m / name)
@@ -527,6 +560,10 @@ class Window(QWidget):
         body.addLayout(self._row(label(T["card"]), self.card_btn))
         body.addWidget(self.card_path)
         body.addWidget(self.card_free)
+        # a music folder in the chosen one, or the chosen one is it
+        self.make_music = Toggle()
+        self.make_music.toggled.connect(self._make_music_changed)
+        body.addLayout(self._row(label(T["make_music"]), self.make_music))
         body.addWidget(line())
 
         # remove songs that are gone
@@ -583,21 +620,33 @@ class Window(QWidget):
     def _load(self) -> None:
         s = self.settings
         src = s.value("music", "")
-        card = s.value("card", "")
+        # the folder chosen for the card and Create music folder; saved before
+        # these two: the output itself ("card"), so nothing to create
+        chosen = s.value("card_dir", "") or s.value("card", "")
+        make = s.value("make_music", "false") in (True, "true") if s.value("card_dir", "") else False
         self.src = Path(src) if src and Path(src).is_dir() else None
-        self.card = Path(card) if card and Path(card).parent.exists() else None
-        if self.card is None:
+        self.card_dir = Path(chosen) if chosen and Path(chosen).parent.exists() else None
+        if self.card_dir is None:
             cards = find_cards()
             if cards:
-                self.card = cards[0]
+                self.card_dir, make = cards[0], False
                 self.found_card = True
+        self.make_music.blockSignals(True)
+        self.make_music.setChecked(make)
+        self.make_music.blockSignals(False)
+        self._set_output()
         self.delete.setChecked(s.value("delete", "false") in (True, "true"))
 
     def _save(self) -> None:
         s = self.settings
         s.setValue("music", str(self.src) if self.src else "")
+        s.setValue("card_dir", str(self.card_dir) if self.card_dir else "")
+        s.setValue("make_music", self.make_music.isChecked())
         s.setValue("card", str(self.card) if self.card else "")
         s.setValue("delete", self.delete.isChecked())
+
+    def _set_output(self) -> None:
+        self.card = output_for(self.card_dir, self.make_music.isChecked()) if self.card_dir else None
 
     # -- choosing
     def _choose_src(self) -> None:
@@ -608,12 +657,20 @@ class Window(QWidget):
             self._options_changed()
 
     def _choose_card(self) -> None:
-        start = str(self.card.parent if self.card else next(iter(_mount_points()), Path.home()))
+        start = str(self.card_dir if self.card_dir else next(iter(_mount_points()), Path.home()))
         d = QFileDialog.getExistingDirectory(self, T["card_dialog"], start)
         if d:
-            self.card = output_for(Path(d))
+            self.card_dir = Path(d)
+            self.make_music.blockSignals(True)
+            self.make_music.setChecked(wants_music_folder(self.card_dir))
+            self.make_music.blockSignals(False)
+            self._set_output()
             self.found_card = False
             self._options_changed()
+
+    def _make_music_changed(self, *_) -> None:
+        self._set_output()
+        self._options_changed()
 
     def _options_changed(self, *_) -> None:
         if self.state in ("checking", "running", "stopping"):
@@ -642,7 +699,7 @@ class Window(QWidget):
         self.card_free.setText(" · ".join(bits))
         self.card_free.setVisible(bool(bits))
         busy = self.state in ("checking", "running", "stopping")
-        for w in (self.src_btn, self.card_btn, self.delete):
+        for w in (self.src_btn, self.card_btn, self.delete, self.make_music):
             w.setEnabled(not busy)
         if self.state == "idle":
             self.go.setText(T["convert"])

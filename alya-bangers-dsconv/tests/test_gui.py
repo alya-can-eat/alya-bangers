@@ -65,9 +65,49 @@ def test_version_label():
 
 
 def test_card_folder(tmp_path):
-    assert gui.output_for(tmp_path / "DSPICO") == tmp_path / "DSPICO" / "music"
-    assert gui.output_for(tmp_path / "DSPICO" / "Music") == tmp_path / "DSPICO" / "Music"
+    card = tmp_path / "DSPICO"
+    assert gui.output_for(card, True) == card / "music" and gui.output_for(card / "Musik", False) == card / "Musik"
+    # Create music folder starts on, but not in a music folder (no music/music)
+    (card / "Musik" / ".dsmusic").mkdir(parents=True)
+    assert gui.wants_music_folder(card) and not gui.wants_music_folder(card / "Music")
+    assert not gui.wants_music_folder(card / "Musik"), "converted before: it is one"
     assert gui.gb(1.25e9) == "1.2 GB" and gui.gb(150e6) == "150.0 MB" and gui.gb(-3e9) == "3.0 GB"
+
+
+def test_the_music_folder_the_ds_uses(tmp_path, monkeypatch):
+    # chosen on the DS (Settings › Browsing): found by itself, before /music
+    card = tmp_path / "DSPICO"
+    (card / "music" / ".dsmusic").mkdir(parents=True)
+    monkeypatch.setattr(gui, "_mount_points", lambda: [card])
+    assert gui.find_cards() == [card / "music"]
+    (card / "Audio" / "Musik" / ".dsmusic").mkdir(parents=True)
+    paths = card / "_nds" / "alya-bangers" / "paths.txt"
+    paths.parent.mkdir(parents=True)
+    paths.write_text("launcher=/_nds/TWiLightMenu.nds\nmusic=fat:/Audio/Musik\n", encoding="utf-8")
+    assert gui.find_cards() == [card / "Audio" / "Musik"]
+    paths.write_text("music=/Audio/Musik\n", encoding="utf-8")
+    assert gui.ds_music_folder(card) == card / "Audio" / "Musik"
+    paths.write_text("music=/gone\n", encoding="utf-8")
+    assert gui.find_cards() == [card / "music"], "not there (any more): /music"
+
+
+def test_create_music_folder_switch(app, tmp_path, monkeypatch):
+    card = tmp_path / "DSPICO"
+    (card / "Musik" / ".dsmusic").mkdir(parents=True)
+    w = gui.Window()
+    w.show()
+    for chosen, make, out in ((card, True, card / "music"), (card / "Musik", False, card / "Musik")):
+        monkeypatch.setattr(gui.QFileDialog, "getExistingDirectory", lambda *a, c=chosen: str(c))
+        w._choose_card()
+        assert w.make_music.isChecked() == make and w.card == out and w.card_path.text() == str(out)
+    w.make_music.click()
+    assert w.card == card / "Musik" / "music", "turned on by hand: a music folder in it"
+    w2 = gui.Window()
+    assert w2.card_dir == card / "Musik" and w2.make_music.isChecked() and w2.card == card / "Musik" / "music", \
+        "kept for next time"
+    w2.make_music.click()
+    w.close()
+    w2.close()
 
 
 def test_check_ask_convert_and_nothing_left(app, library, tmp_path, monkeypatch):

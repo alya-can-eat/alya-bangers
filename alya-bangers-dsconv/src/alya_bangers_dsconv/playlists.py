@@ -5,8 +5,8 @@ matter): once a playlist is on the card, the DS's copy is the one that
 counts, so what was changed there stays.
 
 They are written the way the DS app writes its own (arm9/source/playlist.c):
-/_nds/alya-bangers/playlists/<name>.m3u next to the music folder, with
-#PLAYLIST:<name> and then the songs as paths below the music folder.
+<music folder>/.dsmusic/playlists/<name>.m3u (each music folder has its own),
+with #PLAYLIST:<name> and then the songs as paths below the music folder.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import unquote, urlparse
 
+from .constants import DATA_DIR
+
 PLAYLIST_EXTS = {".m3u", ".m3u8"}
-CARD_DIR = ("_nds", "alya-bangers", "playlists")
+PLAYLISTS_DIR = "playlists"     # in DATA_DIR
 # arm9/source/playlist.h
 PL_MAX = 64
 PL_NAME = 32        # bytes of UTF-8, with the 0
@@ -25,12 +27,9 @@ PL_SONGS = 4000
 FILE_MAX = 47       # bytes of a file name before " 2" and ".m3u" (the DS reads names under 64)
 
 
-def card_dir(dst_root: Path) -> Path | None:
-    """Where the DS app looks for playlists, or None if the output isn't a
-    card's music folder (then there's no card to put them on)."""
-    if dst_root.name.casefold() != "music":
-        return None
-    return dst_root.parent.joinpath(*CARD_DIR)
+def playlists_dir(dst_root: Path) -> Path:
+    """Where the DS app looks for this music folder's playlists."""
+    return dst_root / DATA_DIR / PLAYLISTS_DIR
 
 
 def _cut(s: str, limit: int) -> str:
@@ -140,8 +139,8 @@ def bring_over(playlists: list[Path], src_root: Path, dst_root: Path, dest_by_re
     """Write the playlists the card doesn't have yet. Returns what happened:
     added [(name, songs, not found)], kept [name], skipped [(name, why)]."""
     out = {"added": [], "kept": [], "skipped": []}
-    pl_dir = card_dir(dst_root)
-    if pl_dir is None or not playlists:
+    pl_dir = playlists_dir(dst_root)
+    if not playlists:
         return out
     names, files = card_names(pl_dir)
     finder = SongFinder(src_root, dest_by_rel)
