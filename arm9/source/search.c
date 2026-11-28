@@ -213,22 +213,22 @@ static const struct {
     const char *key;
     const char *name[LANG_COUNT], *plural[LANG_COUNT];
 } tag_names[] = {
-    { "genre", { "Genre", "Genre" }, { "genres", "Genres" } },
-    { "albumartist", { "Album artist", "Albuminterpret" }, { "album artists", "Albuminterpreten" } },
-    { "composer", { "Composer", "Komponist" }, { "composers", "Komponisten" } },
-    { "lyricist", { "Lyricist", "Texter" }, { "lyricists", "Texter" } },
-    { "performer", { "Performer", "Mitwirkende" }, { "performers", "Mitwirkende" } },
-    { "conductor", { "Conductor", "Dirigent" }, { "conductors", "Dirigenten" } },
-    { "arranger", { "Arranger", "Arrangeur" }, { "arrangers", "Arrangeure" } },
-    { "remixer", { "Remixer", "Remixer" }, { "remixers", "Remixer" } },
-    { "mood", { "Mood", "Stimmung" }, { "moods", "Stimmungen" } },
-    { "style", { "Style", "Stil" }, { "styles", "Stile" } },
-    { "label", { "Label", "Label" }, { "labels", "Labels" } },
-    { "organization", { "Label", "Label" }, { "labels", "Labels" } },
-    { "grouping", { "Grouping", "Gruppierung" }, { "groupings", "Gruppierungen" } },
-    { "language", { "Language", "Sprache" }, { "languages", "Sprachen" } },
-    { "initialkey", { "Key", "Tonart" }, { "keys", "Tonarten" } },
-    { "bpm", { "BPM", "BPM" }, { "BPM", "BPM" } },
+    { "genre", { "Genre", "Genre", "Genre" }, { "genres", "Genres", "genres" } },
+    { "albumartist", { "Album artist", "Albuminterpret", "Artiste de l'album" }, { "album artists", "Albuminterpreten", "artistes de l'album" } },
+    { "composer", { "Composer", "Komponist", "Compositeur" }, { "composers", "Komponisten", "compositeurs" } },
+    { "lyricist", { "Lyricist", "Texter", "Parolier" }, { "lyricists", "Texter", "paroliers" } },
+    { "performer", { "Performer", "Mitwirkende", "Interprète" }, { "performers", "Mitwirkende", "interprètes" } },
+    { "conductor", { "Conductor", "Dirigent", "Chef d'orchestre" }, { "conductors", "Dirigenten", "chefs d'orchestre" } },
+    { "arranger", { "Arranger", "Arrangeur", "Arrangeur" }, { "arrangers", "Arrangeure", "arrangeurs" } },
+    { "remixer", { "Remixer", "Remixer", "Remixeur" }, { "remixers", "Remixer", "remixeurs" } },
+    { "mood", { "Mood", "Stimmung", "Ambiance" }, { "moods", "Stimmungen", "ambiances" } },
+    { "style", { "Style", "Stil", "Style" }, { "styles", "Stile", "styles" } },
+    { "label", { "Label", "Label", "Label" }, { "labels", "Labels", "labels" } },
+    { "organization", { "Label", "Label", "Label" }, { "labels", "Labels", "labels" } },
+    { "grouping", { "Grouping", "Gruppierung", "Regroupement" }, { "groupings", "Gruppierungen", "regroupements" } },
+    { "language", { "Language", "Sprache", "Langue" }, { "languages", "Sprachen", "langues" } },
+    { "initialkey", { "Key", "Tonart", "Tonalité" }, { "keys", "Tonarten", "tonalités" } },
+    { "bpm", { "BPM", "BPM", "BPM" }, { "BPM", "BPM", "BPM" } },
 };
 #define N_TAG_NAMES ((int)(sizeof(tag_names) / sizeof(tag_names[0])))
 

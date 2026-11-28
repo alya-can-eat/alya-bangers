@@ -27,7 +27,7 @@ Put your music on the card with the converter on your PC, then listen to it on y
 - Sound settings for cleaner highs
 - Rate your songs, see how often you played them
 - Your own colours
-- English and German
+- English, German and French
 - A converter for Windows and Linux
 
 ## Getting started:

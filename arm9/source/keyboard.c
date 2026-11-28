@@ -4,6 +4,7 @@
 
 #include "keyboard.h"
 #include "search.h"
+#include "state.h"
 #include "util.h"
 
 static int put(Key *out, int n, int x, int y, int w, int h, int kind, bool fn, uint32_t cp)
@@ -33,7 +34,7 @@ static int bottom_row(Key *out, int n, int y)
     return put(out, n, 202, y, 50, 29, K_DONE, true, 0);
 }
 
-int kb_layout(int im, bool num, bool qwertz, bool shift, Key *out)
+int kb_layout(int im, bool num, int latin, bool shift, Key *out)
 {
     int n = 0;
     if (num)
@@ -85,7 +86,17 @@ int kb_layout(int im, bool num, bool qwertz, bool shift, Key *out)
         n = put(out, n, 222, 64, 34, 29, K_BACK, true, 0);
         return bottom_row(out, n, 96);
     }
-    // Latin (also for pinyin)
+    // Latin (also for pinyin): QWERTY, QWERTZ or AZERTY (Settings › Regional)
+    if (latin == KB_AZERTY)
+    {
+        n = row(out, n, "azertyuiop", 4, 0, 23, 29, 25, shift);
+        n = row(out, n, "qsdfghjklm", 4, 32, 23, 29, 25, shift);
+        n = put(out, n, 4, 64, 36, 29, K_SHIFT, true, 0);
+        n = row(out, n, "wxcvbn", 42, 64, 23, 29, 25, shift);
+        n = put(out, n, 217, 64, 37, 29, K_BACK, true, 0);
+        return bottom_row(out, n, 96);
+    }
+    bool qwertz = latin == KB_QWERTZ;
     n = row(out, n, qwertz ? "qwertzuiop" : "qwertyuiop", 4, 0, 23, 29, 25, shift);
     n = row(out, n, "asdfghjkl", 16, 32, 23, 29, 25, shift);
     n = put(out, n, 4, 64, 36, 29, K_SHIFT, true, 0);

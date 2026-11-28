@@ -1,6 +1,7 @@
 """The window, driven offscreen: choose, check, convert, stop, ask."""
 
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -57,6 +58,15 @@ def test_colours_and_font_are_the_ds_apps(app):
     assert (gui.C["bg"], gui.C["text"], gui.C["acc"]) == ("#210029", "#ffefff", "#f78cff")
     assert gui.C["sel"] == gui.C["sel"].lower() and len(gui.C) == 10
     assert app.font().family() == "Unifont alya-bangers" and app.font().pixelSize() == 16
+
+
+def test_every_text_in_every_language():
+    keys = set(gui.TEXTS["en"])
+    for lang, texts in gui.TEXTS.items():
+        assert set(texts) == keys, f"{lang}: {sorted(keys ^ set(texts))}"
+        for k, v in texts.items():
+            # the same {placeholders} as in English
+            assert sorted(re.findall(r"{\w*}", v)) == sorted(re.findall(r"{\w*}", gui.TEXTS["en"][k])), (lang, k)
 
 
 def test_version_label():

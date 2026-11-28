@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-enum { LANG_EN, LANG_DE, LANG_COUNT };
+enum { LANG_EN, LANG_DE, LANG_FR, LANG_COUNT };
 
 typedef enum {
     S_NONE,
@@ -45,7 +45,7 @@ typedef enum {
     S_TIME_RIGHT, S_COVER_BG, S_SHUFFLE_W, S_LANGUAGE, S_KEYBOARD, S_CLOCK, S_DATE,
     S_PLAYLISTS, S_ADD_TO_PL, S_PL_REMOVE, S_PL_NEW, S_PL_SAVE_QUEUE, S_PL_RENAME, S_SORT_PL_ORDER,
     S_BATT_SOUND, S_MISC, S_MUSIC_FOLDER, S_LAUNCHER, S_LAUNCH_BUTTON, S_LAUNCH_HOLD, S_PICK_USE,
-    S_PICK_NONE, S_PICK_TOP, S_PICK_CLEAR, S_PICK_NO_DIRS,
+    S_PICK_NONE, S_PICK_TOP, S_PICK_CLEAR, S_PICK_NO_DIRS, S_LANG_LATER,
     S_OFF, S_RG_TRACK, S_RG_ALBUM, S_AUTO, S_LEFT, S_LENGTH,
     S_LATER_PAGE, S_LATER,
     S_EDITION, S_TAGLINE, S_LICENCE, S_FREE, S_GLYPHS,
@@ -61,11 +61,11 @@ typedef enum {
     S_COUNT
 } StrId;
 
-extern uint8_t i18n_lang;          // LANG_EN, LANG_DE
+extern uint8_t i18n_lang;          // LANG_EN, LANG_DE, LANG_FR
 
 const char *txt(StrId id);
 const char *txt_in(int lang, StrId id);
-const char *lang_name(int lang);   // each in its own language: "English", "Deutsch"
+const char *lang_name(int lang);   // each in its own language: "English", "Deutsch", "Français"
 StrId i18n_missing(int lang);      // the first text the language lacks (S_NONE: none)
 
 #endif

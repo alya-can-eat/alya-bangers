@@ -12,7 +12,7 @@
 #include "palette.h"
 
 enum { RG_OFF, RG_TRACK, RG_ALBUM, RG_AUTO, RG_MODES };
-enum { KB_QWERTY, KB_QWERTZ, KB_LAYOUTS };
+enum { KB_QWERTY, KB_QWERTZ, KB_AZERTY, KB_LAYOUTS };
 enum { DATE_DMY, DATE_YMD, DATE_MDY, DATE_FORMATS };   // 27.11.2026, 2026-11-27, 11/27/2026
 enum { SLOT_ARTIST, SLOT_ALBUM, SLOT_TITLE, SLOT_TITLE_IN_ALBUM, SLOT_FOLDER, SORT_SLOTS };
 #define SLOT_PLAYLIST SORT_SLOTS    // a playlist's songs (kept in Settings.pl_sort)
@@ -29,7 +29,7 @@ typedef struct {
     uint8_t plain_bg;         // player mode: plain background instead of one from the cover
     uint8_t shuffle_weighted; // shuffle: higher rated songs come up more often
     uint8_t lang;             // LANG_EN, LANG_DE (i18n.h)
-    uint8_t keyboard;         // search keyboard: KB_QWERTY, KB_QWERTZ
+    uint8_t keyboard;         // search keyboard: KB_QWERTY, KB_QWERTZ, KB_AZERTY
     // state file version 3 from here (older files: 0)
     uint8_t play_at_start;    // launching the app goes on playing where it stopped
     uint8_t eq_profile;       // 0: Flat, n: the n-th saved profile (eqprof.h)

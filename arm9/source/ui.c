@@ -2079,7 +2079,7 @@ static void draw_layout(int dx, int y0, int im, bool current)
 {
     Key keys[KB_MAX_KEYS];
     bool num = current && app.kb_num;
-    int n = kb_layout(im, num, app.set.keyboard == KB_QWERTZ, current && app.shift && !num, keys);
+    int n = kb_layout(im, num, app.set.keyboard, current && app.shift && !num, keys);
     for (int i = 0; i < n; i++)
     {
         const Key *k = &keys[i];
@@ -2097,7 +2097,7 @@ static void draw_layout(int dx, int y0, int im, bool current)
 static void draw_forms(int y0)
 {
     Key keys[KB_MAX_KEYS];
-    int n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift && !app.kb_num, keys);
+    int n = kb_layout(app.im, app.kb_num, app.set.keyboard, app.shift && !app.kb_num, keys);
     if (app.acc_key < 0 || app.acc_key >= n)
         return;
     const Key *k = &keys[app.acc_key];
@@ -3051,7 +3051,11 @@ static const char *set_value(int id)
     }
     case SET_TIME_RIGHT: return txt(app.set.show_remaining ? S_LEFT : S_LENGTH);
     case SET_LANG: return lang_name(app.set.lang);
-    case SET_KEYBOARD: return app.set.keyboard == KB_QWERTZ ? "QWERTZ" : "QWERTY";
+    case SET_KEYBOARD:
+    {
+        static const char *const names[KB_LAYOUTS] = { "QWERTY", "QWERTZ", "AZERTY" };
+        return names[app.set.keyboard < KB_LAYOUTS ? app.set.keyboard : 0];
+    }
     case SET_CLOCK: return app.set.clock_12h ? "12 h" : "24 h";
     case SET_DATE:
     {
@@ -3392,6 +3396,31 @@ static bool draw_settings(void)
     return anim || (app.page_t > 0 && app.page_t < TAB_TICKS);
 }
 
+// The first start: which language. Each in its own language; the header and
+// the hint are in the highlighted one, so it reads as it will be.
+static bool draw_lang(void)
+{
+    gfx_unclip(B);
+    gfx_fill(B, 0, 0, SCREEN_W, SCREEN_H, C_BG);
+    gfx_fill(B, 0, 0, SCREEN_W, 20, C_PANEL);
+    icon(B, 8, 2, ICON_REGIONAL, C_ACC);
+    text(B, 30, 2, txt(S_LANGUAGE), C_TEXT);
+    const int ty = (SET_H - 1 - 16) / 2;
+    for (int i = 0; i < LANG_COUNT - 1; i++)
+        gfx_fill(B, 8, SET_Y + (i + 1) * SET_H - 1, 240, 1, C_ZEBRA);
+    if (app.menu_sel >= 0 && app.menu_sel < LANG_COUNT)
+        highlight(0, SET_Y + app.menu_vis, SCREEN_W, SET_H - 1, SET_Y, SET_Y + LANG_COUNT * SET_H, C_SEL);
+    for (int i = 0; i < LANG_COUNT; i++)
+        text(B, 30, SET_Y + i * SET_H + ty, lang_name(i), C_TEXT);
+    // where it can be changed later
+    char where[96];
+    snprintf(where, sizeof(where), "%s › %s", txt(S_SETTINGS), txt(S_REGIONAL));
+    centered(B, 148, txt(S_LANG_LATER), C_DIM);
+    centered(B, 164, where, C_DIM);
+    return false;
+}
+
+static bool w_lang(int arg) { (void)arg; return draw_lang(); }
 static bool w_settings(int arg) { (void)arg; return draw_settings(); }
 static bool w_info(int arg) { (void)arg; return draw_info(); }
 static bool w_queue(int arg) { (void)arg; return draw_queue(); }
@@ -3413,6 +3442,8 @@ bool ui_draw_bottom(void)
         return draw_settings();
     if (app.ov_vis == OV_EQ_NAME && p >= 256)
         return draw_eq_name();
+    if (app.ov_vis == OV_LANG && p >= 256)
+        return draw_lang();
 
     int oy = app_panel_offset();
     bool anim = (app.slide > 0 && app.slide < SLIDE_TICKS) || app.press_down || app.frame < app.press_until
@@ -3434,10 +3465,10 @@ bool ui_draw_bottom(void)
         }
     }
     anim |= draw_panel(oy);
-    if (app.ov_vis == OV_SETTINGS || app.ov_vis == OV_EQ_NAME)
+    if (app.ov_vis == OV_SETTINGS || app.ov_vis == OV_EQ_NAME || app.ov_vis == OV_LANG)
     {
-        shifted(app.ov_vis == OV_SETTINGS ? w_settings : w_eq_name, 0, 0, 0, SCREEN_W, SCREEN_H,
-                SCREEN_H * (256 - p) / 256, SCREEN_H);
+        shifted(app.ov_vis == OV_SETTINGS ? w_settings : (app.ov_vis == OV_LANG ? w_lang : w_eq_name), 0, 0, 0,
+                SCREEN_W, SCREEN_H, SCREEN_H * (256 - p) / 256, SCREEN_H);
         anim = true;
     }
     return anim;

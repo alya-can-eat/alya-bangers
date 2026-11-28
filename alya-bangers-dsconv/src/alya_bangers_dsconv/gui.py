@@ -123,11 +123,50 @@ TEXTS = {
         "parts": "Braucht FFmpeg, Qt, libsoxr, GNU Unifont und mehr, jedes unter seiner eigenen Lizenz.",
         "close": "Schliessen",
     },
+    "fr": {
+        # tu, like the German du; a space before : (French), none before ? (Swiss)
+        "music": "Dossier de musique", "card": "Carte DS ou dossier personnalisé", "choose": "Choisir…",
+        "not_chosen": "pas encore choisi", "free": "{0} libres", "found": "trouvée automatiquement",
+        "remove": "Retirer les titres qui ne sont plus dans le dossier de musique",
+        "make_music": "Créer un dossier de musique",
+        "pick_both": "Choisis ton dossier de musique et la carte DS (ou un dossier personnalisé).",
+        "ready": "Convertir vérifie d'abord ce qui est nouveau.",
+        "convert": "Convertir", "start": "Démarrer", "stop": "Arrêter",
+        "stopping": "Arrêt après les titres en cours…",
+        "checking": "Vérification de ta musique…",
+        "counts": "{new} nouveaux · {changed} modifiés · {same} à jour",
+        "remove_n": "{n} titres seront retirés.",
+        "orphans_n": "{n} titres de la carte ne sont plus dans le dossier de musique.",
+        "fits": "Environ {need} de plus sur la carte, {free} libres.",
+        "emptier": "La carte se libère d'environ {need}.",
+        "no_fit": "Ça ne rentre pas : il faut environ {need} de plus, mais seulement {free} libres.",
+        "nothing": "Tout est à jour sur la carte.",
+        "converting": "Conversion : {done} sur {total}", "left": "encore environ {t}",
+        "less_min": "moins d'une minute restante",
+        "scanning": "Examen de ta musique…", "index": "Création de l'index de la bibliothèque et de la police…",
+        "done": "Terminé : {n} titres convertis.", "done_failed": "Terminé, mais {f} titres ont échoué. Voir Détails.",
+        "stopped": "Arrêté. Convertir reprend là où ça s'est arrêté.",
+        "eject": "Éjecte la carte avant de la retirer.",
+        "details": "Détails",
+        "clash_title": "Deux fichiers, un titre",
+        "clash_text": "Ceux-ci deviendraient tous<br>{name}<br>Lequel va sur la carte?",
+        "suggested": "suggéré", "same_for_rest": "Le suggéré aussi pour tous les autres",
+        "keep": "Garder", "error": "Impossible de démarrer : {msg}",
+        "quit_title": "Arrêter la conversion?",
+        "quit_text": "Les titres en cours sont d'abord terminés. La prochaine fois, ça reprend là.",
+        "quit_yes": "Arrêter et fermer", "quit_no": "Continuer",
+        "music_dialog": "Ton dossier de musique", "card_dialog": "La carte DS ou un dossier personnalisé",
+        "about": "À propos", "edition": "Convertisseur PC", "tagline": "Met ta musique sur la carte DS",
+        "licence": "Licence : GNU GPL v3", "free_sw": "Logiciel libre, sans garantie",
+        "parts": "Utilise FFmpeg, Qt, libsoxr, GNU Unifont et d'autres, chacun sous sa propre licence.",
+        "close": "Fermer",
+    },
 }
 
 
 def _lang() -> str:
-    return "de" if QLocale.system().language() == QLocale.Language.German else "en"
+    """Like the computer: German, French, else English."""
+    return {QLocale.Language.German: "de", QLocale.Language.French: "fr"}.get(QLocale.system().language(), "en")
 
 
 T = TEXTS["en"]

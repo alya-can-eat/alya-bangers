@@ -61,7 +61,7 @@ Type on the bottom screen, and the results show up on the top screen while you t
   - Case and accents don't matter ("solve" finds Sölve), unless you type the accent ("sö" means exactly ö).
   - Hiragana finds katakana.
   - Names with kanji or hanzi are found by their readings (the converter adds them): kana with かな, pinyin with 拼音 ("lin" or "linxingyue" for 林星月).
-- Keyboards: ABC (QWERTY, or QWERTZ in Settings › Regional), かな, 拼音, АБВ and 123
+- Keyboards: ABC (QWERTY, or QWERTZ or AZERTY in Settings › Regional), かな, 拼音, АБВ and 123
   - かな is the 50-sound table. ゛ ゜ and 小 change the last kana.
   - Tap the input key for the next keyboard (the new keys push the old ones out), hold it for the list.
   - Hold a letter for its other forms (ä à á â …, е gives ё), slide onto one and let go.

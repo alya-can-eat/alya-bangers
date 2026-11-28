@@ -220,7 +220,7 @@ static void bottom_rows(uint16_t *out, int y0, int y1)
 static bool key_pos(uint32_t cp, int kind, int *x, int *y)
 {
     Key keys[KB_MAX_KEYS];
-    int n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift && !app.kb_num, keys);
+    int n = kb_layout(app.im, app.kb_num, app.set.keyboard, app.shift && !app.kb_num, keys);
     for (int i = 0; i < n; i++)
         if ((kind == K_CHAR && keys[i].kind == K_CHAR && keys[i].cp == cp) || (kind != K_CHAR && keys[i].kind == kind
             && (kind != K_KANA || keys[i].cp == cp)))
@@ -649,7 +649,11 @@ int main(int argc, char **argv)
     snprintf(music_root, sizeof(music_root), "%s", argv[1]);
     app_init();
     if (argc > 3 && strcmp(argv[3], "demo") == 0)
+    {
+        lang_choose(LANG_EN);
+        run(30);
         return demo();
+    }
     check(lib_loaded(), "library.idx loads");
     {
         // playlists are kept in the music folder; the ones of before (one
@@ -682,6 +686,31 @@ int main(int argc, char **argv)
     run(LID_IN / 2 + 1);
     check(sim_brightness == 0, "like opening the lid");
     check(sim_backlight == 5, "backlight set at start");
+
+    // ---- the first start: the language first (no state.bin yet)
+    check(app.overlay == OV_LANG && app.menu_sel == LANG_EN, "first start: which language, the DS's own highlighted");
+    run(OV_TICKS);
+    shot("00_language");
+    press(KEY_DOWN);
+    check(app.menu_sel == LANG_DE && strcmp(txt(S_LANGUAGE), "Sprache") == 0 && app.overlay == OV_LANG,
+          "Down: Deutsch, the page reads in German already");
+    press(KEY_DOWN);
+    check(app.menu_sel == LANG_FR && strcmp(txt(S_LANGUAGE), "Langue") == 0, "Down: Français");
+    run(10);
+    shot("00_language_fr");
+    press(KEY_B);
+    check(app.overlay == OV_LANG, "B doesn't skip it");
+    tap(100, SET_Y + LANG_EN * SET_H + 10);
+    check(app.overlay == OV_NONE && app.set.lang == LANG_EN && strcmp(txt(S_SETTINGS), "Settings") == 0,
+          "tap English: chosen, the page goes");
+    {
+        Settings ls;
+        Theme lt;
+        Resume lr;
+        state_defaults(&ls);
+        check(state_load(&ls, &lt, &lr) && ls.lang == LANG_EN, "saved: it isn't asked again");
+    }
+    run(OV_TICKS + 2);
 
     // ---- Artist tab: KIVARA and Kivara are one artist by default
     check(app.tab == TAB_ARTIST, "starts on the Artist tab");
@@ -1237,7 +1266,19 @@ int main(int argc, char **argv)
     tap(100, SET_Y + 1 * SET_H + 10);
     check(app.set.keyboard == KB_QWERTZ, "tap: QWERTZ");
     tap(100, SET_Y + 1 * SET_H + 10);
-    check(app.set.keyboard == KB_QWERTY, "tap again: QWERTY");
+    check(app.set.keyboard == KB_AZERTY, "tap again: AZERTY");
+    {
+        // AZERTY: a z e … on top, q s … m in the middle, w x c v b n
+        Key ks[KB_MAX_KEYS];
+        int n = kb_layout(IM_ABC, false, KB_AZERTY, false, ks);
+        bool az = n > 25 && ks[0].cp == 'a' && ks[1].cp == 'z' && ks[10].cp == 'q' && ks[19].cp == 'm'
+                  && ks[21].cp == 'w' && ks[26].cp == 'n';
+        for (int i = 0; i < n; i++)
+            az &= ks[i].x >= 0 && ks[i].x + ks[i].w <= SCREEN_W;
+        check(az, "the AZERTY keys, all on the screen");
+    }
+    tap(100, SET_Y + 1 * SET_H + 10);
+    check(app.set.keyboard == KB_QWERTY, "and again: QWERTY");
     shot("13h_regional");
     tap(100, SET_Y + 2 * SET_H + 10);
     check(app.set.clock_12h, "tap Time: 12 h");
@@ -2344,8 +2385,25 @@ int main(int argc, char **argv)
 
     // ---- the German interface: every text there, every screen drawn, the texts fit
     {
-        check(i18n_missing(LANG_DE) == S_NONE && i18n_missing(LANG_EN) == S_NONE, "every text in English and German");
+        bool all = true;
+        for (int lang = 0; lang < LANG_COUNT; lang++)
+            if (i18n_missing(lang) != S_NONE)
+            {
+                printf("      (%s lacks text %d)\n", lang_name(lang), i18n_missing(lang));
+                all = false;
+            }
+        check(all, "every text in every language");
         bool fit = true;
+        // (what doesn't fit is named: the line of this file, the language)
+#define FIT(c)                                                                                              \
+    do                                                                                                      \
+    {                                                                                                       \
+        if (!(c))                                                                                           \
+        {                                                                                                   \
+            printf("      (doesn't fit: screens.c line %d, %s)\n", __LINE__, lang_name(lang));             \
+            fit = false;                                                                                    \
+        }                                                                                                   \
+    } while (0)
         for (int lang = 0; lang < LANG_COUNT; lang++)
         {
             i18n_lang = lang;
@@ -2356,25 +2414,25 @@ int main(int argc, char **argv)
                     fit = false;
                 }
             for (int i = 0; i < 3; i++)
-                fit &= font_text_width(txt(S_TAB_ARTIST + i)) <= tab_x[i + 1] - tab_x[i] - 8;
-            fit &= font_text_width(txt(S_ACCENT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_BACKGROUND)) <= THEME_CHIP_W - 4
+                FIT(font_text_width(txt(S_TAB_ARTIST + i)) <= tab_x[i + 1] - tab_x[i] - 8);
+            FIT(font_text_width(txt(S_ACCENT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_BACKGROUND)) <= THEME_CHIP_W - 4
                    && font_text_width(txt(S_TEXT)) <= THEME_CHIP_W - 4 && font_text_width(txt(S_PRESETS)) <= THEME_CHIP_W - 4
                    && font_text_width(txt(S_PRESET_MIDNIGHT_ROSE)) <= PRESET_X1 - PRESET_X0 - 46 - 16
-                   && font_text_width(txt(S_PRESET_ULTRAVIOLET)) <= PRESET_X1 - PRESET_X0 - 46 - 16;
+                   && font_text_width(txt(S_PRESET_ULTRAVIOLET)) <= PRESET_X1 - PRESET_X0 - 46 - 16);
             for (int i = 0; i < 3; i++)
-                fit &= font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4;       // the row menu
-            fit &= font_text_width(txt(S_ADD_TO_PL)) <= 240 - 88 - 24 - 4 && font_text_width(txt(S_PL_REMOVE)) <= 240 - 88 - 24 - 4
+                FIT(font_text_width(txt(S_PLAY_NOW + i)) <= 240 - 88 - 24 - 4);       // the row menu
+            FIT(font_text_width(txt(S_ADD_TO_PL)) <= 240 - 88 - 24 - 4 && font_text_width(txt(S_PL_REMOVE)) <= 240 - 88 - 24 - 4
                    && font_text_width(txt(S_PL_RENAME)) <= 240 - 88 - 24 - 4
                    && font_text_width(txt(S_PL_NEW)) <= PLADD_X1 - PLADD_X0 - 28
-                   && font_text_width(txt(S_ADD_TO_PL)) <= PLADD_X1 - PLADD_X0 - 16;
+                   && font_text_width(txt(S_ADD_TO_PL)) <= PLADD_X1 - PLADD_X0 - 16);
             for (int i = S_SORT_ARTISTS; i <= S_SORT_FOLDERS; i++)
-                fit &= font_text_width(txt(i)) <= 248 - 96 - 8;                        // sort menu title
+                FIT(font_text_width(txt(i)) <= 248 - 96 - 8);                        // sort menu title
             for (int i = S_SORT_NAME_UP; i <= S_SORT_TRACK; i++)
-                fit &= font_text_width(txt(i)) <= 248 - 96 - 24 - 4;
-            fit &= font_text_width(txt(S_NEXT)) <= 48 && 248 - ui_info_value_x() >= 150;
-            fit &= font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240;
+                FIT(font_text_width(txt(i)) <= 248 - 96 - 24 - 4);
+            FIT(font_text_width(txt(S_NEXT)) <= 48 && 248 - ui_info_value_x() >= 150);
+            FIT(font_text_width(txt(S_NO_SD)) <= 240 && font_text_width(txt(S_DLDI)) <= 240);
             for (int i = S_LIB_MISSING; i <= S_PICK_MUSIC_WHERE; i++)
-                fit &= font_text_width(txt(i)) <= SCREEN_W - 16;
+                FIT(font_text_width(txt(i)) <= SCREEN_W - 16);
             // toasts: read at once, without scrolling. Without a name in them
             // they must fit; with one (a typical short name filled in) a warning
             // says which would scroll anyway
@@ -2408,35 +2466,36 @@ int main(int argc, char **argv)
             }
             // equalizer: the header with "· edited", the bands under their sliders,
             // Flat in the list, the buttons side by side, the question's answers, OK on its key
-            fit &= 8 + font_text_width(txt(S_EQ)) + font_text_width(" · ") + font_text_width(txt(S_EQ_EDITED)) <= 224
-                   && font_text_width(txt(S_EQ_NEW)) <= 224 && font_text_width(txt(S_EQ_FLAT)) <= EQ_LIST_W - 10;
+            FIT(8 + font_text_width(txt(S_EQ)) + font_text_width(" · ") + font_text_width(txt(S_EQ_EDITED)) <= 224
+                   && font_text_width(txt(S_EQ_NEW)) <= 224 && font_text_width(txt(S_EQ_FLAT)) <= EQ_LIST_W - 10);
             for (int i = 0, right = EQ_LIST_W + 1; i < EQ_BANDS; i++)
             {
                 int w = font_text_width(txt(S_EQ_BASS + i)), x0 = EQ_BAND_X(i) - w / 2;
-                fit &= x0 >= right && x0 + w <= SCREEN_W;     // apart, inside the panel
+                FIT(x0 >= right && x0 + w <= SCREEN_W);     // apart, inside the panel
                 right = x0 + w + 2;
             }
             {
                 int sx, sw, dx, dw;
                 ui_eq_buttons(&sx, &sw, &dx, &dw);
-                fit &= dx + dw <= SCREEN_W - 4;
+                FIT(dx + dw <= SCREEN_W - 4);
             }
-            fit &= font_text_width(txt(S_EQ_DELETE)) + 16 <= EQ_ASK_W - 12 && font_text_width(txt(S_EQ_KEEP)) + 16 <= EQ_ASK_W - 12
-                   && font_text_width(txt(S_EQ_OK)) <= 46;
+            FIT(font_text_width(txt(S_EQ_DELETE)) + 16 <= EQ_ASK_W - 12 && font_text_width(txt(S_EQ_KEEP)) + 16 <= EQ_ASK_W - 12
+                   && font_text_width(txt(S_EQ_OK)) <= 46);
             // the high cut: its name beside the value, the line under the slider
-            fit &= font_text_width(txt(S_HIGHCUT)) + 8 + font_text_width("15.5 kHz") <= 236
+            FIT(font_text_width(txt(S_HIGHCUT)) + 8 + font_text_width("15.5 kHz") <= 236
                    && font_text_width(txt(S_HIGHCUT)) + 8 + font_text_width(txt(S_OFF)) <= 236
-                   && font_text_width(txt(S_HIGHCUT_OFF)) <= 236 && font_text_width(txt(S_DITHER)) <= 196;
+                   && font_text_width(txt(S_HIGHCUT_OFF)) <= 236 && font_text_width(txt(S_DITHER)) <= 196);
             for (int k = 1; k <= EQ_HIGHCUT_STEPS; k++)
             {
                 char f[16], v[64];
                 snprintf(f, sizeof(f), "%d.%d", eq_highcut_clean10(k) / 10, eq_highcut_clean10(k) % 10);
                 snprintf(v, sizeof(v), txt(S_HIGHCUT_CLEAN), f);
-                fit &= font_text_width(v) <= 236;
+                FIT(font_text_width(v) <= 236);
             }
         }
         i18n_lang = app.set.lang;
-        check(fit, "the texts fit their places, in both languages");
+        #undef FIT
+        check(fit, "the texts fit their places, in every language");
 
         slide_to(false);
         run(40);
@@ -2511,6 +2570,32 @@ int main(int argc, char **argv)
         run(40);
 
         // back to English
+        tap(240, BAR_Y + 14);
+        run(20);
+        tap(100, SET_Y + 5 * SET_H + 10);
+        run(20);
+        tap(100, SET_Y + 0 * SET_H + 10);
+        check(app.set.lang == LANG_FR && strcmp(txt(S_SETTINGS), "Réglages") == 0, "tap again: Français");
+        run(4);
+        shot("20_fr_regional");
+        // a look at the French screens
+        static const char *const fr_names[] = { "20_fr_playback", "20_fr_sound", "20_fr_browsing", "20_fr_player" };
+        press(KEY_B);
+        run(20);
+        shot("20_fr_settings");
+        for (int i = 0; i < 4; i++)
+        {
+            tap(100, SET_Y + i * SET_H + 10);
+            run(20);
+            shot(fr_names[i]);
+            press(KEY_B);
+            run(20);
+        }
+        tap(240, 8);
+        run(20);
+        show_tab(TAB_ARTIST);
+        run(20);
+        shot("21_fr_artist");
         tap(240, BAR_Y + 14);
         run(20);
         tap(100, SET_Y + 5 * SET_H + 10);

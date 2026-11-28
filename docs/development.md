@@ -46,7 +46,7 @@ make screens-run CARD=/tmp/testcard/card/music   # clicks through the UI, checks
 - `make_test_card.py` needs ffmpeg and the converter's Python dependencies.
 - The converter's own tests: `cd alya-bangers-dsconv && nix develop -c pytest` (the window's tests run offscreen).
 - The tests need a gcc that can build 32-bit programs (`-m32`), e.g. `nix-shell -p gcc_multi`.
-- The screen test also draws every screen in German and checks that every text exists in both languages and fits its place. All texts of the interface are in `arm9/source/i18n.c` (English and German side by side).
+- The screen test also draws screens in German and French and checks that every text exists in every language and fits its place (what doesn't fit is named with its line in `screens.c`). All texts of the interface are in `arm9/source/i18n.c`, one table per language.
 - Toasts (the short messages at the bottom) have to be readable at once: without a name in them they must fit their box (212 px), and one that would scroll even with a short name filled in ("Night bus") prints a warning. Only "Can't play …" may scroll, with the file's name and why.
 
 ### Generated stuff:
@@ -81,3 +81,14 @@ Between releases the version is the next one with "pre" in front: `pre-1.1` on t
 > The tag alone doesn't change the version inside the files: without step 1 the About page still says the old one.
 
 Started by hand ([Actions › release](../../../actions/workflows/release.yml) › Run workflow) it only makes the three files, without a release. Those are the pre-release builds.
+
+## Adding a language:
+
+The DS app speaks English, German and French, the converter too. Another language is welcome, from someone who speaks it well:
+
+1. `arm9/source/i18n.h`: add it to the list (`LANG_EN, LANG_DE, LANG_FR, …`, before `LANG_COUNT`).
+2. `arm9/source/i18n.c`: copy the `en` table, translate every text, add the table to `tables` and its name, in its own language, to `lang_name`. Keep `%s`, `%d` and the like as they are. A letter is 8 px wide and the screen 256 px, so short words help.
+3. `arm9/source/search.c`: the tag names (`tag_names`), one more column.
+4. Letters the built-in font doesn't have yet: add them to `UI` in `tools/gen_builtin_font.py` and run it (the command is at its top).
+5. The converter: one more entry in `TEXTS` in `alya-bangers-dsconv/src/alya_bangers_dsconv/gui.py`, and in `_lang()` below it.
+6. Run the tests (above). They say which texts are missing or don't fit, and warn about toasts that would scroll.

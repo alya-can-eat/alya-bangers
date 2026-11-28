@@ -55,6 +55,8 @@ static int lid_fade, lid_fade_in = LID_IN;
 
 static void music_switch(const char *dir);
 static void launch_start(void);
+static void lang_keys(uint32_t rep, uint32_t down);
+static void lang_tap(int x, int y);
 
 const char *app_music_root(void)
 {
@@ -1194,7 +1196,7 @@ static uint32_t kb_repeat_at;       // ⌫ held: when it last deleted
 
 static void kb_load(void)
 {
-    kb_n = kb_layout(app.im, app.kb_num, app.set.keyboard == KB_QWERTZ, app.shift, kb_keys);
+    kb_n = kb_layout(app.im, app.kb_num, app.set.keyboard, app.shift, kb_keys);
 }
 
 static void kb_flash(int k)
@@ -2837,7 +2839,9 @@ static void touch_up(void)
     else if (!tp.held && !tp.moved)
     {
         int oy = app_panel_offset();
-        if (app.overlay == OV_SETTINGS)
+        if (app.overlay == OV_LANG)
+            lang_tap(tp.x0, tp.y0);
+        else if (app.overlay == OV_SETTINGS)
             tap_settings(tp.x0, tp.y0);
         else if (app.overlay == OV_EQ_NAME)
             tap_eq_name(tp.x0, tp.y0);
@@ -2965,6 +2969,9 @@ static void handle_keys(uint32_t down, uint32_t rep, uint32_t held)
 
     switch (app.overlay)
     {
+    case OV_LANG:
+        lang_keys(rep, down);
+        return;
     case OV_SETTINGS:
     {
         int sel_was = app.menu_sel, page_was = app.set_page;
@@ -3241,11 +3248,59 @@ static void launch_tick(uint32_t elapsed)
     redraw = true;
 }
 
+// ---- the first start: which language (each in its own; the DS's own
+// language, from its settings, highlighted)
+
+static bool first_start;            // no state.bin yet: the language is asked first
+
+static int firmware_lang(void)
+{
+#ifdef ARM9
+    switch (PersonalData->language)
+    {
+    case 2: return LANG_FR;
+    case 3: return LANG_DE;
+    default: break;
+    }
+#endif
+    return LANG_EN;
+}
+
+static void lang_choose(int lang)
+{
+    if (lang < 0 || lang >= LANG_COUNT)
+        return;
+    app.set.lang = i18n_lang = (uint8_t)lang;
+    app.overlay = OV_NONE;
+    save_now();                     // asked once: from now on state.bin is there
+    redraw = true;
+}
+
+static void lang_keys(uint32_t rep, uint32_t down)
+{
+    if (rep & KEY_UP) app.menu_sel = app.menu_sel <= 0 ? LANG_COUNT - 1 : app.menu_sel - 1;
+    if (rep & KEY_DOWN) app.menu_sel = app.menu_sel + 1 >= LANG_COUNT ? 0 : app.menu_sel + 1;
+    if (app.menu_sel >= 0)
+        i18n_lang = (uint8_t)app.menu_sel;     // the header and the hint follow the highlight
+    if (down & KEY_A)
+        lang_choose(app.menu_sel);
+}
+
+static void lang_tap(int x, int y)
+{
+    (void)x;
+    if (y >= SET_Y && y < SET_Y + LANG_COUNT * SET_H)
+        lang_choose((y - SET_Y) / SET_H);
+}
+
 static void restore(void)
 {
     Resume r;
     state_defaults(&app.set);
     bool ok = state_load(&app.set, &app.theme, &r);
+    first_start = !ok;
+    if (first_start)
+        app.set.lang = (uint8_t)firmware_lang();
     i18n_lang = app.set.lang;
     // the equalizer as it was (a profile that's gone: Flat)
     if (app.set.eq_profile > eqp_count())
@@ -3418,6 +3473,12 @@ static void app_init(void)
     apply_weighting();
     systemSetBacklightLevel(app.set.brightness);
     show_tab(TAB_ARTIST);
+    if (first_start)
+    {
+        // never started before: the language first
+        app.overlay = OV_LANG;
+        app.menu_sel = app.set.lang;
+    }
     last_save = ticks;
     // the screens fade in from black, like opening the lid
     setBrightness(3, -16);
@@ -3716,7 +3777,7 @@ static void app_tick(void)
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
     bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && app.presets_open;
-    int menu_target = app.ov_vis == OV_SETTINGS && app.picking ? app.menu_sel * SET_H
+    int menu_target = (app.ov_vis == OV_SETTINGS && app.picking) || app.ov_vis == OV_LANG ? app.menu_sel * SET_H
                       : app.ov_vis == OV_SETTINGS && !presets
                       ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
                          ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)

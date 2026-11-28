@@ -26,9 +26,10 @@ typedef struct {
 
 #define KB_MAX_KEYS 64
 
-// The keys of a layout: im (IM_...), num: the 123 keys, qwertz: Settings ›
-// Regional, shift: letters in upper case. Returns how many.
-int kb_layout(int im, bool num, bool qwertz, bool shift, Key *out);
+// The keys of a layout: im (IM_...), num: the 123 keys, latin: KB_QWERTY,
+// KB_QWERTZ or KB_AZERTY (Settings › Regional), shift: letters in upper case.
+// Returns how many.
+int kb_layout(int im, bool num, int latin, bool shift, Key *out);
 // The key at x, y (keyboard coordinates), -1: none.
 int kb_key_at(const Key *keys, int n, int x, int y);
 // The input key's label: ABC, かな, 拼音, АБВ.

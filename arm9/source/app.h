@@ -124,7 +124,8 @@ enum { BTN_NONE, BTN_PLAY, BTN_NEXT, BTN_ADD, BTN_DOWN, BTN_SORT, BTN_BRIGHT, BT
 
 typedef enum { TAB_ARTIST, TAB_ALBUM, TAB_TITLE, TAB_FOLDER, TAB_SEARCH, TAB_COUNT } Tab;
 typedef enum { OV_NONE, OV_SORT, OV_ROWMENU, OV_SETTINGS, OV_INFO, OV_QUEUE, OV_FILTER, OV_IM, OV_EQ,
-               OV_EQ_NAME, OV_PL_ADD, OV_PL_ASK } Overlay;
+               OV_EQ_NAME, OV_PL_ADD, OV_PL_ASK, OV_LANG } Overlay;
+// OV_LANG: the first start (no state.bin yet) asks for the language first
 // The file and folder picker, a page of the settings past the one it's for
 // (rows like theirs): the launcher's .nds or the music folder.
 enum { PICK_LAUNCHER, PICK_MUSIC };

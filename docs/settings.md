@@ -10,11 +10,11 @@
 - Sound: two settings for very high sounds (cymbals, hi-hats) that can sound harsh on the DS
 - Browsing and Player: small choices for the lists and the player
 - Theme: your own colours
-- Regional: English or German, the keyboard, the time and date format
+- Regional: English, German or French, the keyboard, the time and date format
 - About: version and licence
 - Misc: start another launcher from here (Pico Launcher, TWiLight Menu++, …)
 
-Every page has an icon, so you can find the language without being able to read it: the globe (🌐).
+The very first start asks for the language, with the DS's own one highlighted. Every page has an icon, so you can find the language without being able to read it: the globe (🌐).
 
 <br clear="right">
 
@@ -50,7 +50,7 @@ Every page has an icon, so you can find the language without being able to read 
     - Every other colour is mixed from these three, and the whole app changes while you drag.
     - Up / Down choose the colour, Left / Right turn its hue.
     - Presets (A): *Ultraviolet* (the default) and *Midnight Rose* (the first theme). They always show in their own fixed colours, so you can get back even if you made your theme unreadable xD
-  - Regional: the language (English or German, the German in Swiss spelling), the search keyboard (QWERTY or QWERTZ), the time (24 h or 12 h with am/pm) and the date (27.11.2026, 2026-11-27 or 11/27/2026)
+  - Regional: the language (English, German or French; the German in Swiss spelling), the search keyboard (QWERTY, QWERTZ or AZERTY), the time (24 h or 12 h with am/pm) and the date (27.11.2026, 2026-11-27 or 11/27/2026)
   - About: name, version and edition, licence, where the code lives
   - Misc: another launcher, one tap or one button away
     - Launcher: the `.nds` to start. Tap it and choose it in the file picker (folders first, then the `.nds` files; ‹ or B go up a folder, *No launcher* takes it away).
