@@ -48,6 +48,12 @@
 #define THEME_CHIP_H 22
 #define THEME_CHIP_PITCH 28
 #define THEME_PRESETS_Y 162         // the Presets button under them
+#define THEME_PRIDE_Y 130           // Pride: the play button's flag (between them)
+#define THEME_SEL_PRIDE 3           // theme_sel past the three colours: Pride
+#define PRIDE_X0    4               // its list, over the button (fixed colours, like Presets)
+#define PRIDE_X1    204
+#define PRIDE_ROWS  5
+#define PRIDE_Y     (THEME_PRIDE_Y - 4 - (20 + 16 * PRIDE_ROWS + 4))
 #define PRESET_X0   4               // the list of presets, over the button
 #define PRESET_X1   180
 #define PRESET_Y    (THEME_PRESETS_Y - 4 - (20 + 16 * THEME_PRESETS + 4))
@@ -292,6 +298,10 @@ typedef struct {
     int theme_drag;             // CP_RING or CP_TRIANGLE while the stylus drags
     bool slider_drag;           // settings: the high cut's slider under the stylus
     bool presets_open;          // the list of preset themes is open
+    bool pride_open;            // the list of pride flags is open (it rises like the presets)
+    int pride_t;                // 0 .. OV_TICKS
+    int pride_scroll;           // its first row shown
+    bool pride_bar_drag;        // its scroll bar under the stylus
     int presets_t;              // it rises out of its button: 0 .. OV_TICKS
     bool album_queue;           // the queue is one album
 

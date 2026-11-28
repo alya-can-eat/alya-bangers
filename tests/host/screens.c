@@ -339,6 +339,9 @@ static int demo(void)
     play_tracks(q, 4, 0, false, SA_PUT);
     run(90);
     shot("player");
+    app.set.pride = PRIDE_PROGRESS;     // the play button as a pride flag
+    shot("pride");
+    app.set.pride = PRIDE_NONE;
     film_n = 0;
     film_both("rd_player", 24);
     film_tap("rd_player", 178, 100, 70);
@@ -1233,9 +1236,99 @@ int main(int argc, char **argv)
     run(OV_TICKS + 2);
     tap(PRESET_X0 + 60, PRESET_Y + 20 + 8);
     check(app.theme.acc == theme_default.acc, "back to Ultraviolet");
+
+    // Pride: a flag for the player's play button, from a list rising out of its button
+    check(app.set.pride == PRIDE_NONE, "the play button: the accent colour by default");
+    tap(THEME_CHIP_X + 20, THEME_PRIDE_Y + 10);
+    check(app.pride_open && !app.presets_open && app.menu_sel == -1 && app.pride_scroll == 0,
+          "Pride: the flags rise out of the button, from the top");
+    run(OV_TICKS + 2);
+    shot("13k_pride_list");
+    tap(PRIDE_X0 + 60, PRIDE_Y + 20 + 1 * 16 + 8);
+    check(!app.pride_open && app.set.pride == PRIDE_RAINBOW, "tap Rainbow: chosen, the list goes");
+    run(OV_TICKS + 2);
+    shot("13l_pride_rainbow");
+    tap(THEME_CHIP_X + 20, THEME_PRIDE_Y + 10);
+    run(OV_TICKS + 2);
+    hold(PRIDE_X1 - 6, PRIDE_Y + 22, 2);
+    check(app.pride_bar_drag && app.pride_scroll == 0, "its scroll bar, like the lists'");
+    drag_to(PRIDE_X1 - 6, THEME_PRIDE_Y - 10, 4);
+    release();
+    check(app.pride_open && !app.pride_bar_drag && app.pride_scroll == PRIDE_COUNT - PRIDE_ROWS, "dragged to the end");
+    shot("13m_pride_end");
+    tap(PRIDE_X0 + 60, PRIDE_Y + 20 + (PRIDE_ROWS - 1) * 16 + 8);
+    check(app.set.pride == PRIDE_DEMIGENDER, "the last one: Demigender");
+    run(OV_TICKS + 2);
+    // by D-pad: Pride after the three colours; A: the flags, the one in use highlighted
+    theme_select(2);
+    int hue = app.theme_hsv.h;
+    press(KEY_DOWN);
+    check(app.theme_sel == THEME_SEL_PRIDE, "Down past Text: Pride");
+    press(KEY_RIGHT);
+    check(app.theme_hsv.h == hue && app.theme.text == theme_default.text, "Right does nothing there");
+    press(KEY_A);
+    check(app.pride_open && app.menu_sel == PRIDE_DEMIGENDER && app.pride_scroll == PRIDE_COUNT - PRIDE_ROWS,
+          "A: the flags, the one in use highlighted");
+    for (int i = 0; i < PRIDE_DEMIGENDER - PRIDE_TRANS; i++)
+        press(KEY_UP);
+    check(app.menu_sel == PRIDE_TRANS && app.pride_scroll <= PRIDE_TRANS
+          && app.pride_scroll + PRIDE_ROWS > PRIDE_TRANS, "Up to Trans: in sight");
+    run(OV_TICKS + 2);
+    shot("13n_pride_dpad");
+    press(KEY_A);
+    check(app.set.pride == PRIDE_TRANS && !app.pride_open, "A: Trans");
+    press(KEY_DOWN);
+    check(app.theme_sel == 0, "Down on Pride: round to the accent");
+    {
+        Settings ps;
+        Theme pt;
+        Resume pr;
+        save_now();
+        state_defaults(&ps);
+        check(state_load(&ps, &pt, &pr) && ps.pride == PRIDE_TRANS, "kept in state.bin");
+    }
     press(KEY_B);
     run(20);
     check(app.set_page == PAGE_TOP, "B leaves the Theme page");
+    {
+        // the player: the flag on the button, the symbol white with a dark edge
+        tap(240, 8);
+        run(20);
+        slide_to(true);
+        run(40);
+        redraw = true;
+        ui_draw_bottom();
+        const uint16_t *px = gfx_canvas(SCREEN_BOTTOM)->px;
+        uint16_t white = COLOR(31, 31, 31) | 0x8000;
+        bool flag = px[(100 - 22) * SCREEN_W + 128] == pride_color(PRIDE_TRANS, 24, 2, 49, 49)
+                    && px[(100 + 22) * SCREEN_W + 128] == pride_color(PRIDE_TRANS, 24, 46, 49, 49);
+        bool sym = px[100 * SCREEN_W + 122] == white || px[100 * SCREEN_W + 126] == white;
+        bool edge = px[100 * SCREEN_W + 119] == C_BG;     // left of the pause shape: the edge, on the white stripe
+        check(flag && sym && edge, "the player: the trans flag, the symbol white with a dark edge");
+        shot("13o_pride_player");
+        app.set.pride = PRIDE_NONE;
+        redraw = true;
+        ui_draw_bottom();
+        // the accent: the symbol cut out of it (the background colour), no edge
+        bool plain = px[(100 - 22) * SCREEN_W + 128] == C_ACC;
+        check(plain && px[100 * SCREEN_W + 122] == C_BG && px[100 * SCREEN_W + 119] == C_ACC,
+              "the accent: the symbol in the background colour, no edge");
+        Theme keep = app.theme;
+        // a background too close to the accent: the text colour
+        app.theme = (Theme){ COLOR(3, 3, 8), COLOR(28, 28, 31), COLOR(6, 8, 20) };
+        palette_make(&app.theme);
+        redraw = true;
+        ui_draw_bottom();
+        check(px[100 * SCREEN_W + 122] == C_TEXT && px[100 * SCREEN_W + 119] == C_ACC,
+              "dark accent on a dark background: the text colour");
+        shot("13p_ink_text");
+        app.theme = keep;
+        palette_make(&app.theme);
+        slide_to(false);
+        run(40);
+        tap(240, BAR_Y + 14);
+        run(20);
+    }
     tap(100, SET_Y + 5 * SET_H + 10);
     run(20);
     check(app.set_shown == PAGE_REGIONAL && ui_set_count(PAGE_REGIONAL) == 4, "Regional: language, keyboard, time, date");

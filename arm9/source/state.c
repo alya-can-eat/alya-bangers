@@ -6,6 +6,7 @@
 
 #include "library.h"
 #include "queue.h"
+#include "pride.h"
 #include "state.h"
 #include "i18n.h"
 #include "util.h"
@@ -187,6 +188,8 @@ bool state_load(Settings *s, Theme *t, Resume *r)
         s->lang = LANG_EN;
     if (s->keyboard >= KB_LAYOUTS)
         s->keyboard = KB_QWERTY;
+    if (s->pride >= PRIDE_COUNT)
+        s->pride = PRIDE_NONE;
     if (s->date_fmt >= DATE_FORMATS)
         s->date_fmt = DATE_DMY;
     s->clock_12h = s->clock_12h != 0;

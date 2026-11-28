@@ -17,6 +17,7 @@
 #include "keyboard.h"
 #include "player.h"
 #include "playlist.h"
+#include "pride.h"
 #include "queue.h"
 #include "stats.h"
 #include "util.h"
@@ -1504,6 +1505,79 @@ static int pp_shape(void)
     return smooth256(app.pp_t * 256 / PP_TICKS);
 }
 
+// A colour's brightness as the eye sees it, 0 .. 1000.
+static int luminance(uint16_t c)
+{
+    static const uint16_t lin[32] = {   // (i / 31) ^ 2.2, in thousandths
+        0, 1, 2, 6, 11, 18, 27, 38, 51, 66, 83, 102, 124, 148, 174, 202,
+        233, 267, 302, 341, 381, 425, 470, 519, 569, 623, 679, 738, 799, 864, 930, 1000 };
+    return (2126 * lin[c & 31] + 7152 * lin[(c >> 5) & 31] + 722 * lin[(c >> 10) & 31]) / 10000;
+}
+
+// Contrast of two colours, x 100 (100: none .. 2100: black and white).
+static int contrast(uint16_t a, uint16_t b)
+{
+    int la = luminance(a), lb = luminance(b);
+    return la > lb ? (la + 50) * 100 / (lb + 50) : (lb + 50) * 100 / (la + 50);
+}
+
+// The player's play / pause button. On the accent colour the symbol is cut
+// out of it: the background colour, unless that's too close to the accent
+// (under 3 : 1), then the text colour, then black or white. On a pride flag
+// (Settings › Theme › Pride) it's white with a dark edge, which shows on
+// every stripe.
+static uint16_t pride_px[49 * 49];
+static int pride_cached = -1;
+
+static void play_button(int cy)
+{
+    bool pressed = lit(BTN_PPLAY);
+    int flag = app.set.pride;
+    if (flag != PRIDE_NONE)
+    {
+        if (pride_cached != flag)
+        {
+            // the disc once, from the flag; 0 outside it
+            for (int y = 0; y < 49; y++)
+                for (int x = 0; x < 49; x++)
+                {
+                    int dx = x - 24, dy = y - 24;
+                    pride_px[y * 49 + x] = dx * dx + dy * dy <= 24 * 24 + 24 ? pride_color(flag, x, y, 49, 49) : 0;
+                }
+            pride_cached = flag;
+        }
+        for (int y = 0; y < 49; y++)
+            for (int x = 0; x < 49; x++)
+            {
+                uint16_t p = pride_px[y * 49 + x];
+                if (p)
+                    gfx_fill(B, 128 - 24 + x, cy - 24 + y, 1, 1, pressed ? gfx_mix(p, COLOR(31, 31, 31) | 0x8000, 90) : p);
+            }
+    }
+    else
+        gfx_disc(B, 128, cy, 24, pressed ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
+    const uint16_t white = COLOR(31, 31, 31) | 0x8000;
+    int t = pp_shape();
+    if (flag == PRIDE_NONE)
+    {
+        uint16_t ink = contrast(C_BG, C_ACC) >= 300 ? C_BG
+                       : contrast(C_TEXT, C_ACC) >= 300 ? C_TEXT
+                       : luminance(C_ACC) > 180 ? (COLOR(1, 1, 2) | 0x8000) : white;
+        play_pause(cy, 120, 125, 131, 136, 9, 122, 138, 10, t, ink);
+        return;
+    }
+    {
+        uint16_t e = luminance(C_BG) < 120 ? C_BG : COLOR(1, 1, 2) | 0x8000;     // dark, whatever the theme
+        static const int8_t off[8][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
+        for (int k = 0; k < 8; k++)
+        {
+            int ox = off[k][0];
+            play_pause(cy + off[k][1], 120 + ox, 125 + ox, 131 + ox, 136 + ox, 9, 122 + ox, 138 + ox, 10, t, e);
+        }
+    }
+    play_pause(cy, 120, 125, 131, 136, 9, 122, 138, 10, t, white);
+}
+
 static void draw_bar(int oy)
 {
     int y = oy + BAR_Y;
@@ -2486,8 +2560,7 @@ static bool draw_player_area(void)
         gfx_fill(B, 26, cy + 10, 4, 2, C_ACC);
     lit_box(78, cy, 36, 32, BTN_PREV);
     big_next(78, cy, C_TEXT, true);
-    gfx_disc(B, 128, cy, 24, lit(BTN_PPLAY) ? gfx_mix(C_ACC, C_TEXT, 160) : C_ACC);
-    play_pause(cy, 120, 125, 131, 136, 9, 122, 138, 10, pp_shape(), C_BG);
+    play_button(cy);
     lit_box(178, cy, 36, 32, BTN_PNEXT);
     big_next(178, cy, C_TEXT, false);
     int rep = queue_repeat();
@@ -3134,6 +3207,65 @@ static void presets_list(int dx)
     gfx_clip(B, dx < 0 ? 0 : dx, 0, SCREEN_W, SCREEN_H);
 }
 
+// A small disc: the flag, or (none) the accent colour.
+static void pride_dot(int cx, int cy, int r, int flag)
+{
+    if (flag == PRIDE_NONE)
+    {
+        gfx_disc(B, cx, cy, r, C_ACC);
+        return;
+    }
+    for (int dy = -r; dy <= r; dy++)
+    {
+        int dx = 0;
+        while ((dx + 1) * (dx + 1) + dy * dy <= r * r + r)
+            dx++;
+        for (int x = -dx; x <= dx; x++)
+            gfx_fill(B, cx + x, cy + dy, 1, 1, pride_color(flag, x + r, dy + r, 2 * r + 1, 2 * r + 1));
+    }
+}
+
+// The flags, rising out of the Pride button like the presets: in fixed
+// colours, a small flag and its name each, the one in use marked; the scroll
+// bar of the lists on the right.
+static void pride_list(int dx)
+{
+    int p = ease_out(clamp256(app.pride_t * 256 / OV_TICKS));
+    int x0 = dx + PRIDE_X0, x1 = dx + PRIDE_X1, h = THEME_PRIDE_Y - 4 - PRIDE_Y;
+    int y0 = PRIDE_Y + h * (256 - p) / 256;
+    gfx_clip(B, x0 < 0 ? 0 : x0, PRIDE_Y, x1, THEME_PRIDE_Y - 4);
+    gfx_fill(B, x0, y0, x1 - x0, h, COLOR(5, 5, 6));
+    gfx_rect(B, x0, y0, x1 - x0, h, COLOR(20, 20, 22));
+    text(B, x0 + 8, y0 + 2, txt(S_PRIDE_WHERE), COLOR(18, 18, 20));
+    int bx = x1 - 13;                       // the scroll bar's column
+    gfx_clip(B, x0 < 0 ? 0 : x0, y0 + 20 > PRIDE_Y ? y0 + 20 : PRIDE_Y, bx, THEME_PRIDE_Y - 8);
+    if (app.menu_sel >= 0)
+        gfx_fill(B, x0 + 1, y0 + 20 + app.menu_vis, bx - x0 - 1, 16, COLOR(11, 11, 13));
+    for (int r = 0; r < PRIDE_ROWS + 1; r++)
+    {
+        int i = app.pride_scroll + r, y = y0 + 20 + r * 16;
+        if (i >= PRIDE_COUNT)
+            break;
+        if (i == PRIDE_NONE)
+            gfx_fill(B, x0 + 8, y + 3, 18, 11, C_ACC);
+        else
+            for (int yy = 0; yy < 11; yy++)
+                for (int xx = 0; xx < 18; xx++)
+                    gfx_fill(B, x0 + 8 + xx, y + 3 + yy, 1, 1, pride_color(i, xx, yy, 18, 11));
+        text(B, x0 + 32, y, txt(i == PRIDE_NONE ? S_PRIDE_NONE : S_FLAG_RAINBOW + i - 1), COLOR(31, 31, 31));
+        if (i == app.set.pride)
+            text_r(B, bx - 4, y, "•", COLOR(31, 31, 31));
+    }
+    gfx_clip(B, x0 < 0 ? 0 : x0, PRIDE_Y, x1, THEME_PRIDE_Y - 4);
+    // the scroll bar
+    int ty = y0 + 20, th = 16 * PRIDE_ROWS, max = PRIDE_COUNT - PRIDE_ROWS;
+    gfx_fill(B, bx, ty, 12, th, COLOR(9, 9, 10));
+    int kh = th * PRIDE_ROWS / PRIDE_COUNT;
+    gfx_fill(B, bx + 3, ty + (th - kh) * app.pride_scroll / max, 6, kh,
+             app.pride_bar_drag ? COLOR(31, 31, 31) : COLOR(18, 18, 20));
+    gfx_clip(B, dx < 0 ? 0 : dx, 0, SCREEN_W, SCREEN_H);
+}
+
 static void theme_body(int dx)
 {
     static const uint8_t names[3] = { S_ACCENT, S_BACKGROUND, S_TEXT };
@@ -3162,9 +3294,21 @@ static void theme_body(int dx)
     const char *ps = txt(S_PRESETS);
     text(B, x + (THEME_CHIP_W - font_text_width(ps)) / 2, THEME_PRESETS_Y + 3, ps,
          open ? COLOR(4, 4, 5) : COLOR(31, 31, 31));
+    // Pride: the play button's flag (Presets' fixed colours, a disc of the flag in use)
+    bool popen = app.pride_open;
+    if (app.theme_sel == THEME_SEL_PRIDE)
+    {
+        gfx_rect(B, x - 2, THEME_PRIDE_Y - 2, THEME_CHIP_W + 4, THEME_CHIP_H + 4, COLOR(31, 31, 31));
+        gfx_rect(B, x - 1, THEME_PRIDE_Y - 1, THEME_CHIP_W + 2, THEME_CHIP_H + 2, COLOR(0, 0, 0));
+    }
+    gfx_round_fill(B, x, THEME_PRIDE_Y, THEME_CHIP_W, THEME_CHIP_H, 4, popen ? COLOR(31, 31, 31) : COLOR(9, 9, 10));
+    pride_dot(x + 14, THEME_PRIDE_Y + 11, 8, app.set.pride);
+    text(B, x + 28, THEME_PRIDE_Y + 3, txt(S_PRIDE), popen ? COLOR(4, 4, 5) : COLOR(31, 31, 31));
     cp_draw(B, dx, app.theme_hsv);
     if (app.presets_t > 0)
         presets_list(dx);
+    if (app.pride_t > 0)
+        pride_list(dx);
 }
 
 // A settings page with its left edge at dx (pages slide in from the right).

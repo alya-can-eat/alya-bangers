@@ -42,7 +42,8 @@ typedef struct {
     uint8_t batt_sound_off;   // no sound when the battery gets low (0: the sound is on)
     uint8_t launch_button;    // Settings' header has 🚀: start the launcher (paths.txt)
     uint8_t launch_hold;      // holding START for a second starts it
-    uint8_t reserved[3];      // room for more settings without a new file version
+    uint8_t pride;            // the player's play button: PRIDE_NONE (the accent) or a flag (pride.h)
+    uint8_t reserved[2];      // room for more settings without a new file version
 } Settings;
 
 _Static_assert(sizeof(Settings) == 32, "settings are 32 bytes in the file");

@@ -9,7 +9,7 @@
 - Playback: what happens when you switch on or close the lid, and a sound when the battery gets low
 - Sound: two settings for very high sounds (cymbals, hi-hats) that can sound harsh on the DS
 - Browsing and Player: small choices for the lists and the player
-- Theme: your own colours
+- Theme: your own colours, a pride flag for the play button
 - Regional: English, German or French, the keyboard, the time and date format
 - About: version and licence
 - Misc: start another launcher from here (Pico Launcher, TWiLight Menu++, …)
@@ -22,11 +22,17 @@ The very first start asks for the language, with the DS's own one highlighted. E
 <tr>
 <td><img src="img/settings.png" width="256" alt="The settings, each page with its icon"></td>
 <td><img src="img/presets.png" width="256" alt="The theme presets: Ultraviolet and Midnight Rose"></td>
-<td><img src="img/german_search.png" width="256" alt="Search in German: Künstler, Alben, Titel"></td>
 </tr>
 <tr>
 <td align="center">settings</td>
 <td align="center">theme presets</td>
+</tr>
+<tr>
+<td><img src="img/pride.png" width="256" alt="The player's play button as the intersex-inclusive Progress flag"></td>
+<td><img src="img/german_search.png" width="256" alt="Search in German: Künstler, Alben, Titel"></td>
+</tr>
+<tr>
+<td align="center">Pride: a flag on the play button</td>
 <td align="center">auf Deutsch</td>
 </tr>
 </table>
@@ -50,6 +56,8 @@ The very first start asks for the language, with the DS's own one highlighted. E
     - Every other colour is mixed from these three, and the whole app changes while you drag.
     - Up / Down choose the colour, Left / Right turn its hue.
     - Presets (A): *Ultraviolet* (the default) and *Midnight Rose* (the first theme). They always show in their own fixed colours, so you can get back even if you made your theme unreadable xD
+    - Pride: a flag for the player's play button instead of the accent colour. Rainbow, Progress (intersex-inclusive), lesbian, gay, bi, pan, asexual, trans, non-binary, agender, aromantic, intersex, genderfluid, genderqueer, aroace, demisexual and demigender. By D-pad: Down past Text, then A.
+    - The play/pause symbol: on the accent colour it's cut out of it, in the background colour. If your background is too close to your accent for that, it takes the text colour (or black or white). On a flag it's white with a dark edge, so it shows on every stripe.
   - Regional: the language (English, German or French; the German in Swiss spelling), the search keyboard (QWERTY, QWERTZ or AZERTY), the time (24 h or 12 h with am/pm) and the date (27.11.2026, 2026-11-27 or 11/27/2026)
   - About: name, version and edition, licence, where the code lives
   - Misc: another launcher, one tap or one button away

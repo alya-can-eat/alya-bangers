@@ -26,7 +26,7 @@ Put your music on the card with the converter on your PC, then listen to it on y
 - An equalizer with your own profiles
 - Sound settings for cleaner highs
 - Rate your songs, see how often you played them
-- Your own colours
+- Your own colours, and pride flags for the play button
 - English, German and French
 - A converter for Windows and Linux
 

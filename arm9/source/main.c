@@ -25,6 +25,7 @@
 #include "keyboard.h"
 #include "player.h"
 #include "playlist.h"
+#include "pride.h"
 #include "queue.h"
 #include "stats.h"
 #include "util.h"
@@ -1895,16 +1896,21 @@ static uint16_t *theme_slot(int i)
     return i == 0 ? &app.theme.acc : (i == 1 ? &app.theme.bg : &app.theme.text);
 }
 
+// Up / Down go through the three colours and Pride (THEME_SEL_PRIDE); the
+// triangle keeps the last colour's while Pride is chosen.
 static void theme_select(int i)
 {
-    app.theme_sel = (i + 3) % 3;
-    app.theme_hsv = cp_rgb_to_hsv(*theme_slot(app.theme_sel), app.theme_hsv.h);
+    app.theme_sel = (i + THEME_SEL_PRIDE + 1) % (THEME_SEL_PRIDE + 1);
+    if (app.theme_sel < THEME_SEL_PRIDE)
+        app.theme_hsv = cp_rgb_to_hsv(*theme_slot(app.theme_sel), app.theme_hsv.h);
     redraw = true;
 }
 
 // The picker's colour into the theme: the whole app changes at once.
 static void theme_apply(void)
 {
+    if (app.theme_sel >= THEME_SEL_PRIDE)
+        app.theme_sel = 0;              // the triangle touched: back to a colour, the accent
     *theme_slot(app.theme_sel) = cp_hsv_to_rgb(app.theme_hsv);
     palette_make(&app.theme);
     touch_state();
@@ -1913,6 +1919,8 @@ static void theme_apply(void)
 
 static void presets_open(bool open)
 {
+    if (open)
+        app.pride_open = false;
     app.presets_open = open;
     app.menu_sel = -1;
     // the one in use is highlighted
@@ -1922,6 +1930,49 @@ static void presets_open(bool open)
         if (t->bg == app.theme.bg && t->text == app.theme.text && t->acc == app.theme.acc)
             app.menu_sel = i;
     }
+    redraw = true;
+}
+
+// ---- Pride: the play button's flag
+static void pride_keep_sel(void)
+{
+    if (app.menu_sel < 0)
+        return;
+    if (app.menu_sel < app.pride_scroll)
+        app.pride_scroll = app.menu_sel;
+    if (app.menu_sel >= app.pride_scroll + PRIDE_ROWS)
+        app.pride_scroll = app.menu_sel - PRIDE_ROWS + 1;
+}
+
+static void pride_open(bool open)
+{
+    if (open && app.presets_open)
+        app.presets_open = false;
+    app.pride_open = open;
+    // the one in use highlighted (by D-pad, else just marked) and in sight
+    app.menu_sel = open && app.theme_sel == THEME_SEL_PRIDE ? app.set.pride : -1;
+    int at = app.set.pride;
+    app.pride_scroll = at < PRIDE_ROWS ? 0 : (at > PRIDE_COUNT - PRIDE_ROWS ? PRIDE_COUNT - PRIDE_ROWS : at - PRIDE_ROWS / 2);
+    app.menu_vis = (app.menu_sel - app.pride_scroll) * 16;
+    redraw = true;
+}
+
+static void pride_choose(int i)
+{
+    if (i >= 0 && i < PRIDE_COUNT)
+    {
+        app.set.pride = (uint8_t)i;
+        touch_state();
+    }
+    pride_open(false);
+}
+
+// Its scroll bar at y, a row at a time (like the lists').
+static void pride_scroll_to_y(int y)
+{
+    int top = PRIDE_Y + 20, h = 16 * PRIDE_ROWS, max = PRIDE_COUNT - PRIDE_ROWS;
+    int s = (y - top) * (max + 1) / h;
+    app.pride_scroll = s < 0 ? 0 : (s > max ? max : s);
     redraw = true;
 }
 
@@ -1940,6 +1991,23 @@ static void preset_choose(int i)
 // The stylus on the theme page (below the header). down: it just touched.
 static bool theme_touch(int x, int y, bool down)
 {
+    if (down && app.pride_open)
+    {
+        // a flag, the scroll bar, or anywhere else: closed again
+        app.theme_drag = CP_NONE;
+        if (x >= PRIDE_X1 - 13 && x < PRIDE_X1 && y >= PRIDE_Y + 20 && y < THEME_PRIDE_Y - 8)
+        {
+            app.pride_bar_drag = true;
+            pride_scroll_to_y(y);
+            return true;
+        }
+        int r = (y - PRIDE_Y - 20) / 16;
+        if (x >= PRIDE_X0 && x < PRIDE_X1 - 13 && y >= PRIDE_Y + 20 && r < PRIDE_ROWS)
+            pride_choose(app.pride_scroll + r);
+        else
+            pride_open(false);
+        return true;
+    }
     if (down && app.presets_open)
     {
         // a preset, or anywhere else: closed again
@@ -1968,6 +2036,11 @@ static bool theme_touch(int x, int y, bool down)
             if (y >= THEME_PRESETS_Y && y < THEME_PRESETS_Y + THEME_CHIP_H)
             {
                 presets_open(true);
+                return true;
+            }
+            if (y >= THEME_PRIDE_Y && y < THEME_PRIDE_Y + THEME_CHIP_H)
+            {
+                pride_open(true);
                 return true;
             }
         }
@@ -2716,6 +2789,8 @@ static void touch_move(int x, int y)
         set_scroll_to_y(y);
     else if (app.seek_drag)
         app.seek_preview_ms = seek_ms_at(x);
+    else if (app.pride_bar_drag)
+        pride_scroll_to_y(y);
     else if (app.theme_drag != CP_NONE)
         theme_touch(x, y, false);
     else if (app.eq_drag_band >= 0)
@@ -2800,6 +2875,8 @@ static void touch_up(void)
         app.scroll_drag = false;
     else if (app.set_bar_drag)
         app.set_bar_drag = false;
+    else if (app.pride_bar_drag)
+        app.pride_bar_drag = false;
     else if (app.seek_drag)
     {
         app.seek_drag = false;
@@ -2876,22 +2953,34 @@ static void settings_keys(uint32_t down, uint32_t rep)
 {
     if (app.set_page == PAGE_THEME)
     {
-        // Up / Down: which colour, Left / Right: its hue (the triangle is for
-        // the stylus), A: the presets
-        if (app.presets_open)
+        // Up / Down: which colour (or Pride), Left / Right: its hue (the
+        // triangle is for the stylus), A: the presets (on Pride: the flags)
+        if (app.pride_open)
+        {
+            if (down & KEY_B)
+                pride_open(false);
+            else
+            {
+                menu_keys(rep, down, PRIDE_COUNT, pride_choose);
+                pride_keep_sel();
+            }
+        }
+        else if (app.presets_open)
         {
             if (down & KEY_B)
                 presets_open(false);
             else
                 menu_keys(rep, down, THEME_PRESETS, preset_choose);
         }
+        else if ((down & KEY_A) && app.theme_sel == THEME_SEL_PRIDE)
+            pride_open(true);
         else if (down & KEY_A)
             presets_open(true);
         else if (down & KEY_B)
             set_back();
         else if (rep & (KEY_UP | KEY_DOWN))
             theme_select(app.theme_sel + ((rep & KEY_DOWN) ? 1 : -1));
-        else if (rep & (KEY_LEFT | KEY_RIGHT))
+        else if ((rep & (KEY_LEFT | KEY_RIGHT)) && app.theme_sel < THEME_SEL_PRIDE)
         {
             app.theme_hsv.h = (app.theme_hsv.h + ((rep & KEY_RIGHT) ? 16 : -16) + CP_HUES) % CP_HUES;
             theme_apply();
@@ -3684,6 +3773,17 @@ static void app_tick(void)
     // the preset themes rise out of their button (and are closed with the page)
     if (app.presets_open && (app.overlay != OV_SETTINGS || app.set_page != PAGE_THEME))
         app.presets_open = false;
+    if (app.pride_open && (app.overlay != OV_SETTINGS || app.set_page != PAGE_THEME))
+        app.pride_open = false;
+    {
+        int target = app.pride_open ? OV_TICKS : 0;
+        if (app.pride_t != target)
+        {
+            app.pride_t += app.pride_t < target ? (int)elapsed : -(int)elapsed;
+            app.pride_t = app.pride_t < 0 ? 0 : (app.pride_t > OV_TICKS ? OV_TICKS : app.pride_t);
+            redraw = true;
+        }
+    }
     {
         int target = app.presets_open ? OV_TICKS : 0;
         if (app.presets_t != target)
@@ -3776,8 +3876,9 @@ static void app_tick(void)
     // the highlights in the list, the menus and the queue glide to the selection
     redraw |= glide(&app.sel_vis, (app.sel - app.scroll) * ROW_H, elapsed, list_rows() * ROW_H);
     static int menu_was = -1, q_was = -1, page_was = PAGE_TOP;
-    bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && app.presets_open;
-    int menu_target = (app.ov_vis == OV_SETTINGS && app.picking) || app.ov_vis == OV_LANG ? app.menu_sel * SET_H
+    bool presets = app.ov_vis == OV_SETTINGS && app.set_page == PAGE_THEME && (app.presets_open || app.pride_open);
+    int menu_target = presets && app.pride_open ? (app.menu_sel - app.pride_scroll) * 16
+                      : (app.ov_vis == OV_SETTINGS && app.picking) || app.ov_vis == OV_LANG ? app.menu_sel * SET_H
                       : app.ov_vis == OV_SETTINGS && !presets
                       ? (app.menu_sel >= 0 && app.menu_sel < ui_set_count(app.set_page)
                          ? ui_set_row_y(app.set_page, app.menu_sel) - SET_Y : app.menu_sel * SET_H)
